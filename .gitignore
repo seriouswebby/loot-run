@@ -1,3 +1,5 @@
 .DS_Store
 node_modules/
 *.log
+.sfx-cache/
+__pycache__/

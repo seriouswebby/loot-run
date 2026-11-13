@@ -777,21 +777,45 @@ function runAutotest() {
   });
 
   el.textContent = out.join('\n');
-  document.title = out.some((l) => l.startsWith('FAIL')) ? 'AUTOTEST FAIL' : 'AUTOTEST PASS';
   renderer.render(G.scene, updateCamera(0.016));
-  // audio: render a busy mix offline and check it is audible, finite and not clipping
+  // the page title is only set once the async audio checks are done too: a hang shows up as no result
+  // headless Chrome's virtual clock races ahead while the page is idle and would dump the page before the
+  // audio thread finishes decoding/rendering in real time, so keep the page busy until the audio checks report
+  let audioDone = false;
+  const keepAlive = () => { if (audioDone) return; let x = 0; for (let i = 0; i < 3e6; i++) x += Math.sqrt(i); window.__keepAlive = x; setTimeout(keepAlive, 20); };
+  keepAlive();
+  const finish = (lines) => {
+    audioDone = true;
+    el.textContent += lines.map((l) => '\n' + l).join('');
+    const all = out.concat(lines);
+    document.title = all.some((l) => l.startsWith('FAIL')) ? 'AUTOTEST FAIL' : 'AUTOTEST PASS';
+  };
+  // audio: decode every recorded sample, then render a busy mix offline and check it is audible, finite and not clipping
   try {
     const off = new OfflineAudioContext(2, 44100 * 3, 44100);
     Sfx.init(off);
-    Sfx.shot('pistol', 5, 0); Sfx.shot('shotgun', -10, 3); Sfx.explode(20, 10); Sfx.cash(); Sfx.punch(1, 1); Sfx.crash(0.8, 3, 0); Sfx.sting('heat'); Sfx.thunder();
-    for (let i = 0; i < 30; i++) Sfx.update(0.05, { playing: true, lx: 0, lz: 0, rx: 1, rz: 0, sirens: [{ x: 30, z: 5 }, { x: -20, z: 8 }], heat: 4, zone: 'street', rain: 1, slip: 0.6, engine: { speed: 20, throttle: 1, boost: false }, heli: { x: 10, z: -15 } });
-    off.startRendering().then((buf) => {
-      let peak = 0, sum = 0, bad = false; const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) { const v = d[i]; if (!isFinite(v)) bad = true; peak = Math.max(peak, Math.abs(v)); sum += v * v; }
-      const rms = Math.sqrt(sum / d.length);
-      const line = (!bad && rms > 0.005 && peak <= 1.0) ? 'PASS audio mix renders (rms ' + rms.toFixed(3) + ', peak ' + peak.toFixed(2) + ')' : 'FAIL audio mix — rms ' + rms + ' peak ' + peak + ' nan ' + bad;
-      el.textContent += '\n' + line;
-      if (line.startsWith('FAIL')) document.title = 'AUTOTEST FAIL';
-    }, (e) => { el.textContent += '\nFAIL audio render rejected ' + e; document.title = 'AUTOTEST FAIL'; });
-  } catch (e) { el.textContent += '\nFAIL audio — EXC ' + e.message; document.title = 'AUTOTEST FAIL'; }
+    const want = typeof SFX_DATA === 'undefined' ? 0 : Object.keys(SFX_DATA).length;
+    const timeout = new Promise((r) => setTimeout(() => r(-1), 15000));
+    Promise.race([Sfx.samplesReady, timeout]).then((n) => {
+      const lines = [];
+      lines.push(n === want && want > 0 ? 'PASS recorded sounds decode (' + n + ')' : 'FAIL recorded sounds — decoded ' + n + ' of ' + want);
+      const bad = []; // every sample has sound in it
+      for (const g in Sfx.samples) for (const smp of Sfx.samples[g]) {
+        const d = smp.buf.getChannelData(0); let pk = 0; for (let i = 0; i < d.length; i += 7) pk = Math.max(pk, Math.abs(d[i]));
+        if (!(pk > 0.2) || !(smp.buf.duration > 0.05)) bad.push(g + ' peak ' + pk.toFixed(2) + ' dur ' + smp.buf.duration.toFixed(2));
+        if (smp.loop && !(smp.loop[1] <= smp.buf.duration + 0.01)) bad.push(g + ' loop past end');
+      }
+      lines.push(!bad.length ? 'PASS recorded sounds are audible' : 'FAIL silent/short samples: ' + bad.join(', '));
+      Sfx.shot('pistol', 5, 0); Sfx.shot('shotgun', -10, 3); Sfx.explode(20, 10); Sfx.cash(); Sfx.punch(1, 1); Sfx.crash(0.8, 3, 0); Sfx.sting('heat'); Sfx.thunder();
+      Sfx.glass(4, 2); Sfx.hurt(2, 2); Sfx.honk(-6, 3); Sfx.pop(3, 3); Sfx.alarm(8, 8); Sfx.smoke(2, 0); Sfx.land(0, 1); Sfx.jump(0, 1); Sfx.whoosh(1, 0); Sfx.impact(3, 3); Sfx.heliGun(10, -10); Sfx.buy();
+      for (let i = 0; i < 30; i++) Sfx.update(0.05, { playing: true, lx: 0, lz: 0, rx: 1, rz: 0, sirens: [{ x: 30, z: 5 }, { x: -20, z: 8 }], heat: 4, zone: 'forest', rain: 1, slip: 0.6, engine: { speed: 20, throttle: 1, boost: false }, heli: { x: 10, z: -15 } });
+      return off.startRendering().then((buf) => {
+        let peak = 0, sum = 0, nan = false; const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) { const v = d[i]; if (!isFinite(v)) nan = true; peak = Math.max(peak, Math.abs(v)); sum += v * v; }
+        const rms = Math.sqrt(sum / d.length);
+        lines.push((!nan && rms > 0.005 && peak <= 1.0) ? 'PASS audio mix renders (rms ' + rms.toFixed(3) + ', peak ' + peak.toFixed(2) + ')' : 'FAIL audio mix — rms ' + rms + ' peak ' + peak + ' nan ' + nan);
+        finish(lines);
+      });
+    }).catch((e) => finish(['FAIL audio — ' + e]));
+  } catch (e) { finish(['FAIL audio — EXC ' + e.message]); }
 }

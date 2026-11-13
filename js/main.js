@@ -558,6 +558,9 @@ function updatePlayer(dt) {
   if (m > 0.01 && !holding) { const sp = P.chute ? 8.5 : sprinting ? 9.4 : 4.8; P.vx = mx / m * sp; P.vz = mz / m * sp; }
   else if (P.chute) { P.vx = Math.sin(P.facing) * 4.5; P.vz = Math.cos(P.facing) * 4.5; }
   else { P.vx = P.vz = 0; }
+  // footsteps, on the ground or a rooftop (a longer stride when sprinting)
+  const grounded = !P.chute && !P.jumping && P.y < 0.05 + (P.y > 0.5 ? W.floorAt(P.x, P.z, P.y) : 0);
+  if (grounded && (P.vx || P.vz)) { G.stepD = (G.stepD || 0) + Math.hypot(P.vx, P.vz) * dt; if (G.stepD > (sprinting ? 1.9 : 1.25)) { G.stepD = 0; Sfx.step(P.x, P.z, sprinting ? 0.3 : 0.2); } }
   const w = WEAPONS[P.weapon], aim = chase ? CAM.yaw : Math.atan2(G.aimX - P.x, G.aimZ - P.z);
   if (!w.melee && !holding) { P.facing = turnTo(P.facing, aim, dt * 14); P.aimT = 0.3; }
   else if (m > 0.01) P.facing = turnTo(P.facing, Math.atan2(mx, mz), dt * 12);

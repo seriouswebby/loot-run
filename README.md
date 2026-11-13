@@ -34,7 +34,8 @@ Progress saves in your browser after every story job.
 | File | What it does |
 | --- | --- |
 | `js/core.js` | Math helpers, input, particles, floating text |
-| `js/audio.js` | Synthesized audio: effects, sirens, engine, rotor, ambience, chase music |
+| `js/audio.js` | Audio engine: recorded effects with positional mixing, looping sirens/engines/rotor/ambience, chase music; synthesized fallback |
+| `js/sfxdata.js` | The recorded sounds, embedded as MP3 (generated — see Sound below) |
 | `js/world.js` | City generation, road graph, Ring Highway, zones, collisions, minimap |
 | `js/actors.js` | Characters, pedestrians, cops, weapons, bullets, pickups |
 | `js/vehicles.js` | Car/bike physics, traffic and police AI, roadblocks, explosions |
@@ -43,6 +44,10 @@ Progress saves in your browser after every story job.
 | `js/weather.js` | Dynamic weather |
 | `js/main.js` | Camera, HUD, minimap, controls, main loop |
 | `js/autotest.js` | In-page automated tests |
+
+## Sound
+
+The sound effects are public-domain (CC0) recordings from [Freesound](https://freesound.org), listed in [CREDITS.md](CREDITS.md). `tools/sfx-manifest.json` says which recording each in-game sound uses and how it is trimmed; `python3 tools/build-sfx.py` downloads them, confirms each one's CC0 license, trims, normalises and loops them, and writes `js/sfxdata.js` (embedded so the game still works when opened straight from disk). To swap a sound, change its `id` in the manifest and rebuild.
 
 ## Tests
 

@@ -1,7 +1,8 @@
 'use strict';
-/* Loot Run — synthesized audio. Everything is generated with WebAudio (no sound files):
-   a master bus with compression + reverb, positional one-shot effects (pan + distance falloff),
-   looping sirens / engine / helicopter rotor, city and forest ambience, and adaptive chase music. */
+/* Loot Run — audio. Sound effects are CC0 field recordings (js/sfxdata.js, built by tools/build-sfx.py),
+   decoded at start-up; until they're ready, or if they can't decode, every effect falls back to the
+   WebAudio synthesis below. Master bus with compression + reverb, positional one-shots (pan, distance
+   falloff and air absorption), looping sirens / engines / rotor / ambience, and adaptive chase music. */
 
 const Sfx = {
   ctx: null, ready: false, muted: false,
@@ -18,7 +19,7 @@ const Sfx = {
     const comp = c.createDynamicsCompressor();
     comp.threshold.value = -18; comp.knee.value = 14; comp.ratio.value = 5; comp.attack.value = 0.003; comp.release.value = 0.25;
     const warm = c.createBiquadFilter(); warm.type = 'highshelf'; warm.frequency.value = 7000; warm.gain.value = -5;
-    this.master.connect(warm); warm.connect(comp); comp.connect(c.destination);
+    this.master.connect(warm); warm.connect(comp); comp.connect(c.destination); this.warm = warm;
     this.sfx = c.createGain(); this.sfx.gain.value = 0.8; this.sfx.connect(this.master);
     this.music = c.createGain(); this.music.gain.value = 0; this.music.connect(this.master);
     this.amb = c.createGain(); this.amb.gain.value = 0.55; this.amb.connect(this.master);
@@ -34,6 +35,7 @@ const Sfx = {
     this.mus = { on: false, step: 0, next: 0, heat: 1 };
     this.birdT = 2;
     this.ready = true;
+    this.samplesReady = this.loadSamples();
   },
   impulse(sec, decay) {
     const c = this.ctx, n = Math.floor(c.sampleRate * sec), b = c.createBuffer(2, n, c.sampleRate);
@@ -94,8 +96,79 @@ const Sfx = {
   },
   now() { return this.ctx.currentTime; },
 
+  /* ---------- recorded samples ---------- */
+  loadSamples() {
+    this.samples = {}; this.sloops = null; this.sampleCount = 0;
+    if (typeof SFX_DATA === 'undefined') return Promise.resolve(0);
+    const c = this.ctx, jobs = [];
+    for (const k in SFX_DATA) {
+      const e = SFX_DATA[k], group = k.replace(/\d+$/, '');
+      let bytes;
+      try { const bin = atob(e.d); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); } catch (err) { continue; }
+      jobs.push(new Promise((res) => {
+        const ok = (buf) => { if (c !== this.ctx) return res(0); (this.samples[group] = this.samples[group] || []).push({ buf, loop: e.l }); res(1); };
+        try { const pr = c.decodeAudioData(bytes.buffer, ok, () => res(0)); if (pr && pr.catch) pr.catch(() => res(0)); } catch (err) { res(0); }
+      }));
+    }
+    return Promise.all(jobs).then((r) => {
+      if (c !== this.ctx) return 0;
+      this.sampleCount = r.reduce((a, b) => a + b, 0);
+      // recordings already sound natural: drop most of the treble cut that tamed the synths
+      if (this.sampleCount) { this.warm.gain.value = -1.5; this.buildSampleLoops(); }
+      return this.sampleCount;
+    });
+  },
+  has(name) { return !!(this.samples && this.samples[name]); },
+  /* play a recorded one-shot; false = no such sample (caller falls back to synthesis) */
+  play(name, x, z, vol, o) {
+    const list = this.samples && this.samples[name]; if (!list || !this.ready) return false;
+    o = o || {};
+    const range = o.range || 90, p = this.place(x, z, range); if (p.g < 0.01) return true;
+    const out = this.out(x, z, vol, o.verb != null ? o.verb : 0.06, range); if (!out) return true;
+    const c = this.ctx, s = list[(Math.random() * list.length) | 0], src = c.createBufferSource();
+    src.buffer = s.buf;
+    src.playbackRate.value = (o.rate || 1) * (1 + (Math.random() * 2 - 1) * (o.vary != null ? o.vary : 0.05));
+    // distance takes the top end off, the way air does
+    const lp = Math.min(o.lp || 20000, 20000 * Math.pow(1 - Math.min(0.97, p.d / range), 2.2) + 600);
+    let node = src;
+    if (lp < 15000) { const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; src.connect(f); node = f; }
+    node.connect(out);
+    const t = this.now() + (o.delay || 0);
+    src.start(t, o.offset || 0);
+    if (o.dur) { out.gain.setValueAtTime(out.gain.value, t + o.dur * 0.6); out.gain.linearRampToValueAtTime(0.0001, t + o.dur); src.stop(t + o.dur + 0.05); }
+    return true;
+  },
+  /* a sample straight into a bus at time t (music drums) */
+  hit(name, dest, t, vol, rate) {
+    const list = this.samples && this.samples[name]; if (!list) return false;
+    const c = this.ctx, src = c.createBufferSource(), g = c.createGain();
+    src.buffer = list[(Math.random() * list.length) | 0].buf; src.playbackRate.value = rate || 1; g.gain.value = vol;
+    src.connect(g); g.connect(dest); src.start(t);
+    return true;
+  },
+  loopNode(name, dest, verb) {
+    const list = this.samples[name]; if (!list) return null;
+    const c = this.ctx, s = list[0], src = c.createBufferSource();
+    src.buffer = s.buf; src.loop = true;
+    if (s.loop) { src.loopStart = s.loop[0]; src.loopEnd = s.loop[1]; }
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 20000;
+    const g = c.createGain(); g.gain.value = 0;
+    const p = c.createStereoPanner ? c.createStereoPanner() : c.createGain();
+    src.connect(f); f.connect(g); g.connect(p); p.connect(dest || this.sfx);
+    if (verb) { const sv = c.createGain(); sv.gain.value = verb; g.connect(sv); sv.connect(this.verbIn); }
+    src.start(0, s.loop ? s.loop[0] + Math.random() * (s.loop[1] - s.loop[0]) : 0);
+    return { src, f, g, p };
+  },
+  buildSampleLoops() {
+    const L = {};
+    for (const [k, dest, verb] of [['siren_wail', null, 0.25], ['siren_yelp', null, 0.25], ['engine_car'], ['engine_bike'], ['screech'], ['rotor', null, 0.2],
+      ['amb_city', this.amb], ['amb_wind', this.amb], ['amb_rain', this.amb], ['amb_forest', this.amb]]) L[k] = this.loopNode(k, dest, verb);
+    this.sloops = L;
+  },
+
   /* ---------- one-shot effects (x, z optional = positional) ---------- */
   shot(kind, x, z) {
+    if (this.play('shot_' + kind, x, z, kind === 'shotgun' ? 1 : kind === 'smg' ? 0.95 : kind === 'rpg' ? 0.9 : 0.85, { range: 160, verb: 0.12, vary: 0.06, dur: kind === 'smg' ? 0.45 : 0 })) return;
     const o = this.out(x, z, kind === 'shotgun' ? 1 : kind === 'smg' ? 0.5 : 0.7, 0.3, 150); if (!o) return;
     const t = this.now(), r = 0.92 + Math.random() * 0.16;
     if (kind === 'shotgun') {
@@ -113,22 +186,26 @@ const Sfx = {
     }
   },
   heliGun(x, z) {
+    if (this.play('shot_smg', x, z, 0.75, { range: 190, verb: 0.2, rate: 0.82, vary: 0.05 })) return;
     const o = this.out(x, z, 0.55, 0.45, 170); if (!o) return;
     const t = this.now();
     this.nz(o, t, 'highpass', 2400, 0.7, 0.6, 0.03);
     this.nz(o, t, 'bandpass', 950, 0.8, 0.8, 0.11, 380);
     this.osc(o, t, 'sine', 120, 45, 0.5, 0.001, 0.09);
   },
-  impact(x, z) { const o = this.out(x, z, 0.25, 0.05, 50); if (!o) return; this.nz(o, this.now(), 'bandpass', 2600 + Math.random() * 1500, 2, 0.6, 0.05); },
+  impact(x, z) { if (this.play('impact', x, z, 0.8, { range: 50, vary: 0.15 })) return; const o = this.out(x, z, 0.25, 0.05, 50); if (!o) return; this.nz(o, this.now(), 'bandpass', 2600 + Math.random() * 1500, 2, 0.6, 0.05); },
   punch(x, z) {
+    if (this.play('punch', x, z, 0.85, { range: 60, vary: 0.08 })) return;
     const o = this.out(x, z, 0.8, 0.04, 60); if (!o) return;
     const t = this.now(), r = 0.9 + Math.random() * 0.2;
     this.osc(o, t, 'sine', 175 * r, 50, 0.9, 0.002, 0.13);
     this.nz(o, t, 'lowpass', 1500, 0.7, 0.55, 0.06);
     this.nz(o, t, 'highpass', 3600, 0.7, 0.22, 0.015);
   },
-  whoosh(x, z) { const o = this.out(x, z, 0.3, 0, 40); if (!o) return; this.nz(o, this.now(), 'bandpass', 450, 1.3, 0.7, 0.16, 2200); },
+  whoosh(x, z) { if (this.play('whoosh', x, z, 0.28, { range: 40, vary: 0.1 })) return; const o = this.out(x, z, 0.3, 0, 40); if (!o) return; this.nz(o, this.now(), 'bandpass', 450, 1.3, 0.7, 0.16, 2200); },
   hurt(x, z, player) {
+    // grunts: the player's voice a touch lower than the crowd's
+    if (this.play('hurt', x, z, player ? 0.45 : 0.35, { range: 50, rate: player ? 0.92 : 1.05, vary: player ? 0.03 : 0.12 })) return;
     const o = this.out(x, z, player ? 0.45 : 0.3, 0.05, 50); if (!o) return;
     const t = this.now(), f0 = player ? 185 : 150 + Math.random() * 130;
     const a = this.filt(o, 'bandpass', 720, 5), b = this.filt(o, 'bandpass', 1180, 6);
@@ -139,6 +216,7 @@ const Sfx = {
     }
   },
   cash() {
+    if (this.play('cash', null, null, 1.4, { vary: 0.04 })) { this.play('cash', null, null, 1.0, { delay: 0.07, rate: 1.12 }); return; }
     const o = this.out(null, null, 0.42, 0.3); if (!o) return;
     const t = this.now();
     [[1318.5, 0], [1975.5, 0.07]].forEach(([f, d]) => {
@@ -148,6 +226,7 @@ const Sfx = {
     });
   },
   buy() {
+    if (this.play('buy', null, null, 0.5, { vary: 0 })) return;
     const o = this.out(null, null, 0.45, 0.25); if (!o) return;
     const t = this.now();
     this.nz(o, t, 'bandpass', 2400, 9, 0.5, 0.35);
@@ -157,6 +236,11 @@ const Sfx = {
   click() { const o = this.out(null, null, 0.18, 0); if (!o) return; this.osc(o, this.now(), 'sine', 1900, 1300, 0.6, 0.001, 0.04); },
   tick() { const o = this.out(null, null, 0.1, 0); if (!o) return; this.osc(o, this.now(), 'square', 1050, null, 0.4, 0.001, 0.03); },
   explode(x, z) {
+    if (this.has('explode')) {
+      this.play('explode', x, z, 1.15, { range: 260, verb: 0.3, vary: 0.08 });
+      const o = this.out(x, z, 0.8, 0, 240); if (o) this.osc(o, this.now(), 'sine', 70, 26, 1.0, 0.004, 0.9); // a sub-bass kick under the recording
+      return;
+    }
     const o = this.out(x, z, 1.25, 0.55, 240); if (!o) return;
     const t = this.now();
     this.osc(o, t, 'sine', 85, 24, 1.0, 0.004, 1.5);
@@ -165,6 +249,12 @@ const Sfx = {
     for (let i = 0; i < 10; i++) this.nz(o, t + 0.05 + Math.random() * 0.8, 'highpass', 1800 + Math.random() * 3000, 0.7, 0.12 + Math.random() * 0.2, 0.03);
   },
   crash(power, x, z) {
+    if (this.has('crash')) {
+      const p = clamp(power, 0.25, 1);
+      if (power < 0.4 && this.has('thud')) this.play('thud', x, z, 0.4 + p * 0.6, { range: 70, vary: 0.12 });
+      else this.play('crash', x, z, 0.55 + p * 0.5, { range: 110, verb: 0.1, vary: 0.1 });
+      return;
+    }
     const o = this.out(x, z, clamp(power, 0.25, 1), 0.2, 90); if (!o) return;
     const t = this.now();
     this.nz(o, t, 'bandpass', 850, 0.8, 0.9, 0.24);
@@ -172,18 +262,21 @@ const Sfx = {
     for (const f of [310, 487, 731, 1063, 1460]) this.osc(o, t, 'triangle', f * (0.95 + Math.random() * 0.1), null, 0.12, 0.002, 0.25 + Math.random() * 0.4);
   },
   glass(x, z) {
+    if (this.play('glass', x, z, 2.0, { range: 70, vary: 0.08 })) return;
     const o = this.out(x, z, 0.5, 0.2, 70); if (!o) return;
     const t = this.now();
     this.nz(o, t, 'highpass', 3600, 0.7, 0.7, 0.2);
     for (let i = 0; i < 8; i++) this.osc(o, t + Math.random() * 0.28, 'sine', 2600 + Math.random() * 4200, null, 0.1, 0.001, 0.07 + Math.random() * 0.08);
   },
-  pop(x, z) { const o = this.out(x, z, 0.8, 0.2, 90); if (!o) return; const t = this.now(); this.nz(o, t, 'lowpass', 650, 0.7, 1, 0.13); this.nz(o, t + 0.02, 'highpass', 3600, 0.7, 0.25, 0.9); },
+  pop(x, z) { if (this.play('pop', x, z, 0.8, { range: 90 })) return; const o = this.out(x, z, 0.8, 0.2, 90); if (!o) return; const t = this.now(); this.nz(o, t, 'lowpass', 650, 0.7, 1, 0.13); this.nz(o, t + 0.02, 'highpass', 3600, 0.7, 0.25, 0.9); },
   alarm(x, z) {
+    if (this.play('alarm', x, z, 0.45, { range: 120, verb: 0.15, vary: 0 })) return;
     const o = this.out(x, z, 0.3, 0.2, 110); if (!o) return;
     const t = this.now();
     for (let i = 0; i < 7; i++) { this.osc(o, t + i * 0.085, 'triangle', 1040, null, 0.7, 0.002, 0.07); this.osc(o, t + i * 0.085, 'square', 2080, null, 0.06, 0.002, 0.05); }
   },
   honk(x, z) {
+    if (this.play('honk', x, z, 0.8, { range: 80, vary: 0.04 })) return;
     const o = this.out(x, z, 0.32, 0.15, 70); if (!o) return;
     const t = this.now(), lp = this.filt(o, 'lowpass', 1700, 1);
     for (const f of [370, 466]) {
@@ -192,16 +285,19 @@ const Sfx = {
       s.connect(g); g.connect(lp); s.start(t); s.stop(t + 0.35);
     }
   },
-  smoke(x, z) { const o = this.out(x, z, 0.5, 0.2, 60); if (!o) return; const t = this.now(); this.nz(o, t, 'lowpass', 300, 0.7, 0.8, 0.12); this.nz(o, t, 'bandpass', 900, 0.5, 0.6, 1.4, 260); },
-  land(x, z) { const o = this.out(x, z, 0.35, 0, 40); if (!o) return; const t = this.now(); this.osc(o, t, 'sine', 120, 55, 0.6, 0.002, 0.08); this.nz(o, t, 'lowpass', 900, 0.7, 0.3, 0.05); },
-  jump(x, z) { const o = this.out(x, z, 0.25, 0, 40); if (!o) return; this.nz(o, this.now(), 'bandpass', 700, 1.2, 0.5, 0.1, 1600); },
+  smoke(x, z) { if (this.play('smoke', x, z, 0.32, { range: 60 })) return; const o = this.out(x, z, 0.5, 0.2, 60); if (!o) return; const t = this.now(); this.nz(o, t, 'lowpass', 300, 0.7, 0.8, 0.12); this.nz(o, t, 'bandpass', 900, 0.5, 0.6, 1.4, 260); },
+  land(x, z) { if (this.play('land', x, z, 0.3, { range: 40, vary: 0.1 })) return; const o = this.out(x, z, 0.35, 0, 40); if (!o) return; const t = this.now(); this.osc(o, t, 'sine', 120, 55, 0.6, 0.002, 0.08); this.nz(o, t, 'lowpass', 900, 0.7, 0.3, 0.05); },
+  jump(x, z) { if (this.play('whoosh', x, z, 0.25, { range: 40, rate: 1.4, vary: 0.1 })) return; const o = this.out(x, z, 0.25, 0, 40); if (!o) return; this.nz(o, this.now(), 'bandpass', 700, 1.2, 0.5, 0.1, 1600); },
   thunder() {
+    if (this.play('thunder', null, null, 0.85, { verb: 0.25, vary: 0.12 })) return;
     const o = this.out(null, null, 0.9, 0.6); if (!o) return;
     const t = this.now();
     this.nz(o, t, 'lowpass', 900, 0.5, 0.9, 0.25, 200);
     this.nz(o, t + 0.05, 'lowpass', 260, 0.6, 1.0, 2.6, 60, this.brown);
     this.osc(o, t, 'sine', 60, 30, 0.6, 0.02, 2.2);
   },
+  /* footsteps: only with recordings (there was never a synthesized version) */
+  step(x, z, vol) { this.play('step', x, z, vol || 0.22, { range: 30, vary: 0.1 }); },
   chirp(x, z) {
     const o = this.out(x, z, 0.07, 0.3, 70); if (!o) return;
     const t = this.now(), base = 2600 + Math.random() * 1600, n = randi(2, 5);
@@ -325,15 +421,18 @@ const Sfx = {
     if (!this.ready) return;
     const c = this.ctx, t = c.currentTime;
     this.L = { x: s.lx, z: s.lz, rx: s.rx, rz: s.rz };
+    const SL = this.sloops || {};
     // sirens
     this.sirens.forEach((sv, i) => {
-      const src = s.playing && s.sirens[i];
+      const src = s.playing && s.sirens[i], rec = SL[i === 0 ? 'siren_wail' : 'siren_yelp'];
       let lvl = 0;
       if (src) {
         const p = this.place(src.x, src.z, 170); lvl = p.g;
         this.setPan(sv.p, p.pan, t);
         sv.f.frequency.setTargetAtTime(1400 + p.g * 4500, t, 0.1);
+        if (rec) { this.setPan(rec.p, p.pan, t); rec.f.frequency.setTargetAtTime(1800 + p.g * p.g * 16000, t, 0.1); }
       }
+      if (rec) { rec.g.gain.setTargetAtTime(lvl * 0.3, t, 0.12); sv.g.gain.setTargetAtTime(0, t, 0.05); return; }
       sv.g.gain.setTargetAtTime(lvl * 0.13, t, 0.12);
       sv.ph += dt;
       let k;
@@ -350,30 +449,53 @@ const Sfx = {
       const frac = clamp((v - gears[gi]) / (gears[gi + 1] - gears[gi]), 0, 1);
       const target = 850 + frac * 4400 + (en.throttle > 0 && v < 2 ? 900 : 0) + (en.boost ? 600 : 0);
       E.rpm = damp(E.rpm, target, gi > 0 && target < E.rpm ? 14 : 7, dt);
+      // recorded engine: one steady loop, re-pitched with the revs (kept within a believable range)
+      const rec = en.bike ? SL.engine_bike || SL.engine_car : SL.engine_car, other = rec === SL.engine_car ? SL.engine_bike : SL.engine_car;
+      if (rec) {
+        const rate = clamp(0.62 + (E.rpm - 850) / 4400 * 1.2, 0.6, 1.95) * (en.bike && !SL.engine_bike ? 1.3 : 1);
+        rec.src.playbackRate.setTargetAtTime(rate, t, 0.04);
+        rec.f.frequency.setTargetAtTime(900 + E.rpm * 0.9 + (en.throttle > 0 ? 2500 : 0), t, 0.06);
+        rec.g.gain.setTargetAtTime(0.26 + (en.throttle > 0 ? 0.14 : 0) + (en.boost ? 0.08 : 0), t, 0.08);
+        if (other) other.g.gain.setTargetAtTime(0, t, 0.1);
+        E.g.gain.setTargetAtTime(0, t, 0.05); E.rg.gain.setTargetAtTime(Math.min(0.5, v / 50) * 0.35, t, 0.2);
+      } else {
       const f = E.rpm / 60 * 2 * (en.bike ? 1.8 : 1);
       E.o1.frequency.setTargetAtTime(f, t, 0.03); E.o2.frequency.setTargetAtTime(f * 0.5, t, 0.03); E.o3.frequency.setTargetAtTime(f * 1.009, t, 0.03);
       E.f.frequency.setTargetAtTime(200 + E.rpm * 0.28 + (en.throttle > 0 ? 450 : 0), t, 0.05);
       E.g.gain.setTargetAtTime(0.07 + (en.throttle > 0 ? 0.05 : 0) + (en.boost ? 0.04 : 0), t, 0.08);
       E.rg.gain.setTargetAtTime(Math.min(0.5, v / 50) * 0.5, t, 0.2);
-    } else { E.g.gain.setTargetAtTime(0, t, 0.12); E.rg.gain.setTargetAtTime(0, t, 0.2); }
-    this.screech.g.gain.setTargetAtTime(s.playing ? clamp(s.slip || 0, 0, 1) * 0.16 : 0, t, 0.05);
+      }
+    } else {
+      E.g.gain.setTargetAtTime(0, t, 0.12); E.rg.gain.setTargetAtTime(0, t, 0.2);
+      for (const k of ['engine_car', 'engine_bike']) if (SL[k]) SL[k].g.gain.setTargetAtTime(0, t, 0.15);
+    }
+    const slip = s.playing ? clamp(s.slip || 0, 0, 1) : 0;
+    if (SL.screech) { SL.screech.g.gain.setTargetAtTime(slip * 0.3, t, 0.05); SL.screech.src.playbackRate.setTargetAtTime(0.9 + slip * 0.2, t, 0.1); this.screech.g.gain.setTargetAtTime(0, t, 0.05); }
+    else this.screech.g.gain.setTargetAtTime(slip * 0.16, t, 0.05);
     this.screech.f.frequency.setTargetAtTime(2000 + Math.random() * 700, t, 0.04);
     // helicopter rotor
     const H = this.heli;
+    const R = SL.rotor;
     if (s.playing && s.heli) {
       const p = this.place(s.heli.x, s.heli.z, 230);
-      H.g.gain.setTargetAtTime(0.42 * Math.max(p.g, 0.05), t, 0.15);
+      if (R) { R.g.gain.setTargetAtTime(0.55 * Math.max(p.g, 0.05), t, 0.15); this.setPan(R.p, p.pan, t); R.f.frequency.setTargetAtTime(1200 + p.g * p.g * 14000, t, 0.2); H.g.gain.setTargetAtTime(0, t, 0.1); }
+      else H.g.gain.setTargetAtTime(0.42 * Math.max(p.g, 0.05), t, 0.15);
       this.setPan(H.p, p.pan, t);
-    } else H.g.gain.setTargetAtTime(0, t, 0.4);
+    } else { H.g.gain.setTargetAtTime(0, t, 0.4); if (R) R.g.gain.setTargetAtTime(0, t, 0.4); }
     // ambience
     const A = this.ambi, z = s.zone;
     const city = !s.playing ? 0.04 : z === 'forest' ? 0.04 : z === 'highway' ? 0.42 : z === 'outskirts' ? 0.14 : 0.24;
     const wind = !s.playing ? 0 : z === 'forest' ? 0.22 : z === 'outskirts' || z === 'highway' ? 0.1 : 0.035;
-    A.cg.gain.setTargetAtTime(city, t, 0.8);
-    A.rg.gain.setTargetAtTime((s.rain || 0) * 0.16, t, 0.8);
-    A.wg.gain.setTargetAtTime(wind * (0.7 + 0.3 * Math.sin(t * 0.37)), t, 0.6);
+    const swell = 0.7 + 0.3 * Math.sin(t * 0.37);
+    if (SL.amb_city) { SL.amb_city.g.gain.setTargetAtTime(city * 0.95, t, 0.8); A.cg.gain.setTargetAtTime(city * 0.25, t, 0.8); }
+    else A.cg.gain.setTargetAtTime(city, t, 0.8);
+    if (SL.amb_rain) { SL.amb_rain.g.gain.setTargetAtTime((s.rain || 0) * 0.65, t, 0.8); A.rg.gain.setTargetAtTime(0, t, 0.3); }
+    else A.rg.gain.setTargetAtTime((s.rain || 0) * 0.16, t, 0.8);
+    if (SL.amb_wind) { SL.amb_wind.g.gain.setTargetAtTime(wind * 1.6 * swell, t, 0.6); A.wg.gain.setTargetAtTime(0, t, 0.3); }
+    else A.wg.gain.setTargetAtTime(wind * swell, t, 0.6);
     A.wf.frequency.setTargetAtTime(420 + 220 * Math.sin(t * 0.21), t, 0.5);
-    if (s.playing && z === 'forest') {
+    if (SL.amb_forest) SL.amb_forest.g.gain.setTargetAtTime(s.playing && z === 'forest' ? 0.5 : s.playing && z === 'outskirts' ? 0.12 : 0, t, 1.2);
+    if (s.playing && z === 'forest' && !SL.amb_forest) {
       this.birdT -= dt;
       if (this.birdT <= 0) { this.birdT = rand(1.2, 4); const a = rand(0, TAU); this.chirp(s.lx + Math.cos(a) * rand(8, 30), s.lz + Math.sin(a) * rand(8, 30)); }
     }
@@ -392,9 +514,11 @@ const Sfx = {
   },
   musicStep(i, t, heat, sp) {
     const M = this.music, s = i % 16, N = (m) => 440 * Math.pow(2, (m - 69) / 12);
-    if (s % 4 === 0 || (heat >= 3 && (s === 10 || s === 14))) this.osc(M, t, 'sine', 150, 42, 0.95, 0.002, 0.22, 0.12);
-    if (heat >= 2 && (s === 4 || s === 12)) { this.nz(M, t, 'bandpass', 1900, 0.7, 0.42, 0.14); this.osc(M, t, 'triangle', 200, 150, 0.22, 0.001, 0.08); }
-    if (s % 2 === 1 || heat >= 4) this.nz(M, t, 'highpass', 7500, 0.7, s % 2 ? 0.13 : 0.06, s % 4 === 3 ? 0.07 : 0.03);
+    const kick = s % 4 === 0 || (heat >= 3 && (s === 10 || s === 14)), snare = heat >= 2 && (s === 4 || s === 12), hat = s % 2 === 1 || heat >= 4;
+    // recorded drum hits when available, synthesized otherwise
+    if (kick && !this.hit('kick', M, t, 1.4)) this.osc(M, t, 'sine', 150, 42, 0.95, 0.002, 0.22, 0.12);
+    if (snare && !this.hit('snare', M, t, 1.0)) { this.nz(M, t, 'bandpass', 1900, 0.7, 0.42, 0.14); this.osc(M, t, 'triangle', 200, 150, 0.22, 0.001, 0.08); }
+    if (hat && !this.hit('hat', M, t, s % 2 ? 0.36 : 0.18, s % 4 === 3 ? 0.9 : 1.05)) this.nz(M, t, 'highpass', 7500, 0.7, s % 2 ? 0.13 : 0.06, s % 4 === 3 ? 0.07 : 0.03);
     const riff = [45, 0, 45, 48, 0, 45, 52, 0, 45, 0, 43, 0, 45, 48, 50, 0, 45, 0, 45, 48, 0, 45, 52, 0, 53, 0, 52, 0, 48, 0, 47, 0];
     const n = riff[i];
     if (n) {
