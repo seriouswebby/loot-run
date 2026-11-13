@@ -51,14 +51,15 @@ function buildRig(look) {
   add(new THREE.BoxGeometry(0.16, 0.14, 0.18), handMat, 0, -0.7, 0, armR).castShadow = false;
   const head = add(R.head, m(look.skin), 0, 1.86, 0);
   let hat = null;
-  if (look.cap) { hat = add(R.cap, m(look.cap), 0, 2.1, 0); add(R.brim, m(look.cap), 0, 2.06, 0.28); }
-  else add(R.hair, m(look.hair), 0, 2.1, -0.01);
+  if (look.cap) { hat = add(R.cap, m(look.cap), 0, 0.24, 0, head); add(R.brim, m(look.cap), 0, 0.2, 0.28, head); }
+  else add(R.hair, m(look.hair), 0, 0.24, -0.01, head);
   const eyeM = m('#151515');
-  add(R.eye, eyeM, -0.09, 1.9, 0.205).castShadow = false; add(R.eye, eyeM, 0.09, 1.9, 0.205).castShadow = false;
-  if (look.badge) add(new THREE.BoxGeometry(0.12, 0.12, 0.02), m('#ffd166'), -0.16, 1.42, 0.18).castShadow = false;
-  const mask = add(R.mask, m('#1b1b1b'), 0, 1.86, 0); mask.visible = false;
+  add(R.eye, eyeM, -0.09, 0.04, 0.205, head).castShadow = false; add(R.eye, eyeM, 0.09, 0.04, 0.205, head).castShadow = false;
+  if (look.badge) add(new THREE.BoxGeometry(0.12, 0.12, 0.02), m('#ffd166'), -0.16, 0.15, 0.18, torso).castShadow = false;
+  const mask = add(R.mask, m('#1b1b1b'), 0, 0, 0, head); mask.visible = false;
   const hand = new THREE.Group(); hand.position.set(0, -0.66, 0); armR.add(hand);
-  return { root, body, legL, legR, torso, armL, armR, head, hand, hat, mask, weapon: null, weaponId: null };
+  const defaults = [legL, legR, torso, armL, armR, head].map((o) => ({ o, p: o.position.clone() }));
+  return { root, body, legL, legR, torso, armL, armR, head, hand, hat, mask, weapon: null, weaponId: null, defaults };
 }
 function rigSetWeapon(rig, id) {
   if (rig.weaponId === id) return;
@@ -111,13 +112,16 @@ class Actor {
       G.scene.add(this.stars);
     }
     this.stars.visible = true;
+    Phys.ragdoll(this, { x: this.kx + this.vx, y: this.yv, z: this.kz + this.vz });
     G.onKnockout(this);
   }
   getUp() {
+    if (this.ragdoll) Phys.unragdoll(this);
     this.down = false; this.hp = Math.ceil(this.maxHp * 0.5);
     if (this.stars) this.stars.visible = false;
   }
   physics(dt) {
+    if (this.ragdoll) return; // the physics engine owns the body while it's limp
     if (this.vault) return; // vaulting/mantling moves the player directly
     let mx = this.vx, mz = this.vz;
     if (this.down || this.handsUp > 0) { mx = 0; mz = 0; }
@@ -143,7 +147,7 @@ class Actor {
   }
   animate(dt) {
     const rg = this.rig;
-    if (this.dead) return;
+    if (this.dead || this.ragdoll) return;
     rg.root.position.set(this.x, this.y, this.z);
     rg.root.rotation.y = this.facing;
     if (this.down) {
@@ -201,9 +205,11 @@ class Actor {
     const rg = this.rig;
     rg.body.rotation.set(0, 0, 0); rg.body.position.set(0, 0, 0);
     for (const p of [rg.legL, rg.legR, rg.armL, rg.armR]) p.rotation.set(0, 0, 0);
-    rg.root.rotation.set(0, this.facing, 0);
+    for (const d of rg.defaults) { d.o.position.copy(d.p); d.o.rotation.set(0, 0, 0); }
+    rg.root.position.set(this.x, this.y, this.z); rg.root.rotation.set(0, this.facing, 0);
   }
   remove() {
+    if (this.ragdoll) Phys.unragdoll(this);
     this.dead = true;
     G.scene.remove(this.rig.root);
     if (this.stars) G.scene.remove(this.stars);

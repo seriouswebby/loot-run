@@ -5,6 +5,7 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 URL="file://$ROOT/index.html?autotest"
+if [ "${NOPHYS:-}" = 1 ]; then URL="$URL&nophys"; fi
 if [ $# -gt 0 ]; then URL="$URL&only=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$1")"; fi
 for f in "$ROOT"/js/*.js; do node --check "$f" || echo "SYNTAX ERROR in $f"; done
 "$CHROME" --headless=new --disable-gpu-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader \

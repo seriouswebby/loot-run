@@ -895,6 +895,19 @@ function placeATMs() {
   }
 }
 
+/* loose street props (bins, newspaper boxes, cones, alley crates); physics.js makes them knockable */
+function placeProps() {
+  W.propSpots = [];
+  const kinds = ['bin', 'bin', 'news', 'cone', 'bin'];
+  const avoid = (x, z) => W.robs.some((r) => dist(r.x, r.z, x, z) < 3.5) || W.places.shops.some((s) => dist(s.x, s.z, x, z) < 3.5) || dist(W.places.hideout.x, W.places.hideout.z, x, z) < 6;
+  for (const b of W.blocks) for (let k = 0; k < 2; k++) {
+    const side = Math.floor(rnd() * 4), t = (rnd() * 2 - 1) * 12, [nx, nz] = [[0, -1], [1, 0], [0, 1], [-1, 0]][side];
+    const x = b.cx + nx * 16.3 + (nz !== 0 ? t : 0), z = b.cz + nz * 16.3 + (nx !== 0 ? t : 0);
+    if (!avoid(x, z)) W.propSpots.push({ x, z, kind: kinds[Math.floor(rnd() * kinds.length)], rot: rnd() * TAU });
+  }
+  for (const a of W.alleys) for (let k = 0; k < 2; k++) W.propSpots.push({ x: a.minX + 1.2 + rnd() * (a.maxX - a.minX - 2.4), z: a.minZ + 1.2 + rnd() * (a.maxZ - a.minZ - 2.4), kind: 'crate', rot: rnd() * TAU });
+}
+
 /* ---------------- minimap base ---------------- */
 function buildMinimap() {
   const k = 2, o = W.MAPH, SZ = 2 * o * k;
@@ -981,6 +994,7 @@ W.build = function (scene, seed) {
   buildForest();
   buildOutskirts();
   placeATMs();
+  placeProps();
   buildTrees();
   for (const k in GB) GB[k].build(S);
   P.build(S);

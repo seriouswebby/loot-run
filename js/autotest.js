@@ -30,8 +30,8 @@ function runAutotest() {
   };
   const tp = (x, z) => { if (P.inCar) G.exitCar(true); P.x = x; P.z = z; P.kx = P.kz = 0; P.vx = P.vz = 0; zoneT = 0; G.crumbs = []; G.interact = computeInteract(); };
   const hold = (sec) => { Input.keys.KeyE = true; steps(sec); Input.keys.KeyE = false; steps(STEP * 2); };
-  const reset = () => { if (P.inCar) G.exitCar(true); if (P.inHeli) G.exitHeli(true); for (const c of G.cars) if (!c.persistent && !c.mission) c.remove(); G.cars = G.cars.filter((c) => !c.dead); Weather.set('clear', true); Ordnance.c4.length = 0; Heat.clear(); clearPolice(); G.respawning = false; P.down = false; P.handsUp = 0; P.hp = 100; Story.active = null; G.inputOverride = null; for (const k in Input.keys) Input.keys[k] = false; G.crimeCd = {}; };
-  startGame(null);
+  const reset = () => { Phys.clearRagdolls(); if (P.inCar) G.exitCar(true); if (P.inHeli) G.exitHeli(true); for (const c of G.cars) if (!c.persistent && !c.mission) c.remove(); G.cars = G.cars.filter((c) => !c.dead); Weather.set('clear', true); Ordnance.c4.length = 0; Heat.clear(); clearPolice(); G.respawning = false; P.down = false; P.handsUp = 0; P.hp = 100; Story.active = null; G.inputOverride = null; for (const k in Input.keys) Input.keys[k] = false; G.crimeCd = {}; };
+  startGame(null); G.camMode = 'iso';
   G.S.cash = 500;
 
   T('world built', () => {
@@ -607,6 +607,54 @@ function runAutotest() {
     }
     const glided = Math.abs(P.x - startX); G.noSpawn = false;
     return (opened && !hurt && glided > 20) || `opened ${opened} hurt ${hurt} glided ${glided.toFixed(1)} m y ${P.y.toFixed(1)}`;
+  });
+  T('physics: Box3D engine loaded', () => (Phys.ready ? true : new URLSearchParams(location.search).has('nophys') ? 'SKIP' : 'Box3D did not load'));
+  T('ragdoll: knocked-out pedestrian goes limp, settles, then gets up', () => {
+    if (!Phys.ready) return 'SKIP';
+    reset(); G.noSpawn = true; tp(W.rp(3) + 2.5, W.rp(4) + 25);
+    const p = spawnPed(P.x + 3, P.z, W.nearestBlock(P.x, P.z), 1, 1); p.kx = 9; p.yv = 5; p.hurt(999, P.x, P.z, 4, null);
+    const limp = !!p.ragdoll && Phys.ragdolls.includes(p);
+    steps(3);
+    const r = p.ragdoll, t = r.parts.torso.b.getPosition(), h = r.parts.head.b.getPosition();
+    const settled = isFinite(t.x + t.y + t.z + h.y) && t.y < 1 && Math.abs(p.x - t.x) < 0.01 && dist(p.x, p.z, P.x + 3, P.z) > 1;
+    const bodiesDown = Phys.ragdollBodies;
+    p.downT = 0; steps(0.2);
+    const up = !p.ragdoll && !p.down && Phys.ragdollBodies === bodiesDown - 6 && Math.abs(p.rig.torso.position.y - 1.27) < 0.01 && p.rig.root.visible && Math.abs(p.rig.root.position.x - p.x) < 0.5;
+    const outside = !W.collideCircle({ x: p.x, z: p.z }, p.r);
+    p.remove(); G.noSpawn = false;
+    return (limp && settled && up && outside) || `limp ${limp} settled ${settled} (torso y ${t.y.toFixed(2)}) up ${up} outside ${outside} ragdoll bodies ${bodiesDown}->${Phys.ragdollBodies}`;
+  });
+  T('ragdolls are capped at 8 at a time', () => {
+    if (!Phys.ready) return 'SKIP';
+    reset(); G.noSpawn = true; tp(0, 25); const peds = [];
+    for (let i = 0; i < 12; i++) { const p = spawnPed(P.x + (i % 4) * 2 - 3, P.z + Math.floor(i / 4) * 2 + 2, W.nearestBlock(P.x, P.z), 1, 1); p.hurt(999, P.x, P.z, 2, null); peds.push(p); }
+    steps(0.5); const n = Phys.ragdolls.length;
+    for (const p of peds) p.remove(); G.noSpawn = false;
+    return (n <= 8 && Phys.ragdolls.length === 0) || `ragdolls ${n}, left after cleanup ${Phys.ragdolls.length}`;
+  });
+  T('player ragdolls when knocked out and stands up after respawn', () => {
+    if (!Phys.ready) return 'SKIP';
+    reset(); tp(0, 25); G.S.armor = 0; P.kx = 6; G.hurtPlayer(500, P.x - 1, P.z, 4, null);
+    const limp = !!P.ragdoll; steps(0.6);
+    return (limp && !P.ragdoll && !P.down && Math.abs(P.rig.torso.position.y - 1.27) < 0.01) || `limp ${limp} ragdoll after ${!!P.ragdoll} down ${P.down}`;
+  });
+  T('a car sends a street bin flying', () => {
+    if (!Phys.ready) return 'SKIP';
+    reset(); G.noSpawn = true; const x = W.rp(3) + 2.5, z = W.rp(4) + 10;
+    const prop = { kind: 'bin', x, y: 0.5, z: z + 12, q: new THREE.Quaternion(), body: null, mesh: Phys.propMesh('bin') }; Phys.props.push(prop);
+    tp(x, z); const car = new Car('sedan', x, z, 0); G.enterCar(car); car.v = 18; car.vz = 18; Input.keys.KeyW = true;
+    steps(2); Input.keys.KeyW = false;
+    const moved = dist(prop.x, prop.z, x, z + 12);
+    G.exitCar(); car.remove(); Phys.kill(prop.body); G.scene.remove(prop.mesh); Phys.props.splice(Phys.props.indexOf(prop), 1); G.noSpawn = false;
+    return moved > 2 || 'bin moved ' + moved.toFixed(2);
+  });
+  T('explosions throw props and ragdolls', () => {
+    if (!Phys.ready) return 'SKIP';
+    reset(); G.noSpawn = true; tp(0, 25);
+    const prop = { kind: 'crate', x: 3, y: 0.45, z: 25, q: new THREE.Quaternion(), body: null, mesh: Phys.propMesh('crate') }; Phys.props.push(prop); steps(0.6);
+    explosion(1, 25, 7, 0, null); let top = 0; for (let i = 0; i < 40; i++) { step(STEP); top = Math.max(top, prop.y); }
+    Phys.kill(prop.body); G.scene.remove(prop.mesh); Phys.props.splice(Phys.props.indexOf(prop), 1); G.noSpawn = false;
+    return top > 1.2 || 'crate peak height ' + top.toFixed(2);
   });
   T('save and load', () => {
     G.S.cash = 4321; G.S.storyDone = 3; G.save();

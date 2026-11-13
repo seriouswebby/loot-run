@@ -378,6 +378,7 @@ function explosion(x, z, r, dmg, src) {
   hitA(P); for (const n of G.npcs) hitA(n);
   for (const c of G.cars) { if (c.dead || c.wreck) continue; const d = dist(c.x, c.z, x, z); if (d < r && d > 0.1) { c.lastHitBy = src; c.damage(dmg * (1 - d / r) * 0.9, x, z, src); c.kx += (c.x - x) / d * 6; c.kz += (c.z - z) / d * 6; } }
   for (const h of Choppers.list) if (!h.dead && h.y < 7 && dist(h.x, h.z, x, z) < r + 2) h.damage(dmg * 1.2, src);
+  Phys.explode(x, z, r);
   panic(x, z, 45);
   if (src === P) { G.crime('explosion', x, z, {}); G.blastLoot(x, z, r); }
 }

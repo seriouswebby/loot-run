@@ -677,6 +677,7 @@ function step(dt) {
   if (P.inCar) { P.x = P.inCar.x; P.z = P.inCar.z; }
   Bullets.update(dt); Pickups.update(dt); Spikes.update(dt); Roadblocks.update(dt); Smoke.update(dt);
   Choppers.update(dt); Ordnance.update(dt);
+  Phys.step(dt);
   updateSecurity(dt); Story.update(dt); updatePopulation(dt);
   crumbT -= dt;
   if (crumbT <= 0) {
@@ -846,6 +847,7 @@ function newWorld() {
   vera.ai = { mode: 'vera' }; vera.invuln = true; G.npcs.push(vera); G.vera = vera;
   spawnFixedCars();
   Choppers.init();
+  Phys.spawnProps();
   initMarkers();
   G.interact = { e: null, f: null };
   G.aimX = sp.x; G.aimZ = sp.z + 5;
@@ -859,10 +861,13 @@ function startGame(state) {
   G.equip(G.S.weapons.pistol ? 'pistol' : G.S.weapons.bat ? 'bat' : 'fists');
   Heat.clear(); Story.active = null;
   CAM.fx = P.x; CAM.fz = P.z;
+  // start in third person, looking toward Vera
+  P.facing = CAM.yaw = Math.atan2(G.vera.x - P.x, G.vera.z - P.z); CAM.pitch = 0.3; CAM.wasInCar = false;
   G.state = 'play';
   $('title').hidden = true; $('hud').hidden = false;
   Sfx.init();
   if (!state) setTimeout(() => UI.toast('Vera is waiting at the yellow marker. Press E to talk.', 'good'), 600);
+  if (G.camMode === 'chase') setTimeout(() => UI.toast('Click to look around with the mouse. Press C to switch camera views.'), 1400);
 }
 function bootUI() {
   $('btnNew').addEventListener('click', () => { startGame(null); G.save(); });
@@ -900,9 +905,10 @@ function boot() {
   newWorld();
   G.S = freshState();
   bootUI();
+  const physReady = Phys.init();
   const q = new URLSearchParams(location.search);
-  if (q.has('autotest')) { G.autotest = true; runAutotest(); return; }
-  if (q.has('demo')) { startGame(null); demoSetup(q.get('demo')); }
+  if (q.has('autotest')) { G.autotest = true; physReady.then(() => runAutotest()); return; }
+  if (q.has('demo')) { startGame(null); G.camMode = 'iso'; physReady.then(() => demoSetup(q.get('demo'))); }
   requestAnimationFrame((t) => { lastT = t; frame(t); });
 }
 
@@ -932,6 +938,14 @@ function demoSetup(kind) {
   else if (kind === 'rain' || kind === 'storm' || kind === 'fog') { Weather.set(kind, true); Weather.apply(); }
   else if (kind === 'curve') { const k = W.HWY - W.RR, rp = W.ringPoint(2 * k + 40); const car = new Car('supercar', rp.x - rp.tz * 7.5, rp.z + rp.tx * 7.5, Math.atan2(rp.tx, rp.tz)); P.x = car.x; P.z = car.z; G.enterCar(car); car.v = 40; for (let i = 0; i < 20; i++) step(STEP); CAM.zoomIso = 60; CAM.curIso = 60; }
   else if (kind === 'chute') { const b = W.buildings.filter((k) => k.h > 25).sort((p, q) => q.h - p.h)[0]; P.x = b.maxX + 6; P.z = (b.minZ + b.maxZ) / 2; P.y = b.h * 0.6; P.yv = -2; P.chute = true; P.facing = Math.PI / 2; for (let i = 0; i < 20; i++) step(STEP); CAM.zoomIso = 34; CAM.curIso = 34; }
+  else if (kind === 'ragdoll') {
+    G.camMode = 'chase'; P.x = W.rp(3) + 2.5; P.z = W.rp(4) + 20; P.facing = CAM.yaw = 0; CAM.pitch = 0.35;
+    for (let i = 0; i < 5; i++) { const p = spawnPed(P.x - 2 + i, P.z + 9 + (i % 2), W.nearestBlock(P.x, P.z), 1, 1); p.ai.mode = 'idle'; }
+    for (let i = 0; i < 4; i++) { const pr = { kind: i % 2 ? 'bin' : 'cone', x: P.x - 3 + i * 2, y: 0.5, z: P.z + 12, q: new THREE.Quaternion(), body: null, mesh: Phys.propMesh(i % 2 ? 'bin' : 'cone') }; Phys.props.push(pr); }
+    for (let i = 0; i < 40; i++) step(STEP);
+    explosion(P.x, P.z + 10, 7, 120, null);
+    for (let i = 0; i < 22; i++) step(STEP);
+  }
   else if (kind === 'map') { GPS.update(0.5); G.state = 'map'; $('bigmap').hidden = false; drawBigMap(); }
   else if (kind === 'beach') { P.x = 30; P.z = W.SHORE - 8; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'dialog') { Story.start(); }

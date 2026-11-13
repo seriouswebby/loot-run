@@ -3,7 +3,7 @@
 
 const G = {
   scene: null, player: null, npcs: [], cars: [], time: 0, crumbs: [], playerZone: 'street', curAlley: null,
-  state: 'title', respawning: false, respawnT: 0, respawnTo: null, camMode: 'iso', shakeAmt: 0, nitro: 1,
+  state: 'title', respawning: false, respawnT: 0, respawnTo: null, camMode: 'chase', shakeAmt: 0, nitro: 1,
   hold: { key: null, t: 0, dur: 1 }, interact: null, crimeCd: {}, toastQ: [], autotest: false, god: false,
   S: null,
 };
@@ -440,7 +440,8 @@ G.knockedOut = function () {
   const P = G.player; if (G.respawning) return;
   if (P.inCar) G.exitCar(true);
   if (P.inHeli) G.exitHeli(true);
-  P.down = true; P.vx = P.vz = 0;
+  P.down = true;
+  Phys.ragdoll(P, { x: P.kx + P.vx, y: P.yv, z: P.kz + P.vz }); P.vx = P.vz = 0;
   const loss = Math.round(G.S.cash * 0.15);
   G.startRespawn('KNOCKED OUT', 'Hospital bill: -' + money(loss), W.places.hospital, loss, true);
 };
@@ -461,6 +462,7 @@ G.startRespawn = function (title, sub, place, loss, heal) {
 };
 G.finishRespawn = function () {
   const P = G.player, r = G.respawnTo;
+  if (P.ragdoll) Phys.unragdoll(P);
   G.S.cash = Math.max(0, G.S.cash - r.loss);
   Heat.clear(); clearPolice();
   P.x = r.place.x + rand(-1, 1); P.z = r.place.z + rand(-1, 1); P.kx = P.kz = 0; P.y = 0;
