@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Loot Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: full-bleed WebGL city, HUD pinned to the four corners like a getaway-car dashboard. */
+:root {
+  color-scheme: dark;
+  --ink: #0f1216;          /* panels, outlines */
+  --ink-2: #1b2027;
+  --paper: #f3ead8;        /* main text */
+  --muted: #a7aeb6;
+  --cash: #8bea5a;         /* money */
+  --heat: #ff4a3d;         /* police red */
+  --siren: #3d8bff;        /* police blue */
+  --gold: #ffd23f;         /* objectives, Vera */
+  --font-display: 'Bungee', Impact, 'Arial Black', sans-serif;
+  --font-ui: 'Barlow Condensed', 'Arial Narrow', Arial, sans-serif;
+}
+html, body { height: 100%; margin: 0; background: var(--ink); color: var(--paper); overflow: hidden; font-family: var(--font-ui); }
+[hidden] { display: none !important; }
+#game { position: fixed; inset: 0; cursor: crosshair; }
+#game canvas { display: block; }
+.panel { background: rgba(15, 18, 22, 0.78); border: 2px solid rgba(243, 234, 216, 0.12); border-radius: 6px; }
+#hud { position: fixed; inset: 0; pointer-events: none; }
+#flash { position: fixed; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(220, 20, 20, 0.85)); opacity: 0; pointer-events: none; }
+
+#tl { position: absolute; top: max(14px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); display: grid; gap: 6px; }
+#cash { font: 34px/1 var(--font-display); color: var(--cash); text-shadow: 2px 2px 0 var(--ink), -1px -1px 0 var(--ink); font-variant-numeric: tabular-nums; }
+.bar { width: 210px; height: 10px; background: rgba(15, 18, 22, 0.75); border: 2px solid var(--ink); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 100%; transition: width .15s; }
+#hpFill { background: linear-gradient(90deg, #d7263d, #ff5a5f); }
+#armorFill { background: linear-gradient(90deg, #2f6fdf, #6fb0ff); }
+#armorBar { height: 6px; }
+
+#obj { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); text-align: center; padding: 8px 18px 9px; min-width: 260px; max-width: min(560px, 60vw); }
+#objTitle { font: 13px var(--font-display); color: var(--gold); letter-spacing: .06em; }
+#objText { font-size: 19px; font-weight: 600; margin-top: 2px; text-wrap: balance; }
+
+#tr { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); display: grid; gap: 8px; justify-items: end; }
+#heatBox { padding: 8px 10px; display: grid; gap: 5px; justify-items: end; opacity: .6; }
+#heatBox.active { opacity: 1; }
+#heatBox .lbl { font: 11px var(--font-display); letter-spacing: .12em; color: var(--muted); }
+#pips { display: flex; gap: 5px; }
+.pip { width: 22px; height: 14px; border-radius: 7px 7px 3px 3px; background: #2a3038; border: 2px solid var(--ink); }
+.pip.dim { background: #7a2a26; }
+.pip.red { background: var(--heat); box-shadow: 0 0 12px var(--heat); }
+.pip.blue { background: var(--siren); box-shadow: 0 0 12px var(--siren); }
+#heatStatus { font: 13px var(--font-display); color: var(--paper); min-height: 14px; letter-spacing: .04em; }
+#evadeBar { width: 140px; height: 5px; background: #2a3038; border-radius: 3px; overflow: hidden; }
+#evadeFill { height: 100%; width: 0; background: var(--cash); }
+#zone { padding: 6px 10px; text-align: right; }
+#zoneLabel { font: 14px var(--font-display); letter-spacing: .05em; }
+#zoneHint { font-size: 15px; color: var(--muted); font-weight: 600; }
+#zone[data-z="highway"] #zoneLabel { color: #ffcf4a; }
+#zone[data-z="alley"] #zoneLabel { color: #e08a4e; }
+#zone[data-z="forest"] #zoneLabel { color: #7ddf6a; }
+
+#sec { position: absolute; right: max(16px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); padding: 9px 12px; display: grid; gap: 3px; min-width: 170px; }
+#sec .h { font: 12px var(--font-display); color: var(--gold); letter-spacing: .06em; margin-bottom: 2px; }
+#sec .row { display: flex; justify-content: space-between; gap: 14px; font-size: 16px; font-weight: 600; }
+#sec .ok { color: var(--cash); } #sec .bad { color: var(--heat); }
+
+#bl { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); padding: 9px 14px; }
+#weapon { font: 18px var(--font-display); }
+#ammo { font-size: 17px; font-weight: 700; color: var(--gold); }
+#items { font-size: 15px; color: var(--muted); font-weight: 600; margin-top: 3px; max-width: 300px; }
+#airStatus { font: 11px var(--font-display); color: #ffb703; letter-spacing: .05em; min-height: 12px; }
+#weatherLine { font-size: 14px; color: #a9d6e5; font-weight: 600; }
+#heliLock { position: absolute; left: 0; top: 0; width: 70px; height: 70px; border: 2px dashed var(--heat); border-radius: 50%; display: grid; place-items: center; align-content: end; padding-bottom: 4px; }
+#heliLock span { font: 10px var(--font-display); color: var(--heat); text-shadow: 1px 1px 0 var(--ink); }
+#heliLock .bar { width: 50px; height: 5px; } #heliLockFill { background: var(--heat); }
+
+#mmWrap { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); width: 190px; height: 190px; border-radius: 50%; overflow: hidden; border: 3px solid var(--ink); box-shadow: 0 0 0 2px rgba(243, 234, 216, 0.25), 0 6px 20px rgba(0, 0, 0, .4); }
+#minimap { width: 100%; height: 100%; display: block; }
+
+#prompt { position: absolute; left: 50%; bottom: max(26px, env(safe-area-inset-bottom)); transform: translateX(-50%); text-align: center; padding: 9px 18px; font-size: 20px; font-weight: 700; white-space: pre; }
+#holdBar { margin: 7px auto 0; width: 220px; height: 8px; background: #2a3038; border-radius: 4px; overflow: hidden; }
+#holdFill { height: 100%; width: 0; background: var(--gold); }
+#grab { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); padding: 8px 16px; text-align: center; }
+#grab b { font: 16px var(--font-display); color: var(--heat); }
+#grab .bar { margin-top: 6px; } #grabFill { background: var(--heat); }
+
+#crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 2px solid var(--paper); border-radius: 50%; box-shadow: 0 0 0 1px var(--ink), inset 0 0 0 1px var(--ink); }
+#crosshair::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 1px var(--ink); }
+#lookHint { position: absolute; left: 50%; top: calc(50% + 28px); transform: translateX(-50%); padding: 5px 12px; font-size: 16px; font-weight: 600; white-space: nowrap; }
+#toasts { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); display: grid; gap: 6px; justify-items: center; width: min(560px, 90vw); }
+.toast { background: rgba(15, 18, 22, 0.85); border-left: 4px solid var(--paper); padding: 6px 12px; font-size: 17px; font-weight: 600; border-radius: 4px; }
+.toast.good { border-color: var(--cash); } .toast.warn { border-color: #ffb703; } .toast.heat { border-color: var(--heat); } .toast.cash { border-color: var(--cash); color: var(--cash); }
+
+#banner { position: absolute; left: 0; right: 0; top: 34%; text-align: center; opacity: 0; transform: scale(.9); transition: opacity .25s, transform .25s; }
+#banner.show { opacity: 1; transform: scale(1); }
+#bannerTitle { font: clamp(40px, 9vw, 92px)/1 var(--font-display); color: var(--paper); text-shadow: 4px 4px 0 var(--ink); letter-spacing: .02em; }
+#banner.cuffed #bannerTitle { color: var(--siren); } #banner.ko #bannerTitle { color: var(--heat); }
+#banner.done #bannerTitle { color: var(--cash); } #banner.job #bannerTitle { color: var(--gold); }
+#bannerSub { font-size: 24px; font-weight: 700; margin-top: 6px; text-shadow: 2px 2px 0 var(--ink); }
+
+#floaters { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.floater { position: absolute; left: 0; top: 0; font: 20px var(--font-display); color: var(--paper); text-shadow: 2px 2px 0 var(--ink); white-space: nowrap; }
+.floater.cash { color: var(--cash); } .floater.hp { color: #ff8a8f; } .floater.ammo { color: var(--gold); }
+
+.screen { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px max(16px, env(safe-area-inset-right)) 16px max(16px, env(safe-area-inset-left)); overflow-y: auto; }
+#title { background: linear-gradient(180deg, rgba(15, 18, 22, 0.35), rgba(15, 18, 22, 0.9) 70%); }
+.titleCard { max-width: 760px; width: 100%; display: grid; gap: 18px; }
+.logo { font: clamp(56px, 13vw, 128px)/0.9 var(--font-display); color: var(--gold); text-shadow: 6px 6px 0 var(--ink), 0 0 40px rgba(255, 210, 63, 0.25); letter-spacing: -.01em; }
+.logo small { display: block; font-size: .2em; color: var(--paper); letter-spacing: .3em; margin-top: 10px; text-shadow: 2px 2px 0 var(--ink); }
+.pitch { font-size: 21px; font-weight: 600; line-height: 1.3; max-width: 60ch; text-wrap: pretty; }
+.btns { display: flex; gap: 12px; flex-wrap: wrap; }
+button { font: 18px var(--font-display); letter-spacing: .03em; padding: 12px 22px; border-radius: 6px; border: 3px solid var(--ink); background: var(--gold); color: var(--ink); cursor: pointer; box-shadow: 4px 4px 0 var(--ink); }
+button.alt { background: var(--paper); }
+button:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--ink); }
+button:focus-visible { outline: 3px solid var(--siren); outline-offset: 3px; }
+button:disabled { background: #3a414a; color: var(--muted); cursor: default; box-shadow: none; transform: none; }
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 6px 22px; font-size: 17px; font-weight: 600; }
+.keys div { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+kbd { font: 12px var(--font-display); background: var(--paper); color: var(--ink); border-radius: 4px; padding: 3px 6px; border-bottom: 3px solid #b9ad94; white-space: nowrap; }
+.foot { color: var(--muted); font-size: 16px; }
+
+.modal { width: min(720px, 100%); padding: 20px 22px; max-height: 88vh; overflow-y: auto; }
+.modal h2 { font: 26px var(--font-display); margin: 0 0 4px; color: var(--gold); }
+#shop .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+#shopCash { font: 24px var(--font-display); color: var(--cash); }
+#shopList h3 { font: 14px var(--font-display); color: var(--muted); letter-spacing: .12em; margin: 16px 0 6px; }
+.item { display: flex; align-items: center; gap: 14px; padding: 8px 0; border-top: 1px solid rgba(243, 234, 216, 0.1); }
+.item .info { flex: 1; min-width: 0; display: grid; }
+.item b { font-size: 20px; } .item span { color: var(--muted); font-size: 16px; font-weight: 500; }
+.item button { font-size: 15px; padding: 8px 12px; min-width: 104px; box-shadow: 3px 3px 0 var(--ink); }
+.item button.owned { background: #23422a; color: var(--cash); }
+
+#dialog { position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(760px, calc(100vw - 32px)); padding: 16px 20px 14px; display: grid; grid-template-columns: 64px 1fr; gap: 16px; cursor: pointer; }
+.portrait { width: 64px; height: 64px; border-radius: 50%; background: #7b2cbf; border: 3px solid var(--gold); display: grid; place-items: center; font: 30px var(--font-display); }
+#dlgName { font: 14px var(--font-display); color: var(--gold); letter-spacing: .06em; }
+#dlgText { font-size: 22px; font-weight: 600; line-height: 1.3; margin-top: 3px; text-wrap: pretty; }
+#dlgFoot { display: flex; justify-content: space-between; color: var(--muted); font-size: 15px; margin-top: 8px; }
+
+#bigmap { background: rgba(15, 18, 22, 0.85); }
+#bigmap .wrap { display: grid; gap: 10px; justify-items: center; }
+#bigmapCanvas { width: min(82vh, 92vw); height: min(82vh, 92vw); border-radius: 8px; border: 3px solid var(--ink); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; font-size: 16px; font-weight: 600; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+#autotest { position: fixed; top: 0; left: 0; right: 0; max-height: 100vh; overflow: auto; margin: 0; padding: 12px; background: rgba(0, 0, 0, 0.85); color: #b7ff9b; font: 13px/1.4 ui-monospace, monospace; z-index: 99; white-space: pre-wrap; }
+@media (max-width: 700px) {
+  #obj { top: 74px; min-width: 0; width: calc(100vw - 32px); } #toasts { top: 150px; }
+  #mmWrap { width: 130px; height: 130px; } .bar { width: 150px; } #sec { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { #banner, .bar i { transition: none; } }
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="floaters"></div>
+
+<div id="hud" hidden>
+  <div id="flash"></div>
+  <div id="tl">
+    <div id="cash">$0</div>
+    <div class="bar" id="hpBar"><i id="hpFill"></i></div>
+    <div class="bar" id="armorBar"><i id="armorFill"></i></div>
+  </div>
+  <div id="obj" class="panel"><div id="objTitle">FREE ROAM</div><div id="objText"></div></div>
+  <div id="tr">
+    <div id="heatBox" class="panel">
+      <div class="lbl">HEAT</div>
+      <div id="pips"><i id="pip0" class="pip"></i><i id="pip1" class="pip"></i><i id="pip2" class="pip"></i><i id="pip3" class="pip"></i><i id="pip4" class="pip"></i></div>
+      <div id="heatStatus"></div>
+      <div id="evadeBar"><div id="evadeFill"></div></div>
+      <div id="airStatus"></div>
+    </div>
+    <div id="zone" class="panel"><div id="zoneLabel">STREETS</div><div id="zoneHint"></div><div id="weatherLine"></div></div>
+  </div>
+  <div id="sec" class="panel" hidden>
+    <div class="h" id="secName">STORE</div>
+    <div class="row"><span>Alarm box</span><span id="secAlarm">ARMED</span></div>
+    <div class="row"><span>Cameras</span><span id="secCams">1/1</span></div>
+    <div class="row"><span>If robbed now</span><span id="secHeat">+2</span></div>
+  </div>
+  <div id="crosshair" hidden></div>
+  <div id="heliLock" hidden><span>TARGET</span><div class="bar"><i id="heliLockFill"></i></div></div>
+  <div id="lookHint" class="panel" hidden>Click to look around with the mouse</div>
+  <div id="toasts"></div>
+  <div id="banner"><div id="bannerTitle"></div><div id="bannerSub"></div></div>
+  <div id="grab" class="panel" hidden><b id="grabText">GETTING CUFFED — RUN!</b><div class="bar"><i id="grabFill"></i></div></div>
+  <div id="prompt" class="panel" hidden><div id="promptText"></div><div id="holdBar" hidden><div id="holdFill"></div></div></div>
+  <div id="bl" class="panel"><div id="weapon">FISTS</div><div id="ammo">MELEE</div><div id="items"></div></div>
+  <div id="mmWrap"><canvas id="minimap" width="380" height="380"></canvas></div>
+</div>
+
+<div id="title" class="screen">
+  <div class="titleCard">
+    <div class="logo">LOOT RUN<small>BAYHAVEN · AFTER HOURS</small></div>
+    <p class="pitch">Rob anything in Bayhaven: corner stores, ATMs, parked cars, the federal vault. Cut the alarm boxes and loop the cameras first, or don't. Then choose your getaway: the fast, exposed Ring Highway, or alleys and woods where you can hide but get boxed in.</p>
+    <div class="btns"><button id="btnNew" type="button">New story</button><button id="btnCont" class="alt" type="button" hidden>Continue</button></div>
+    <div class="keys">
+      <div><kbd>WASD</kbd> Move · drive</div>
+      <div><kbd>MOUSE</kbd> Aim · <kbd>CLICK</kbd> attack</div>
+      <div><kbd>E</kbd> Interact · hold to rob</div>
+      <div><kbd>F</kbd> Steal a car or helicopter</div>
+      <div><kbd>SHIFT</kbd> Sprint · nitro (fast cars or Nitro Kit) · descend</div>
+      <div><kbd>SPACE</kbd> Jump · vault · mantle</div>
+      <div><kbd>Q</kbd> <kbd>1-5</kbd> Weapons</div>
+      <div><kbd>G</kbd> Smoke bomb · spike strip</div>
+      <div><kbd>T</kbd> Grenade · <kbd>B</kbd> C4</div>
+      <div><kbd>H</kbd> Medkit</div>
+      <div><kbd>C</kbd> Iso · top-down · 3rd person</div>
+      <div><kbd>3RD PERSON</kbd> Mouse looks · A/D strafe</div>
+      <div><kbd>M</kbd> City map</div>
+      <div><kbd>ESC</kbd> Pause · <kbd>N</kbd> sound</div>
+    </div>
+    <div class="foot">Needs a keyboard and mouse. Your story saves on this device after every job.</div>
+  </div>
+</div>
+
+<div id="pause" class="screen" hidden style="background: rgba(15,18,22,.75)">
+  <div class="modal panel">
+    <h2>PAUSED</h2>
+    <p id="pauseStats" class="foot"></p>
+    <div class="keys" style="margin: 14px 0 18px">
+      <div><kbd>E</kbd> Rob · cut alarm · loop camera</div>
+      <div><kbd>F</kbd> Steal · enter · exit car</div>
+      <div><kbd>G</kbd> Smoke bomb · spike strip</div>
+      <div><kbd>T</kbd> Grenade · <kbd>B</kbd> plant / blow C4</div>
+      <div><kbd>SPACE</kbd> Jump · vault · mantle (on foot) · handbrake (car) · climb (heli)</div>
+      <div><kbd>C</kbd> Change camera</div>
+      <div><kbd>3RD PERSON</kbd> Mouse looks · A/D strafe</div>
+      <div><kbd>M</kbd> City map</div>
+      <div><kbd>H</kbd> Medkit</div>
+    </div>
+    <div class="btns"><button id="btnResume" type="button">Resume</button><button id="btnSound" class="alt" type="button">Sound: on</button><button id="btnTitle" class="alt" type="button">Save &amp; quit</button></div>
+  </div>
+</div>
+
+<div id="shop" class="screen" hidden style="background: rgba(15,18,22,.6)">
+  <div class="modal panel">
+    <div class="top"><h2 id="shopName">HARDLINE SUPPLY</h2><div id="shopCash">$0</div></div>
+    <p class="foot">Guns, gear and explosives. Robbery cash spends here, no questions asked. Press Esc or E to leave.</p>
+    <div id="shopList"></div>
+    <div class="btns" style="margin-top: 16px"><button id="shopClose" class="alt" type="button">Leave shop</button></div>
+  </div>
+</div>
+
+<div id="dialog" class="panel" hidden>
+  <div class="portrait">V</div>
+  <div><div id="dlgName">VERA KADE</div><div id="dlgText"></div><div id="dlgFoot"><span>E / click to continue</span><span id="dlgStep"></span></div></div>
+</div>
+
+<div id="bigmap" class="screen" hidden>
+  <div class="wrap">
+    <canvas id="bigmapCanvas" width="900" height="900"></canvas>
+    <div class="legend">
+      <span><i style="background:#d9c27a"></i>Ring Highway: fast, roadblocks</span>
+      <span><i style="background:#b98a4e"></i>Alley</span>
+      <span><i style="background:#a0522d"></i>Dead-end alley</span>
+      <span><i style="background:#24391f"></i>Forest Park: 4 exits</span>
+      <span style="color:#8bea5a">$ Robbable</span><span style="color:#ff8a3d">G Gun &amp; explosives store</span><span>H Helipad</span><span style="color:#ffd23f">— GPS route</span><span style="color:#ff7b29">R Rusty's</span><span style="color:#ffd23f">V Vera</span>
+    </div>
+    <div class="foot">M or click to close</div>
+  </div>
+</div>
+
+<div id="ending" class="screen" hidden style="background: rgba(15,18,22,.85)">
+  <div class="titleCard" style="text-align:center; justify-items:center">
+    <div class="logo">GOT AWAY<small>THE BAYHAVEN STORY IS COMPLETE</small></div>
+    <p class="pitch" id="endStats"></p>
+    <button id="btnEndPlay" type="button">Keep robbing in free roam</button>
+  </div>
+</div>
+
+<div id="nogl" class="screen" hidden><p class="pitch">This game needs WebGL. Try a recent version of Chrome, Edge, Firefox or Safari.</p></div>
+<pre id="autotest" hidden></pre>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>window.THREE || document.write('<script src="vendor/three.min.js"><\/script>');</script>
+<script src="js/core.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/world.js"></script>
+<script src="js/actors.js"></script>
+<script src="js/vehicles.js"></script>
+<script src="js/game.js"></script>
+<script src="js/air.js"></script>
+<script src="js/weather.js"></script>
+<script src="js/main.js"></script>
+<script src="js/autotest.js"></script>
+<script>
+(function () {
+  let started = false;
+  const go = () => { if (!started) { started = true; boot(); } };
+  if (document.fonts && document.fonts.load) {
+    Promise.race([Promise.all([document.fonts.load('40px Bungee'), document.fonts.load('600 20px "Barlow Condensed"')]), new Promise((r) => setTimeout(r, 2500))]).then(go, go);
+  } else go();
+})();
+</script>
+</body>
+</html>
