@@ -67,6 +67,8 @@ const UI = {
     this.set('hpFill', clamp(P.hp, 0, 100) + '%', 'width');
     this.set('armorFill', clamp(S.armor, 0, 100) + '%', 'width');
     this.set('armorBar', S.armor > 0 ? '1' : '0.25', 'opacity');
+    this.set('stamFill', Math.round(G.stamina == null ? 100 : G.stamina) + '%', 'width');
+    $('stamBar').classList.toggle('winded', !!G.winded); $('stamBar').hidden = !!(P.inCar || P.inHeli);
     // heat pips
     const blink = Math.floor(G.time * 4) % 2;
     for (let i = 0; i < 5; i++) {
@@ -546,7 +548,14 @@ function updatePlayer(dt) {
   } else { mx = f.x * fw + r.x * st; mz = f.z * fw + r.z * st; }
   if (G.inputOverride) { mx = G.inputOverride.mx || 0; mz = G.inputOverride.mz || 0; }
   const m = Math.hypot(mx, mz), holding = !!G.hold.key && Input.down('KeyE');
-  if (m > 0.01 && !holding) { const sp = P.chute ? 8.5 : key('ShiftLeft', 'ShiftRight') ? 7.4 : 4.6; P.vx = mx / m * sp; P.vz = mz / m * sp; }
+  const wantSprint = key('ShiftLeft', 'ShiftRight') && m > 0.01 && !holding && !P.chute && P.y < 0.5 + (P.y > 0.5 ? W.floorAt(P.x, P.z, P.y) : 0);
+  if (G.stamina == null) G.stamina = 100;
+  if (G.winded && G.stamina >= 30) G.winded = false;
+  const sprinting = wantSprint && !G.winded && G.stamina > 0;
+  if (sprinting) { G.stamina = Math.max(0, G.stamina - dt * 17); G.restT = 0.6; if (G.stamina <= 0) { G.winded = true; G.toast('Out of breath!'); } }
+  else { G.restT = (G.restT || 0) - dt; if (G.restT <= 0) G.stamina = Math.min(100, G.stamina + dt * 26); }
+  G.sprinting = sprinting;
+  if (m > 0.01 && !holding) { const sp = P.chute ? 8.5 : sprinting ? 9.4 : 4.8; P.vx = mx / m * sp; P.vz = mz / m * sp; }
   else if (P.chute) { P.vx = Math.sin(P.facing) * 4.5; P.vz = Math.cos(P.facing) * 4.5; }
   else { P.vx = P.vz = 0; }
   const w = WEAPONS[P.weapon], aim = chase ? CAM.yaw : Math.atan2(G.aimX - P.x, G.aimZ - P.z);
@@ -950,6 +959,12 @@ function demoSetup(kind) {
     for (let i = 0; i < 40; i++) step(STEP);
     explosion(P.x, P.z + 10, 7, 120, null);
     for (let i = 0; i < 22; i++) step(STEP);
+  }
+  else if (kind === 'damage') {
+    G.camMode = 'chase'; P.x = W.rp(3) + 2.5; P.z = W.rp(4) + 20; P.facing = CAM.yaw = 0; CAM.pitch = 0.45; CAM.chaseD = 6;
+    const car = new Car('sedan', P.x + 1.2, P.z + 6, 0.7, { parked: true, color: '#3a86ff' });
+    car.damage(30, car.x + 3, car.z + 1); car.damage(25, car.x - 1, car.z + 4); car.damage(35, car.x + 1, car.z - 4); car.damage(20, car.x - 3, car.z);
+    for (let i = 0; i < 30; i++) step(STEP);
   }
   else if (kind === 'map') { GPS.update(0.5); G.state = 'map'; $('bigmap').hidden = false; drawBigMap(); }
   else if (kind === 'beach') { P.x = 30; P.z = W.SHORE - 8; for (let i = 0; i < 30; i++) step(STEP); }

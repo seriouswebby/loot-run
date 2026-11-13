@@ -71,7 +71,7 @@ const W = {
   colliders: [], cells: new Map(), GS: 10, qid: 1,
   nodes: [], nodeMap: new Map(), edges: [],
   blocks: [], blockGrid: [], alleys: [], trails: [], forestExits: [], places: { helipads: [], shops: [] }, robs: [], buildings: [],
-  parkingSpots: [], curbSpots: [], trees: [], cams: [], alarms: [],
+  parkingSpots: [], curbSpots: [], trees: [], cams: [], alarms: [], lampSpots: [],
 };
 W.HALF = W.N * 25;          // the street grid spans ±HALF
 W.HWY = W.HALF + 160;       // Ring Highway centreline (6 lanes, 30 m wide)
@@ -136,6 +136,15 @@ W.insert = function (c) {
 W.addCollider = function (minX, minZ, maxX, maxZ, h, kind, noLos) {
   const c = { minX, minZ, maxX, maxZ, h: h || 10, kind: kind || 'wall', noLos: !!noLos, q: 0 };
   W.colliders.push(c); W.insert(c); return c;
+};
+W.removeCollider = function (c) {
+  if (c.removed) return;
+  for (let ix = Math.floor(c.minX / W.GS); ix <= Math.floor(c.maxX / W.GS); ix++)
+    for (let iz = Math.floor(c.minZ / W.GS); iz <= Math.floor(c.maxZ / W.GS); iz++) {
+      const a = W.cells.get(gkey(ix, iz)); if (!a) continue; const i = a.indexOf(c); if (i >= 0) a.splice(i, 1);
+    }
+  c.removed = true;
+  if (c.physBody) { try { c.physBody.destroy(); c.physBody.delete(); } catch (e) { /* gone */ } c.physBody = null; }
 };
 W.addCircle = function (x, z, r, kind) {
   const c = { circle: true, x, z, r, minX: x - r, maxX: x + r, minZ: z - r, maxZ: z + r, h: 5, kind, noLos: true, q: 0 };
@@ -634,7 +643,11 @@ function specialBlock(b) {
     addSign(cx, 4.2, cz + 5.95, 'n', 'FUEL & GO', '#0b6e4f', '#ffffff', 7, 1.6);
     P.box(cx, 5.2, cz - 6, 18, 0.5, 10, '#e8e8e8'); P.box(cx, 5.55, cz - 6, 18.2, 0.25, 10.2, '#0b6e4f');
     for (const [dx, dz] of [[-7.5, -3.5], [7.5, -3.5], [-7.5, -8.5], [7.5, -8.5]]) { P.box(cx + dx, 2.5, cz + dz, 0.5, 5, 0.5, '#cfcfcf'); W.addCircle(cx + dx, cz + dz, 0.4, 'pillar'); }
-    for (const dx of [-3.5, 3.5]) { P.box(cx + dx, 0.8, cz - 6, 1, 1.6, 0.8, '#d62828'); W.addCollider(cx + dx - 0.5, cz - 6.4, cx + dx + 0.5, cz - 5.6, 1.6, 'prop', true); }
+    for (const dx of [-3.5, 3.5]) {
+      const pm = new THREE.Mesh(new THREE.BoxGeometry(1, 1.6, 0.8), lam('#d62828')); pm.position.set(cx + dx, 0.8, cz - 6); pm.castShadow = true; S.add(pm);
+      const sc = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.35, 0.05), new THREE.MeshBasicMaterial({ color: 0x9be7ff })); sc.position.set(0, 0.35, 0.43); pm.add(sc);
+      const c = W.addCollider(cx + dx - 0.5, cz - 6.4, cx + dx + 0.5, cz - 5.6, 1.6, 'prop', true); c.destructible = { kind: 'pump', ref: pm, x: cx + dx, z: cz - 6 };
+    }
     const r = makeRob('gas', 'store', 'Fuel & Go', cx + 3, cz + 3.8, { hold: 3.5, cash: [200, 380], base: 0, cool: 150 });
     addAlarm(r, cx - 8, cz + 10.5, 'w');
     addCam(r, cx - 6.5, cz + 6, 'n', 0.2, 13);
@@ -655,10 +668,7 @@ function blockGround(b) {
   if (!['park', 'parking', 'gas', 'chop'].includes(b.type)) GB.plaza.rect(cx - 15.5, cz - 15.5, cx + 15.5, cz + 15.5, 0.03, 4);
   for (const [dx, dz, sx, sz] of [[0, -o, 38, 0.3], [0, o, 38, 0.3], [-o, 0, 0.3, 38], [o, 0, 0.3, 38]]) P.box(cx + dx, 0.08, cz + dz, sx, 0.16, sz, '#9b958a', 0);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const x = cx + sx * 18.2, z = cz + sz * 18.2;
-    P.box(x, 2.75, z, 0.18, 5.5, 0.18, '#3a3d42');
-    P.box(x - sx * 0.8, 5.45, z, 1.6, 0.14, 0.2, '#3a3d42');
-    P.box(x - sx * 1.5, 5.3, z, 0.5, 0.2, 0.4, '#fff1b8');
+    W.lampSpots.push({ x: cx + sx * 18.2, z: cz + sz * 18.2, sx });
   }
 }
 
@@ -853,7 +863,33 @@ function buildOutskirts() {
   W.places.beach = { id: 'beach', name: 'Skyline Tours dock', x: 45, z: SH - 6 };
 }
 
-W.addTree = function (x, z, type) { W.trees.push({ x, z, type, s: 0.8 + rnd() * 0.5 }); W.addCircle(x, z, 0.45, 'tree'); };
+W.addTree = function (x, z, type) {
+  const t = { x, z, type, s: 0.8 + rnd() * 0.5 };
+  t.col = W.addCircle(x, z, 0.45, 'tree'); t.col.destructible = { kind: 'tree', ref: t };
+  W.trees.push(t);
+};
+const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
+W.hideTree = function (t) {
+  const m = W.treeMeshes; if (!m || t.ti == null) return;
+  m.trunks.setMatrixAt(t.ti, ZERO_M); m.trunks.instanceMatrix.needsUpdate = true;
+  t.cm.setMatrixAt(t.ci, ZERO_M); t.cm.instanceMatrix.needsUpdate = true;
+};
+function buildLamps() {
+  const n = W.lampSpots.length, pole = new THREE.BoxGeometry(0.18, 5.5, 0.18); pole.translate(0, 2.75, 0);
+  const arm = new THREE.BoxGeometry(1.6, 0.14, 0.2); arm.translate(-0.8, 5.45, 0);
+  const head = new THREE.BoxGeometry(0.5, 0.2, 0.4); head.translate(-1.5, 5.3, 0);
+  const poles = new THREE.InstancedMesh(pole, lam('#3a3d42'), n), arms = new THREE.InstancedMesh(arm, lam('#3a3d42'), n), heads = new THREE.InstancedMesh(head, new THREE.MeshBasicMaterial({ color: 0xfff1b8 }), n);
+  const d = new THREE.Object3D();
+  W.lampSpots.forEach((l, i) => {
+    d.position.set(l.x, 0, l.z); d.rotation.set(0, l.sx > 0 ? 0 : Math.PI, 0); d.updateMatrix();
+    poles.setMatrixAt(i, d.matrix); arms.setMatrixAt(i, d.matrix); heads.setMatrixAt(i, d.matrix);
+    l.i = i; l.col = W.addCircle(l.x, l.z, 0.25, 'lamp'); l.col.h = 5.5; l.col.destructible = { kind: 'lamp', ref: l };
+  });
+  for (const m of [poles, arms]) { m.castShadow = true; S.add(m); }
+  S.add(heads);
+  W.lampMeshes = [poles, arms, heads];
+}
+W.hideLamp = function (l) { for (const m of W.lampMeshes) { m.setMatrixAt(l.i, ZERO_M); m.instanceMatrix.needsUpdate = true; } };
 function buildTrees() {
   const d = new THREE.Object3D(), col = new THREE.Color();
   const total = W.trees.length;
@@ -864,9 +900,10 @@ function buildTrees() {
   const roundG = new THREE.IcosahedronGeometry(2, 0); roundG.translate(0, 3.9, 0);
   const pm = new THREE.InstancedMesh(pineG, new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, pines.length));
   const rm = new THREE.InstancedMesh(roundG, new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, rounds.length));
-  W.trees.forEach((t, i) => { d.position.set(t.x, 0, t.z); d.rotation.set(0, rnd() * TAU, 0); d.scale.setScalar(t.s); d.updateMatrix(); trunks.setMatrixAt(i, d.matrix); });
-  pines.forEach((t, i) => { d.position.set(t.x, 0, t.z); d.rotation.set(0, rnd() * TAU, 0); d.scale.set(t.s, t.s * (0.9 + rnd() * 0.3), t.s); d.updateMatrix(); pm.setMatrixAt(i, d.matrix); pm.setColorAt(i, col.set(pick(['#2f5d34', '#28512d', '#356b3a', '#3d6e33']))); });
-  rounds.forEach((t, i) => { d.position.set(t.x, 0, t.z); d.rotation.set(rnd(), rnd() * TAU, 0); d.scale.setScalar(t.s); d.updateMatrix(); rm.setMatrixAt(i, d.matrix); rm.setColorAt(i, col.set(pick(['#4f8a3a', '#5e9a3f', '#477f36', '#6aa64a']))); });
+  W.treeMeshes = { trunks };
+  W.trees.forEach((t, i) => { t.ti = i; d.position.set(t.x, 0, t.z); d.rotation.set(0, rnd() * TAU, 0); d.scale.setScalar(t.s); d.updateMatrix(); trunks.setMatrixAt(i, d.matrix); });
+  pines.forEach((t, i) => { t.ci = i; t.cm = pm; d.position.set(t.x, 0, t.z); d.rotation.set(0, rnd() * TAU, 0); d.scale.set(t.s, t.s * (0.9 + rnd() * 0.3), t.s); d.updateMatrix(); pm.setMatrixAt(i, d.matrix); pm.setColorAt(i, col.set(pick(['#2f5d34', '#28512d', '#356b3a', '#3d6e33']))); });
+  rounds.forEach((t, i) => { t.ci = i; t.cm = rm; d.position.set(t.x, 0, t.z); d.rotation.set(rnd(), rnd() * TAU, 0); d.scale.setScalar(t.s); d.updateMatrix(); rm.setMatrixAt(i, d.matrix); rm.setColorAt(i, col.set(pick(['#4f8a3a', '#5e9a3f', '#477f36', '#6aa64a']))); });
   for (const m of [trunks, pm, rm]) { m.castShadow = true; m.receiveShadow = true; S.add(m); }
 }
 
@@ -994,6 +1031,7 @@ W.build = function (scene, seed) {
   buildForest();
   buildOutskirts();
   placeATMs();
+  buildLamps();
   placeProps();
   buildTrees();
   for (const k in GB) GB[k].build(S);

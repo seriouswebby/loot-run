@@ -618,11 +618,11 @@ function runAutotest() {
     const r = p.ragdoll, t = r.parts.torso.b.getPosition(), h = r.parts.head.b.getPosition();
     const settled = isFinite(t.x + t.y + t.z + h.y) && t.y < 1 && Math.abs(p.x - t.x) < 0.01 && dist(p.x, p.z, P.x + 3, P.z) > 1;
     const bodiesDown = Phys.ragdollBodies;
-    p.downT = 0; steps(0.2);
+    p.downT = 0; steps(0.2); p.animate(STEP);
     const up = !p.ragdoll && !p.down && Phys.ragdollBodies === bodiesDown - 6 && Math.abs(p.rig.torso.position.y - 1.27) < 0.01 && p.rig.root.visible && Math.abs(p.rig.root.position.x - p.x) < 0.5;
     const outside = !W.collideCircle({ x: p.x, z: p.z }, p.r);
     p.remove(); G.noSpawn = false;
-    return (limp && settled && up && outside) || `limp ${limp} settled ${settled} (torso y ${t.y.toFixed(2)}) up ${up} outside ${outside} ragdoll bodies ${bodiesDown}->${Phys.ragdollBodies}`;
+    return (limp && settled && up && outside) || `limp ${limp} settled ${settled} (torso y ${t.y.toFixed(2)}) up ${up} [ragdoll ${!!p.ragdoll} down ${p.down} torsoY ${p.rig.torso.position.y.toFixed(2)} rootDx ${(p.rig.root.position.x - p.x).toFixed(2)} visible ${p.rig.root.visible}] outside ${outside} ragdoll bodies ${bodiesDown}->${Phys.ragdollBodies}`;
   });
   T('ragdolls are capped at 8 at a time', () => {
     if (!Phys.ready) return 'SKIP';
@@ -675,6 +675,40 @@ function runAutotest() {
     let dent = 0; for (const d of car.dentable) { const a = d.m.geometry.attributes.position.array; for (let i = 0; i < a.length; i++) dent = Math.max(dent, Math.abs(a[i] - d.orig[i])); }
     const fixed = car.hp === car.maxHp && dent === 0 && G.S.cash < 5000; G.exitCar(); car.remove();
     return (wrecked < healthy * 0.85 && offered && fixed) || `healthy ${healthy.toFixed(1)} wrecked ${wrecked.toFixed(1)} repair offered ${offered} fixed ${fixed} (hp ${hp0.toFixed(0)}→${car.hp.toFixed(0)}, dent ${dent.toFixed(3)})`;
+  });
+  T('smash: a fast car snaps a tree, a slow one stops', () => {
+    reset(); G.noSpawn = true; const x = -150, z = -W.HWY + 7.5;
+    W.addTree(x + 25, z, 'round'); const t1 = W.trees[W.trees.length - 1];
+    tp(x, z); const car = new Car('sedan', x, z, Math.PI / 2); G.enterCar(car); car.v = 20; car.vx = 20; Input.keys.KeyW = true; steps(2); Input.keys.KeyW = false;
+    const snapped = t1.col.removed && car.x > x + 27 && car.v > 6; G.exitCar(); car.remove();
+    W.addTree(x + 12, z + 5, 'pine'); const t2 = W.trees[W.trees.length - 1];
+    tp(x, z + 5); const slow = new Car('sedan', x, z + 5, Math.PI / 2); G.enterCar(slow); slow.v = 5; slow.vx = 5; steps(3);
+    const stood = !t2.col.removed && slow.x < x + 12; G.exitCar(); slow.remove(); W.removeCollider(t2.col); G.noSpawn = false;
+    return (snapped && stood) || `fast: tree down ${t1.col.removed} car x ${car.x.toFixed(1)} v ${car.v.toFixed(1)} | slow: tree standing ${!t2.col.removed}`;
+  });
+  T('smash: street poles go down and gas pumps explode', () => {
+    reset(); G.noSpawn = true;
+    const l = W.lampSpots.find((k) => !k.col.removed); tp(l.x - 10 * Math.SQRT1_2, l.z - 10 * Math.SQRT1_2);
+    const car = new Car('sports', P.x, P.z, Math.PI / 4); G.enterCar(car); car.v = 14; car.vx = 14 * Math.SQRT1_2; car.vz = 14 * Math.SQRT1_2; steps(1.5);
+    const pole = l.col.removed; G.exitCar(); car.remove();
+    const pump = W.colliders.find((c) => c.destructible && c.destructible.kind === 'pump' && !c.removed);
+    tp(pump.destructible.x, pump.destructible.z - 9); const c2 = new Car('sedan', P.x, P.z, 0); G.enterCar(c2); G.god = true; c2.v = 12; c2.vz = 12; steps(1.5); G.god = false;
+    const boom = pump.removed && !pump.destructible.ref.visible && c2.hp < c2.maxHp;
+    if (P.inCar) G.exitCar(true); c2.remove(); G.noSpawn = false;
+    return (pole && boom) || `pole down ${pole} pump exploded ${boom}`;
+  });
+  T('smash: explosions flatten nearby trees', () => {
+    reset(); W.addTree(-150, -W.HWY + 20, 'pine'); const t = W.trees[W.trees.length - 1];
+    explosion(-148, -W.HWY + 20, 7, 50, null); return t.col.removed || 'tree survived';
+  });
+  T('sprint is faster, burns stamina and recovers when you stop', () => {
+    reset(); G.noSpawn = true; tp(-150, -W.HWY + 7.5); G.stamina = 100; G.winded = false;
+    G.inputOverride = { mx: 1, mz: 0 }; Input.keys.ShiftLeft = true; steps(0.5);
+    const fast = Math.hypot(P.vx, P.vz); steps(7);
+    const tired = G.stamina, slowed = Math.hypot(P.vx, P.vz), wasWinded = G.winded;
+    Input.keys.ShiftLeft = false; G.inputOverride = null; steps(4);
+    const back = G.stamina; G.noSpawn = false;
+    return (fast > 9 && wasWinded && tired < 30 && slowed < 5.5 && back > 80) || `sprint ${fast.toFixed(1)} m/s, stamina after 7.5 s ${tired.toFixed(0)}, speed then ${slowed.toFixed(1)}, after resting ${back.toFixed(0)}`;
   });
   T('save and load', () => {
     G.S.cash = 4321; G.S.storyDone = 3; G.save();

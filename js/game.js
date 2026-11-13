@@ -428,6 +428,40 @@ G.repairCar = function () {
   G.toast('Rusty patched up the ' + car.T.name.toLowerCase() + ' for ' + money(cost), 'good');
   return true;
 };
+/* smash a tree, street pole or gas pump: it falls/breaks, a pump explodes */
+G.smash = function (c, car, ex, ez) {
+  if (c.removed) return;
+  const d = c.destructible; W.removeCollider(c);
+  const sp = car ? Math.hypot(car.vx, car.vz) : 6;
+  let dx = car ? car.vx / (sp || 1) : 0, dz = car ? car.vz / (sp || 1) : 0;
+  if (!car) { const px = d.x != null ? d.x : c.x, pz = d.z != null ? d.z : c.z, l = dist(px, pz, ex, ez) || 1; dx = (px - ex) / l; dz = (pz - ez) / l; }
+  if (d.kind === 'tree') {
+    const t = d.ref; W.hideTree(t);
+    FX.burst(t.x, 3.5 * t.s, t.z, 18, ['#2f5d34', '#4f8a3a', '#6b4a2f', '#3d6e33'], 6, 0.3, 1.1);
+    const g = new THREE.Group(), s = t.s, trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2 * s, 0.3 * s, 2.4 * s, 6), lam('#6b4a2f'));
+    trunk.position.y = -1.6 * s; g.add(trunk);
+    const top = new THREE.Mesh(t.type === 'pine' ? new THREE.ConeGeometry(1.9 * s, 5 * s, 7) : new THREE.IcosahedronGeometry(2 * s, 0), lam(t.type === 'pine' ? '#2f5d34' : '#4f8a3a'));
+    top.position.y = t.type === 'pine' ? 1.7 * s : 0.9 * s; g.add(top); g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+    if (!Phys.debrisPiece(g, t.x, 3.0 * s, t.z, rand(0, TAU), { x: dx * sp * 0.45, y: 1.5, z: dz * sp * 0.45 }, { x: dz * 2.5, y: 0, z: -dx * 2.5 }, { x: 0.6 * s, y: 2.8 * s, z: 0.6 * s })) FX.burst(t.x, 1, t.z, 8, ['#6b4a2f'], 4, 0.25, 0.8);
+    Sfx.crash(0.75, t.x, t.z);
+  } else if (d.kind === 'lamp') {
+    const l = d.ref; W.hideLamp(l);
+    FX.burst(l.x, 5, l.z, 10, ['#fff1b8', '#ffd166', '#ffffff'], 6, 0.12, 0.5);
+    const g = new THREE.Group(), p = new THREE.Mesh(new THREE.BoxGeometry(0.18, 5.5, 0.18), lam('#3a3d42')); g.add(p);
+    const hd = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.2, 0.4), new THREE.MeshBasicMaterial({ color: 0x777766 })); hd.position.set(0, 2.7, 0); g.add(hd);
+    Phys.debrisPiece(g, l.x, 2.75, l.z, 0, { x: dx * sp * 0.5, y: 1, z: dz * sp * 0.5 }, { x: dz * 3, y: 0, z: -dx * 3 }, { x: 0.12, y: 2.75, z: 0.12 });
+    Sfx.crash(0.45, l.x, l.z);
+  } else if (d.kind === 'pump') {
+    d.ref.visible = false;
+    explosion(d.x, d.z, 8, 90, car && car.driver === 'player' ? G.player : null);
+  }
+  if (car) {
+    const k = d.kind === 'tree' ? 0.65 : 0.85;
+    car.vx *= k; car.vz *= k; car.v *= k;
+    car.damage(d.kind === 'tree' ? 10 : 4, car.x + dx * 3, car.z + dz * 3, null);
+    if (car.driver === 'player') G.shake(d.kind === 'tree' ? 0.45 : 0.25);
+  }
+};
 G.missionCarLost = function (car) { if (Story.active && Story.active.car === car) Story.fail('The truck got wrecked.'); };
 
 /* ---------------- player damage, bust, knockout ---------------- */

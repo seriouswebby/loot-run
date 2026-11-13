@@ -36,6 +36,8 @@ html, body { height: 100%; margin: 0; background: var(--ink); color: var(--paper
 #hpFill { background: linear-gradient(90deg, #d7263d, #ff5a5f); }
 #armorFill { background: linear-gradient(90deg, #2f6fdf, #6fb0ff); }
 #armorBar { height: 6px; }
+#stamBar { height: 6px; } #stamFill { background: linear-gradient(90deg, #8bea5a, #d4f56e); }
+#stamBar.winded #stamFill { background: #ff8a3d; }
 
 #obj { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); text-align: center; padding: 8px 18px 9px; min-width: 260px; max-width: min(560px, 60vw); }
 #objTitle { font: 13px var(--font-display); color: var(--gold); letter-spacing: .06em; }
@@ -161,6 +163,7 @@ kbd { font: 12px var(--font-display); background: var(--paper); color: var(--ink
     <div id="cash">$0</div>
     <div class="bar" id="hpBar"><i id="hpFill"></i></div>
     <div class="bar" id="armorBar"><i id="armorFill"></i></div>
+    <div class="bar" id="stamBar" title="Stamina"><i id="stamFill"></i></div>
   </div>
   <div id="obj" class="panel"><div id="objTitle">FREE ROAM</div><div id="objText"></div></div>
   <div id="tr">

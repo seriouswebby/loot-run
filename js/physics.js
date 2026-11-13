@@ -32,11 +32,11 @@ const Phys = {
   /* static copies of nearby walls and buildings, added lazily around whatever is moving */
   ensureStatics(x, z, r) {
     for (const c of W.queryBox(x - r, z - r, x + r, z + r)) {
-      if (this.statics.has(c) || c.kind === 'bound') continue;
+      if (this.statics.has(c) || c.kind === 'bound' || c.removed) continue;
       this.statics.add(c);
       const h = Math.max(0.6, c.h || 3);
-      if (c.circle) { const b = this.world.createBody({ type: 'static', position: { x: c.x, y: h / 2, z: c.z } }); b.createBox({ halfExtents: { x: c.r * 0.9, y: h / 2, z: c.r * 0.9 } }); b.delete(); }
-      else { const b = this.world.createBody({ type: 'static', position: { x: (c.minX + c.maxX) / 2, y: h / 2, z: (c.minZ + c.maxZ) / 2 } }); b.createBox({ halfExtents: { x: (c.maxX - c.minX) / 2, y: h / 2, z: (c.maxZ - c.minZ) / 2 } }); b.delete(); }
+      if (c.circle) { const b = this.world.createBody({ type: 'static', position: { x: c.x, y: h / 2, z: c.z } }); b.createBox({ halfExtents: { x: c.r * 0.9, y: h / 2, z: c.r * 0.9 } }); if (c.destructible) c.physBody = b; else b.delete(); }
+      else { const b = this.world.createBody({ type: 'static', position: { x: (c.minX + c.maxX) / 2, y: h / 2, z: (c.minZ + c.maxZ) / 2 } }); b.createBox({ halfExtents: { x: (c.maxX - c.minX) / 2, y: h / 2, z: (c.maxZ - c.minZ) / 2 } }); if (c.destructible) c.physBody = b; else b.delete(); }
     }
     for (const bd of W.buildings) {
       if (this.statics.has(bd) || bd.maxX < x - r || bd.minX > x + r || bd.maxZ < z - r || bd.minZ > z + r) continue;
@@ -183,14 +183,14 @@ const Phys = {
   },
 
   /* ---------------- flying car parts ---------------- */
-  debrisPiece(mesh, x, y, z, rotY, vel, spin) {
+  debrisPiece(mesh, x, y, z, rotY, vel, spin, half) {
     if (!this.ready) return false;
     if (this.debris.length > 40) { const old = this.debris.shift(); this.kill(old.b); G.scene.remove(old.mesh); }
     this.ensureStatics(x, z, 10);
     const box = new THREE.Box3().setFromObject(mesh), size = box.getSize(new THREE.Vector3());
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
     const b = this.body({ type: 'dynamic', position: { x, y, z }, rotation: { x: q.x, y: q.y, z: q.z, w: q.w }, linearVelocity: vel, angularVelocity: spin, angularDamping: 0.2 });
-    b.createBox({ halfExtents: { x: Math.max(0.05, size.x / 2), y: Math.max(0.05, size.y / 2), z: Math.max(0.05, size.z / 2) }, density: 0.6, friction: 0.7, restitution: 0.2 });
+    b.createBox({ halfExtents: half || { x: Math.max(0.05, size.x / 2), y: Math.max(0.05, size.y / 2), z: Math.max(0.05, size.z / 2) }, density: 0.6, friction: 0.7, restitution: 0.2 });
     mesh.position.set(x, y, z); mesh.quaternion.copy(q); G.scene.add(mesh);
     this.debris.push({ b, mesh, t: 45 });
     return true;

@@ -197,12 +197,18 @@ class Car {
   }
   collideStatic() {
     let best = null;
+    const ox = this.x, oz = this.z;
     for (const [cx, cz] of this.circles()) {
       const p = { x: cx, z: cz };
       const hit = W.collideCircle(p, this.r, this.y);
       if (hit) { this.x += p.x - cx; this.z += p.z - cz; if (!best || hit.depth > best.depth) best = hit; }
     }
     if (!best) return;
+    const smash = best.c.destructible;
+    if (smash && !this.T.pedal && Math.hypot(this.vx, this.vz) > ({ tree: 12, lamp: 6, pump: 5 }[smash.kind] || 99)) {
+      this.x = ox; this.z = oz; G.smash(best.c, this);
+      return;
+    }
     const vn = this.vx * best.nx + this.vz * best.nz;
     if (vn < 0) {
       this.vx -= best.nx * vn * 1.35; this.vz -= best.nz * vn * 1.35;
@@ -240,23 +246,31 @@ class Car {
     const L = this.T.len / 2, Wd = this.T.w / 2, sx = Math.abs(lx) / Wd, sz = Math.abs(lz) / L;
     if (sx > sz) lx = Math.sign(lx) * Wd; else lz = Math.sign(lz) * L;
     const nl = Math.hypot(lx, lz) || 1, nx = sx > sz ? Math.sign(lx) : 0, nz = sx > sz ? 0 : Math.sign(lz);
-    const depth = Math.min(0.32, amount / 70);
+    const depth = Math.min(0.55, amount / 36);
+    FX.burst(this.x + (lx * c + lz * s) * 0.9, 0.9, this.z + (-lx * s + lz * c) * 0.9, Math.min(14, 3 + amount / 3), ['#ffd166', '#ffffff', '#ff9f1c'], 7, 0.1, 0.35, { grav: 10 });
     for (const d of this.dentable) {
       const pos = d.m.geometry.attributes.position, a = pos.array, o = d.m.position;
       for (let i = 0; i < a.length; i += 3) {
         const vx = a[i] + o.x, vz = a[i + 2] + o.z, dist2 = (vx - lx) ** 2 + (vz - lz) ** 2;
-        if (dist2 > 1.6) continue;
-        const f = (1 - dist2 / 1.6) * depth;
+        if (dist2 > 2.6) continue;
+        const f = (1 - dist2 / 2.6) * depth;
         a[i] -= nx * f; a[i + 2] -= nz * f;
+        if (a[i + 1] > 0) a[i + 1] = Math.max(d.orig[i + 1] * 0.55, a[i + 1] - f * 0.35); // tops crumple down a bit
         // never fold past 45% of the way in
-        a[i] = clamp(a[i], d.orig[i] - Math.abs(d.orig[i]) * 0.45 - 0.05, d.orig[i] + Math.abs(d.orig[i]) * 0.45 + 0.05);
-        a[i + 2] = clamp(a[i + 2], d.orig[i + 2] - Math.abs(d.orig[i + 2]) * 0.45 - 0.05, d.orig[i + 2] + Math.abs(d.orig[i + 2]) * 0.45 + 0.05);
+        a[i] = clamp(a[i], d.orig[i] - Math.abs(d.orig[i]) * 0.6 - 0.05, d.orig[i] + Math.abs(d.orig[i]) * 0.6 + 0.05);
+        a[i + 2] = clamp(a[i + 2], d.orig[i + 2] - Math.abs(d.orig[i + 2]) * 0.6 - 0.05, d.orig[i + 2] + Math.abs(d.orig[i + 2]) * 0.6 + 0.05);
       }
       pos.needsUpdate = true; d.m.geometry.computeVertexNormals();
     }
     void nl;
     const cond = clamp((this.hp - amount) / this.maxHp, 0, 1);
-    for (const g of this.glassMats) g.color.set(cond < 0.3 ? '#cfd8df' : cond < 0.65 ? '#7f93a3' : '#22303c');
+    for (const g of this.glassMats) g.color.set(cond < 0.4 ? '#cfd8df' : cond < 0.75 ? '#7f93a3' : '#22303c');
+    // paint gets scuffed and scorched the more it's damaged
+    if (!this.matOrig) this.matOrig = this.mats.map((m) => m.color.clone());
+    this.mats.forEach((m, i) => { if (!this.glassMats.includes(m)) m.color.copy(this.matOrig[i]).lerp(this.scuff || (this.scuff = new THREE.Color('#2e2a27')), (1 - cond) * 0.55); });
+    const loose = nz !== 0 && this.bumpers.find((b) => b.on && b.sz === nz);
+    if (loose && amount > 6 && !loose.hanging) { loose.hanging = true; loose.m.rotation.z = (chance(0.5) ? 1 : -1) * 0.3; loose.m.position.y -= 0.18; }
+    else if (loose && loose.hanging) amount = Math.max(amount, 15);
     if (amount > 14 && nz !== 0) {
       const bp = this.bumpers.find((b) => b.on && b.sz === nz);
       if (bp) {
@@ -271,6 +285,8 @@ class Car {
   repair() {
     for (const d of this.dentable) { d.m.geometry.attributes.position.array.set(d.orig); d.m.geometry.attributes.position.needsUpdate = true; d.m.geometry.computeVertexNormals(); }
     for (const g of this.glassMats) g.color.set('#22303c');
+    if (this.matOrig) this.mats.forEach((m, i) => m.color.copy(this.matOrig[i]));
+    for (const b of this.bumpers) if (b.on && b.hanging) { b.hanging = false; b.m.rotation.set(0, 0, 0); b.m.position.y = 0.48; }
     for (const b of this.bumpers) if (!b.on) { const m = b.m.clone(); m.position.set(0, 0.48, b.sz * (this.T.len / 2 + 0.08)); m.quaternion.identity(); this.mesh.add(m); b.m = m; b.on = true; }
     this.hp = this.maxHp; this.popped = false;
   }
@@ -295,9 +311,10 @@ class Car {
       this.burning -= dt;
       if (Math.random() < 0.6) FX.spawn(this.x + rand(-0.8, 0.8), 1.3, this.z + rand(-0.8, 0.8), rand(-0.5, 0.5), rand(2, 4), rand(-0.5, 0.5), pick(['#ff6b1a', '#ffb703', '#e63946']), rand(0.3, 0.6), 0.6, { grav: -2 });
       if (this.burning <= 0) this.explode();
-    } else if (!this.wreck && !this.T.pedal && this.hp < this.maxHp * 0.35) {
+    } else if (!this.wreck && !this.T.pedal && this.hp < this.maxHp * 0.5) {
       this.smokeT -= dt;
-      if (this.smokeT <= 0) { this.smokeT = 0.12; const fx = Math.sin(this.h), fz = Math.cos(this.h); FX.spawn(this.x + fx * this.T.len * 0.35, 1.2, this.z + fz * this.T.len * 0.35, rand(-0.3, 0.3), 1.5, rand(-0.3, 0.3), '#5c5c5c', 0.5, 1.2, { grav: -1, grow: 1.5 }); }
+      const heavy = this.hp < this.maxHp * 0.25;
+      if (this.smokeT <= 0) { this.smokeT = heavy ? 0.05 : 0.14; const fx = Math.sin(this.h), fz = Math.cos(this.h); FX.spawn(this.x + fx * this.T.len * 0.35, 1.2, this.z + fz * this.T.len * 0.35, rand(-0.3, 0.3), 1.5, rand(-0.3, 0.3), heavy ? '#1f1f1f' : '#8a8a8a', heavy ? 0.8 : 0.5, heavy ? 1.6 : 1.1, { grav: -1, grow: heavy ? 2.4 : 1.5 }); }
     }
     if (this.wreck) { this.wreckT -= dt; if (Math.random() < 0.1) FX.spawn(this.x, 1.3, this.z, 0, 1.2, 0, '#3a3a3a', 0.6, 1.5, { grav: -1, grow: 2 }); }
     // pedal bikes left lying around (or abandoned) vanish after 2 minutes
@@ -433,6 +450,7 @@ function explosion(x, z, r, dmg, src) {
   hitA(P); for (const n of G.npcs) hitA(n);
   for (const c of G.cars) { if (c.dead || c.wreck) continue; const d = dist(c.x, c.z, x, z); if (d < r && d > 0.1) { c.lastHitBy = src; c.damage(dmg * (1 - d / r) * 0.9, x, z, src); c.kx += (c.x - x) / d * 6; c.kz += (c.z - z) / d * 6; } }
   for (const h of Choppers.list) if (!h.dead && h.y < 7 && dist(h.x, h.z, x, z) < r + 2) h.damage(dmg * 1.2, src);
+  for (const c of W.queryBox(x - r * 0.6, z - r * 0.6, x + r * 0.6, z + r * 0.6)) if (c.destructible && !c.removed && dist(c.destructible.x != null ? c.destructible.x : c.x, c.destructible.z != null ? c.destructible.z : c.z, x, z) < r * 0.6) G.smash(c, null, x, z);
   Phys.explode(x, z, r);
   panic(x, z, 45);
   if (src === P) { G.crime('explosion', x, z, {}); G.blastLoot(x, z, r); }
