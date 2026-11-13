@@ -345,12 +345,11 @@ G.carValue = function (car) { return Math.round(car.T.value * (0.35 + 0.65 * cla
 G.ejectDriver = function (car) {
   const fx = Math.sin(car.h), fz = Math.cos(car.h);
   const x = car.x + fz * (car.T.w / 2 + 0.8), z = car.z - fx * (car.T.w / 2 + 0.8);
-  if (car.police) { const c = spawnCop(x, z, 'chase'); W.collideCircle(c, c.r); }
-  else {
-    const b = W.nearestBlock(x, z);
-    const p = spawnPed(x, z, b, 1, 1); W.collideCircle(p, p.r);
-    p.ai.mode = 'flee'; p.ai.fleeT = 8; p.ai.thx = car.x; p.ai.thz = car.z;
-  }
+  if (car.police) { const c = spawnCop(x, z, 'chase'); W.collideCircle(c, c.r); return c; }
+  const b = W.nearestBlock(x, z);
+  const p = spawnPed(x, z, b, 1, 1); W.collideCircle(p, p.r);
+  p.ai.mode = 'flee'; p.ai.fleeT = 8; p.ai.thx = car.x; p.ai.thz = car.z;
+  return p;
 };
 G.enterCar = function (car) {
   const P = G.player;
@@ -365,7 +364,8 @@ G.enterCar = function (car) {
     G.crime(car.police ? 'copCar' : 'carjack', car.x, car.z, {});
     msg = car.police ? 'You jacked a police cruiser!' : 'Carjacked a ' + car.T.name.toLowerCase();
   } else if (car.parked && car.locked && car.T.bike) {
-    msg = 'Hotwired the motorbike.'; G.crime('carTheft', car.x, car.z, {});
+    // bikes have no windows and no alarm: a quiet theft, though anyone watching still calls it in
+    msg = car.T.pedal ? 'Nicked the ' + car.T.name.toLowerCase() + '.' : 'Hotwired the motorbike.'; G.crime('carTheft', car.x, car.z, {});
   } else if (car.parked && car.locked) {
     if (G.S.tools.lockpick) { msg = 'Lock picked. Nice and quiet.'; Sfx.click(); }
     else { Sfx.glass(car.x, car.z); car.alarmT = 6; FX.burst(car.x, 1.2, car.z, 10, ['#cfe8ff', '#ffffff'], 3, 0.1, 0.5); G.crime('carTheft', car.x, car.z, {}); msg = 'Smashed the window. Car alarm!'; }
@@ -405,18 +405,50 @@ G.sellCar = function () {
   car.remove();
   return true;
 };
-/* thrown off a bike in a hard crash */
-G.bail = function (car, impact) {
+/* thrown off a bike in a hard crash. vx/vz = the bike's velocity just before the hit:
+   the rider keeps most of it and goes over the bars, as a ragdoll when physics is running. */
+G.bail = function (car, impact, vx, vz) {
   if (car.T.pedal) car.fallen = true;
-  if (car.driver === 'ai') { G.ejectDriver(car); car.driver = null; car.ai = null; car.parked = true; return; }
+  if (vx == null) { vx = car.vx; vz = car.vz; }
+  const sp = Math.hypot(vx, vz), dx = sp > 0.5 ? vx / sp : Math.sin(car.h), dz = sp > 0.5 ? vz / sp : Math.cos(car.h);
+  const fly = sp * 0.72 + 1.5, lift = 3.5 + Math.min(6, impact * 0.2);
+  const vel = { x: dx * fly, y: lift, z: dz * fly };
+  // pitch forward about the sideways axis: head over heels
+  const flip = 1.6 + fly * 0.06, spin = { x: dz * flip, y: rand(-0.3, 0.3), z: -dx * flip };
+  const launch = (a) => {
+    // start from the saddle, above the bike's own physics box
+    a.x = car.x; a.z = car.z; a.y = 0.95; a.facing = Math.atan2(dx, dz); a.carHitT = G.time + 1.5;
+    a.rig.root.position.set(a.x, a.y, a.z); a.rig.root.rotation.set(0, a.facing, 0);
+  };
+  if (car.driver === 'ai') {
+    const a = G.ejectDriver(car); car.driver = null; car.ai = null; car.parked = true;
+    car.v = 0; car.vx *= 0.2; car.vz *= 0.2;
+    if (!a) return;
+    launch(a); a.down = true; a.downT = rand(3, 5); a.vx = a.vz = 0;
+    a.kx = vel.x; a.kz = vel.z; a.yv = lift;
+    a.hp = Math.max(1, a.hp - impact);
+    Phys.ragdoll(a, vel, spin);
+    return;
+  }
   const P = G.player; if (P.inCar !== car) return;
-  const vx = car.vx, vz = car.vz;
   G.exitCar(true);
-  P.y = 0.05; P.yv = 5 + impact * 0.1; P.kx = vx * 0.6; P.kz = vz * 0.6;
   car.v = 0; car.vx *= 0.2; car.vz *= 0.2;
   G.toast('Thrown off the ' + car.T.name.toLowerCase() + '!', 'warn');
   if (car.T.pedal) { G.remount = { bike: car, t: 1.3, h: car.h }; car.leftT = 120; }
-  G.hurtPlayer(Math.min(45, impact * 1.4), P.x - vx, P.z - vz, 0, null);
+  launch(P); P.vx = P.vz = 0; P.kx = vel.x; P.kz = vel.z; P.yv = lift;
+  if (G.hurtPlayer(Math.min(45, impact * 1.4), P.x - dx, P.z - dz, 0, null)) return; // knocked out: that ragdolls too
+  if (Phys.ready && Phys.ragdoll(P, vel, spin)) { P.kx = P.kz = 0; P.tumble = { t: 0 }; Sfx.whoosh(P.x, P.z); return; }
+  // no physics engine: the old hop-and-skid
+  P.y = 0.05; P.yv = 5 + impact * 0.1; P.kx = vx * 0.6; P.kz = vz * 0.6;
+};
+/* tumbling after a bail: lie there until the body comes to rest, then get up */
+G.updateTumble = function (dt) {
+  const P = G.player, T = P.tumble; if (!T) return;
+  T.t += dt;
+  if (P.down || G.respawning || !P.ragdoll || P.ragdoll.frozen) { P.tumble = null; return; }
+  if ((T.t > 1.4 && P.ragdoll.spd < 1.2) || T.t > 5) {
+    Phys.unragdoll(P); P.tumble = null; P.safeT = G.time + 0.5; P.kx = P.kz = 0;
+  }
 };
 G.repairCost = (car) => Math.round(60 + (1 - clamp(car.hp / car.maxHp, 0, 1)) * car.T.value * 0.35);
 G.repairCar = function () {
@@ -484,7 +516,7 @@ G.knockedOut = function () {
   const P = G.player; if (G.respawning) return;
   if (P.inCar) G.exitCar(true);
   if (P.inHeli) G.exitHeli(true);
-  P.down = true;
+  P.down = true; P.chute = false; P.tumble = null; // a knocked-out skydiver loses the chute
   Phys.ragdoll(P, { x: P.kx + P.vx, y: P.yv, z: P.kz + P.vz }); P.vx = P.vz = 0;
   const loss = Math.round(G.S.cash * 0.15);
   G.startRespawn('KNOCKED OUT', 'Hospital bill: -' + money(loss), W.places.hospital, loss, true);
@@ -493,7 +525,7 @@ G.busted = function () {
   const P = G.player; if (G.respawning) return;
   if (P.inCar) G.exitCar(true);
   if (P.inHeli) G.exitHeli(true);
-  P.handsUp = 99;
+  P.handsUp = 99; P.chute = false;
   const loss = Math.round(G.S.cash * 0.25);
   G.S.stats.busts++;
   G.startRespawn('CUFFED', 'Bail and confiscation: -' + money(loss), W.places.police, loss, false);
@@ -506,12 +538,27 @@ G.startRespawn = function (title, sub, place, loss, heal) {
 };
 G.finishRespawn = function () {
   const P = G.player, r = G.respawnTo;
-  if (P.ragdoll) Phys.unragdoll(P);
   G.S.cash = Math.max(0, G.S.cash - r.loss);
   Heat.clear(); clearPolice();
-  P.x = r.place.x + rand(-1, 1); P.z = r.place.z + rand(-1, 1); P.kx = P.kz = 0; P.y = 0;
-  P.down = false; P.handsUp = 0; P.hp = r.heal ? 100 : Math.max(P.hp, 50); G.crumbs = [];
+  G.resetPlayer(r.place.x + rand(-1, 1), r.place.z + rand(-1, 1));
+  P.hp = r.heal ? 100 : Math.max(P.hp, 50);
   G.respawning = false; G.save();
+};
+/* a fresh start for the character: standing upright on the ground, nothing in progress */
+G.resetPlayer = function (x, z) {
+  const P = G.player;
+  if (P.inCar) G.exitCar(true);
+  if (P.inHeli) G.exitHeli(true);
+  if (P.ragdoll) Phys.unragdoll(P);
+  P.x = x; P.z = z; P.y = 0; P.yv = 0; P.vx = P.vz = 0; P.kx = P.kz = 0;
+  P.down = false; P.downT = 0; P.handsUp = 0; P.spin = 0; P.cd = 0; P.atkT = 0; P.aimT = 0;
+  P.chute = false; P.jumping = false; P.vault = null; P.top = null; P.tumble = null; P.carHitT = 0;
+  P.safeT = G.time + 1;
+  if (P.stars) P.stars.visible = false;
+  P.rig.root.visible = true; P.resetPose();
+  W.collideCircle(P, P.r);
+  G.stamina = 100; G.winded = false; G.restT = 0; G.remount = null;
+  G.jumpQ = false; G.hopQ = false; G.slip = 0; G.crumbs = [];
 };
 function clearPolice() {
   for (const n of G.npcs) if (n.kind === 'cop' && dist(n.x, n.z, G.player.x, G.player.z) > 0) n.remove();
@@ -552,7 +599,7 @@ G.cycleWeapon = function () {
 };
 G.attack = function (ang) {
   const P = G.player, w = WEAPONS[P.weapon];
-  if (P.cd > 0 || P.down || P.inCar || P.inHeli || P.handsUp > 0) return;
+  if (P.cd > 0 || P.down || P.tumble || P.inCar || P.inHeli || P.handsUp > 0) return;
   P.facing = ang;
   if (w.melee) {
     P.cd = w.cd; P.atkT = P.atkDur = w.cd * 0.85;

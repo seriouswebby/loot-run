@@ -63,7 +63,7 @@ const Phys = {
     ['legL', 'torso', { x: -0.14, y: -0.37, z: 0 }, { x: 0, y: 0.43, z: 0 }, 1.2, 0.35],
     ['legR', 'torso', { x: 0.14, y: -0.37, z: 0 }, { x: 0, y: 0.43, z: 0 }, 1.2, 0.35],
   ],
-  ragdoll(a, vel) {
+  ragdoll(a, vel, spin) {
     if (!this.ready || a.ragdoll || a.dead) return false;
     if (this.ragdolls.length >= 8) this.freeze(this.ragdolls[0]);
     const rg = a.rig, group = -(++this.group % 30000 + 1);
@@ -83,11 +83,11 @@ const Phys = {
     for (const [key, parent, pa, pb, cone, twist] of this.JOINTS) {
       joints.push(this.world.createSphericalJoint(parts[parent].b, parts[key].b, { localFrameA: { position: pa }, localFrameB: { position: pb }, enableConeLimit: true, coneAngle: cone, enableTwistLimit: true, lowerTwistAngle: -twist, upperTwistAngle: twist, collideConnected: false }));
     }
-    // a little tumble
-    parts.torso.b.applyAngularImpulse({ x: rand(-1, 1), y: rand(-0.5, 0.5), z: rand(-1, 1) }, true);
+    // a little tumble (or a proper somersault when thrown off a bike)
+    parts.torso.b.applyAngularImpulse(spin || { x: rand(-1, 1), y: rand(-0.5, 0.5), z: rand(-1, 1) }, true);
     // the meshes now take world transforms straight from the bodies
     rg.root.position.set(0, 0, 0); rg.root.rotation.set(0, 0, 0); rg.body.position.set(0, 0, 0); rg.body.rotation.set(0, 0, 0);
-    a.ragdoll = { parts, joints, t: 0 };
+    a.ragdoll = { parts, joints, t: 0, spd: sp, sx: a.x, sz: a.z, px: a.x, py: 1, pz: a.z };
     this.ragdolls.push(a);
     return true;
   },
@@ -112,7 +112,7 @@ const Phys = {
     W.collideCircle(a, a.r);
     a.resetPose();
   },
-  syncRagdolls() {
+  syncRagdolls(dt) {
     for (const a of this.ragdolls) {
       const r = a.ragdoll;
       for (const k in r.parts) {
@@ -123,7 +123,12 @@ const Phys = {
         p.mesh.position.set(pos.x + this.v.x, pos.y + this.v.y, pos.z + this.v.z);
       }
       const t = r.parts.torso.b.getPosition();
-      if (isFinite(t.x + t.z)) { a.x = t.x; a.z = t.z; }
+      if (isFinite(t.x + t.z)) {
+        a.x = t.x; a.z = t.z; r.t += dt;
+        r.spd = Math.hypot(t.x - r.px, t.y - r.py, t.z - r.pz) / dt; r.px = t.x; r.py = t.y; r.pz = t.z;
+        // a body flying across the map needs the walls ahead of it to exist in the physics world
+        if (Math.abs(t.x - r.sx) > 5 || Math.abs(t.z - r.sz) > 5) { r.sx = t.x; r.sz = t.z; this.ensureStatics(t.x, t.z, 16); }
+      }
       if (a.stars) { const h = r.parts.head.b.getPosition(); a.stars.position.set(h.x, h.y + 0.5, h.z); a.stars.rotation.y += 0.05; }
     }
   },
@@ -242,7 +247,7 @@ const Phys = {
     if (this.activeT <= 0) { this.activeT = 0.5; this.activateProps(); }
     this.syncKinematics(dt);
     this.world.step(dt, 4);
-    this.syncRagdolls(); this.syncProps(); this.syncDebris(dt);
+    this.syncRagdolls(dt); this.syncProps(); this.syncDebris(dt);
   },
 
   clearRagdolls() { for (const a of this.ragdolls.slice()) this.unragdoll(a); },

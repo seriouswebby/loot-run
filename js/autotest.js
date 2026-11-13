@@ -331,6 +331,39 @@ function runAutotest() {
     const thrown = !P.inCar; G.god = false;
     return (visible && thrown) || `rider visible ${visible} thrown ${thrown}`;
   });
+  T('bike into a car at speed: rider flies over the bars as a ragdoll, then gets up', () => {
+    reset(); G.noSpawn = true; const z = -W.HWY + 7.5;
+    for (const c of G.cars.slice()) if (Math.abs(c.z - z) < 30 && Math.abs(c.x - 25) < 60) c.remove();
+    const car = new Car('sedan', 25, z, 0, { parked: true }), bike = new Car('motorbike', 0, z, Math.PI / 2);
+    tp(0, z + 2); G.enterCar(bike); bike.v = 30; bike.vx = 30; G.god = true;
+    let thrownAt = -1, limp = false, top = 0, far = 0;
+    for (let i = 0; i < 420; i++) {
+      step(STEP);
+      if (thrownAt < 0 && !P.inCar) { thrownAt = P.x; limp = !!P.ragdoll && !!P.tumble; }
+      if (P.ragdoll && P.ragdoll.parts) top = Math.max(top, P.ragdoll.parts.torso.b.getPosition().y);
+      far = Math.max(far, P.x);
+      if (thrownAt >= 0 && !P.tumble && i > 60) break;
+    }
+    const up = !P.ragdoll && !P.tumble && !P.down && Math.abs(P.rig.torso.position.y - 1.27) < 0.01;
+    G.god = false; car.remove(); bike.remove(); G.noSpawn = false;
+    if (!Phys.ready) return (thrownAt >= 0) || 'no physics: not thrown';
+    // the far side of the sedan is at x ≈ 26: the rider should land beyond it
+    return (thrownAt >= 0 && limp && top > 1.8 && far > 28 && up) || `thrown at ${thrownAt.toFixed(1)} limp ${limp} peak ${top.toFixed(2)} furthest x ${far.toFixed(1)} up ${up} ragdoll ${!!P.ragdoll} tumble ${JSON.stringify(P.tumble)} down ${P.down}`;
+  });
+  T('bike into a wall: thrown, no tunneling, and bikes do not mow down trees', () => {
+    reset(); const b = W.blocks.find((k) => k.type === 'city');
+    const bike = new Car('motorbike', b.cx, b.cz - 26, 0); tp(b.cx + 1.5, b.cz - 26); G.enterCar(bike);
+    bike.v = 40; bike.vz = 40; G.god = true; let inside = false;
+    for (let i = 0; i < 300; i++) { step(STEP); if (P.z > b.cz - 15.1 + 0.5) inside = true; if (!P.inCar && !P.tumble && i > 30) break; }
+    const thrown = !P.inCar; G.god = false; bike.remove();
+    // a tree in the way of a fast motorbike stays standing
+    const t = W.trees.find((q) => q.col && !q.col.removed);
+    if (!t) return 'no tree';
+    reset(); G.noSpawn = true; const mb = new Car('motorbike', t.x, t.z - 8, 0); tp(t.x + 2, t.z - 8); G.enterCar(mb); mb.v = 30; mb.vz = 30; G.god = true;
+    const felled = () => W.trees.filter((q) => q.col && q.col.removed).length, before = felled();
+    steps(1); const standing = !t.col.removed && felled() === before; G.god = false; if (P.inCar) G.exitCar(true); mb.remove(); G.noSpawn = false;
+    return (thrown && !inside && standing) || `thrown ${thrown} went into the building ${inside} (z ${P.z.toFixed(1)} wall ${(b.cz - 15).toFixed(1)}) tree standing ${standing}`;
+  });
   T('running over a cop counts as knocking them out', () => {
     reset(); tp(0, -W.HWY - 3); Heat.add(2, 5, 'test');
     const car = new Car('sedan', 0, -W.HWY + 7.5, Math.PI / 2); G.enterCar(car); car.v = 25; car.vx = 25;
@@ -359,10 +392,10 @@ function runAutotest() {
       reset(); tp(0, -W.HWY - 6);
       let veh;
       if (type === 'heli') { veh = new Chopper('tour', 0, -W.HWY - 6, Math.PI / 2); G.enterHeli(veh); Input.keys.Space = true; for (let i = 0; i < 120; i++) frame(); Input.keys.Space = false; Input.keys.KeyD = true; for (let i = 0; i < 60; i++) frame(); Input.keys.KeyD = false; Input.keys.ShiftLeft = true; for (let i = 0; i < 400; i++) frame(); Input.keys.ShiftLeft = false; G.exitHeli(); }
-      else { veh = new Car(type, 0, -W.HWY + 7.5, Math.PI / 2); tp(0, -W.HWY - 5); G.enterCar(veh); Input.keys.KeyW = true; Input.keys.KeyD = true; for (let i = 0; i < 90; i++) frame(); Input.keys.KeyW = false; for (let i = 0; i < 60; i++) frame(); Input.keys.KeyD = false; G.exitCar(); }
+      else { veh = new Car(type, 0, -W.HWY + 7.5, Math.PI / 2); tp(0, -W.HWY - 5); G.enterCar(veh); Input.keys.KeyW = true; Input.keys.KeyD = true; for (let i = 0; i < 90; i++) frame(); Input.keys.KeyW = false; for (let i = 0; i < 60; i++) frame(); Input.keys.KeyD = false; G.remount = null; for (let i = 0; i < 400 && P.tumble; i++) frame(); G.remount = null; G.exitCar(); }
       for (const c of G.cars) if (c !== veh && !c.persistent) c.remove(); G.cars = G.cars.filter((c) => !c.dead);
       Input.keys.KeyW = true; for (let i = 0; i < 60; i++) frame(); Input.keys.KeyW = false;
-      if (!upright()) { const rg = P.rig; bad.push(`${type}: root ${rg.root.rotation.x.toFixed(2)},${rg.root.rotation.z.toFixed(2)} body ${rg.body.rotation.x.toFixed(2)},${rg.body.rotation.y.toFixed(2)},${rg.body.rotation.z.toFixed(2)} pos ${rg.body.position.y.toFixed(2)},${rg.body.position.z.toFixed(2)} y ${rg.root.position.y.toFixed(2)}`); }
+      if (!upright()) { const rg = P.rig; bad.push(`${type}: root ${rg.root.rotation.x.toFixed(2)},${rg.root.rotation.z.toFixed(2)} body ${rg.body.rotation.x.toFixed(2)},${rg.body.rotation.y.toFixed(2)},${rg.body.rotation.z.toFixed(2)} pos ${rg.body.position.y.toFixed(2)},${rg.body.position.z.toFixed(2)} y ${rg.root.position.y.toFixed(2)} [P.y ${P.y.toFixed(2)} inCar ${!!P.inCar} ragdoll ${!!P.ragdoll} tumble ${!!P.tumble} jumping ${P.jumping} vault ${!!P.vault} hurt ${(G.hurtLog || []).join(',')}]`); }
       if (veh.remove) veh.remove();
     }
     return !bad.length || bad.join(' | ');
@@ -531,7 +564,7 @@ function runAutotest() {
       reset(); G.noSpawn = true; tp(0, 25); const b = new Car(type, 1.5, 25, 0); G.enterCar(b); G.god = true;
       b.damage(9999, 0, 0, null); steps(0.4);
       const thrown = !P.inCar && b.fallen && !b.wreck && b.burning <= 0;
-      steps(2.5);
+      steps(5);
       const back = P.inCar === b && !b.fallen;
       // knocked over with nobody on it: no explosion, and it despawns after its timer
       G.exitCar(); const left = b.leftT;
@@ -637,6 +670,15 @@ function runAutotest() {
     reset(); tp(0, 25); G.S.armor = 0; P.kx = 6; G.hurtPlayer(500, P.x - 1, P.z, 4, null);
     const limp = !!P.ragdoll; steps(0.6);
     return (limp && !P.ragdoll && !P.down && Math.abs(P.rig.torso.position.y - 1.27) < 0.01) || `limp ${limp} ragdoll after ${!!P.ragdoll} down ${P.down}`;
+  });
+  T('knocked out under a parachute: you respawn without it, character fully reset', () => {
+    reset(); tp(0, 25); G.S.armor = 0; P.y = 30; P.yv = -2; P.chute = true; steps(0.3);
+    const gliding = P.chute && P.y > 20;
+    G.hurtPlayer(500, P.x - 1, P.z, 4, null); const dropped = !P.chute;
+    for (let i = 0; i < 600 && (G.respawning || P.down); i++) step(STEP);
+    steps(0.5);
+    const upright = Math.abs(P.rig.torso.position.y - 1.27) < 0.01 && Math.abs(P.rig.body.rotation.x) < 0.01 && P.rig.root.visible && G.stamina === 100;
+    return (gliding && dropped && !P.chute && !P.down && P.y === 0 && !P.jumping && upright) || `gliding ${gliding} chute dropped ${dropped} chute after ${P.chute} down ${P.down} y ${P.y.toFixed(2)} jumping ${P.jumping} upright ${upright}`;
   });
   T('a car sends a street bin flying', () => {
     if (!Phys.ready) return 'SKIP';

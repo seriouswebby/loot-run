@@ -205,15 +205,17 @@ class Car {
     }
     if (!best) return;
     const smash = best.c.destructible;
-    if (smash && !this.T.pedal && Math.hypot(this.vx, this.vz) > ({ tree: 12, lamp: 6, pump: 5 }[smash.kind] || 99)) {
+    // cars flatten trees, poles and pumps; a bike just stops dead against them (and you don't)
+    if (smash && !this.T.bike && Math.hypot(this.vx, this.vz) > ({ tree: 12, lamp: 6, pump: 5 }[smash.kind] || 99)) {
       this.x = ox; this.z = oz; G.smash(best.c, this);
       return;
     }
     const vn = this.vx * best.nx + this.vz * best.nz;
     if (vn < 0) {
+      const pvx = this.vx, pvz = this.vz;
       this.vx -= best.nx * vn * 1.35; this.vz -= best.nz * vn * 1.35;
       const impact = -vn;
-      if (this.T.bike && impact > 11) G.bail(this, impact);
+      if (this.T.bike && impact > 8 && this.driver) G.bail(this, impact, pvx, pvz);
       if (impact > 9) {
         this.damage((impact - 9) * 1.6, this.x - best.nx * 3, this.z - best.nz * 3);
         Sfx.crash(impact / 30, this.x, this.z); if (this.driver === 'player') G.shake(impact * 0.03);
@@ -383,6 +385,7 @@ function carPairs() {
       b.x -= best.nx * best.pen * tb; b.z -= best.nz * best.pen * tb;
       const vn = (a.vx - b.vx) * best.nx + (a.vz - b.vz) * best.nz;
       if (vn < 0) {
+        const pre = [a.vx, a.vz, b.vx, b.vz];
         const jimp = -(1.3 * vn) / (1 / ma + 1 / mb);
         a.vx += jimp * best.nx / ma; a.vz += jimp * best.nz / ma;
         b.vx -= jimp * best.nx / mb; b.vz -= jimp * best.nz / mb;
@@ -394,7 +397,8 @@ function carPairs() {
           b.damage((imp - 8) * 1.15 * (ma / mb), a.x, a.z, a.driver === 'player' ? G.player : null);
           Sfx.crash(imp / 30, (a.x + b.x) / 2, (a.z + b.z) / 2); if (a.driver === 'player' || b.driver === 'player') G.shake(imp * 0.025);
           for (const c of [a, b]) if (c.parked && !c.wreck && c.alarmT <= 0 && imp > 9 && !c.T.bike) c.alarmT = 5;
-          for (const c of [a, b]) if (c.T.bike && imp > 9) G.bail(c, imp);
+          if (a.T.bike && a.driver) G.bail(a, imp, pre[0], pre[1]);
+          if (b.T.bike && b.driver) G.bail(b, imp, pre[2], pre[3]);
         }
       }
     }
@@ -423,8 +427,11 @@ function carHitsActors(car) {
         if (byPlayer) G.crime(a.kind === 'cop' ? 'assaultCop' : 'assault', car.x, car.z, { victim: a, ko });
         else panic(a.x, a.z, 12);
       }
+      const pvx = car.vx, pvz = car.vz;
       car.vx *= 0.9; car.vz *= 0.9; car.v *= 0.9;
       Sfx.punch(car.x, car.z); if (byPlayer) G.shake(0.25);
+      // a bike that ploughs into someone at speed throws its rider too
+      if (car.T.bike && car.driver && spd > 13) G.bail(car, spd * 0.55, pvx, pvz);
     } else {
       const px = hw - Math.abs(lx), pz = hl - Math.abs(lz);
       if (px < pz) { const s = Math.sign(lx) || 1; a.x += fz * s * px; a.z += -fx * s * px; }
@@ -433,6 +440,14 @@ function carHitsActors(car) {
   };
   if (!P.inCar && !P.inHeli) test(P);
   for (const n of G.npcs) test(n);
+  // bikes vs heavy street props (bins, crates, newspaper boxes): hit one fast and you go over the bars
+  if (car.T.bike && car.driver && spd > 12 && Phys.ready) {
+    for (const p of Phys.props) {
+      if (!p.body || p.kind === 'cone' || p.y > 1.2) continue;
+      const dx = p.x - car.x, dz = p.z - car.z, lz = dx * fx + dz * fz, lx = dx * fz - dz * fx;
+      if (lz > 0 && lz < car.T.len / 2 + 0.45 && Math.abs(lx) < car.T.w / 2 + 0.35) { G.bail(car, spd * 0.5); break; }
+    }
+  }
 }
 
 function explosion(x, z, r, dmg, src) {

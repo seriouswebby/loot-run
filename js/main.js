@@ -387,7 +387,7 @@ function updateMarkers() {
 /* ---------------- interactions ---------------- */
 function computeInteract() {
   const P = G.player, out = { e: null, f: null };
-  if (G.respawning || P.down || P.handsUp > 0) return out;
+  if (G.respawning || P.down || P.tumble || P.handsUp > 0) return out;
   if (P.inHeli) { const h = P.inHeli; out.f = { label: G.heliLanded(h) ? 'Get out' : G.S.parachute > 0 ? 'Bail out with your parachute' : 'Land first (hold Shift)', run: () => G.exitHeli() }; return out; }
   if (P.y > 1.5) {
     for (const h of Choppers.list) if (!h.dead && !h.pilot && h.falling <= 0 && G.heliLanded(h) && Math.abs(h.y - P.y) < 2.5 && dist(h.x, h.z, P.x, P.z) < 5.5) { const hh = h; out.f = { label: hh.police ? 'Steal the police helicopter (+2 heat)' : 'Fly the helicopter', run: () => G.enterHeli(hh) }; }
@@ -412,7 +412,7 @@ function computeInteract() {
     let lbl = (bc.T.bike ? 'Ride the ' : 'Get in the ') + bc.T.name.toLowerCase();
     if (bc.fallen) lbl = 'Pick up the ' + bc.T.name.toLowerCase();
     if (bc.driver === 'ai' && bc.ai && bc.ai.mode !== 'roadblock' && bc.ai.mode !== 'parked') lbl = 'Carjack the ' + bc.T.name.toLowerCase();
-    else if (bc.parked && bc.locked) lbl = (G.S.tools.lockpick ? 'Pick the lock: ' : 'Smash window (loud): ') + bc.T.name.toLowerCase();
+    else if (bc.parked && bc.locked) lbl = bc.T.bike ? (bc.T.pedal ? 'Steal the ' : 'Hotwire the ') + bc.T.name.toLowerCase() : (G.S.tools.lockpick ? 'Pick the lock: ' : 'Smash window (loud): ') + bc.T.name.toLowerCase();
     const car = bc; out.f = { label: lbl, run: () => G.enterCar(car) };
   }
   let bh = null, bhd = 5.5;
@@ -533,7 +533,7 @@ function updatePlayer(dt) {
     P.x = car.x; P.z = car.z; P.vx = car.vx; P.vz = car.vz;
     return;
   }
-  if (P.down || P.handsUp > 0 || G.respawning) { P.vx = P.vz = 0; P.vault = null; if (P.handsUp > 0 && !G.respawning) P.handsUp -= dt; return; }
+  if (P.down || P.tumble || P.handsUp > 0 || G.respawning) { P.vx = P.vz = 0; P.vault = null; if (P.handsUp > 0 && !G.respawning) P.handsUp -= dt; return; }
   if (P.vault) { stepVault(P, dt); return; }
   const f = G.camFwd || { x: -Math.SQRT1_2, z: -Math.SQRT1_2 }, r = { x: -f.z, z: f.x };
   const chase = G.camMode === 'chase';
@@ -660,11 +660,12 @@ function step(dt) {
   if (G.remount) {
     const r = G.remount, b = r.bike;
     if (b.dead || P.down || P.handsUp > 0 || G.respawning || P.inCar || P.inHeli) G.remount = null;
-    else if ((r.t -= dt) <= 0 && P.y <= 0.01) {
+    else if ((r.t -= dt) <= 0 && P.y <= 0.01 && !P.tumble) {
       b.x = P.x; b.z = P.z; b.h = r.h; b.fallen = false; b.vx = b.vz = 0; b.v = 0; b.mesh.rotation.z = 0;
       G.remount = null; G.enterCar(b); G.toast('Back on the ' + b.T.name.toLowerCase() + '!');
     }
   }
+  G.updateTumble(dt);
   updateZone(dt);
   updatePlayer(dt);
   processHold(dt);
@@ -869,9 +870,7 @@ function newWorld() {
 function startGame(state) {
   G.S = state || freshState();
   const P = G.player, sp = W.places.spawn;
-  P.x = sp.x; P.z = sp.z; P.hp = 100; P.down = false; P.handsUp = 0;
-  if (P.inCar) G.exitCar(true);
-  if (P.inHeli) G.exitHeli(true);
+  G.respawning = false; G.resetPlayer(sp.x, sp.z); P.hp = 100;
   G.equip(G.S.weapons.pistol ? 'pistol' : G.S.weapons.bat ? 'bat' : 'fists');
   Heat.clear(); Story.active = null;
   CAM.fx = P.x; CAM.fz = P.z;
@@ -959,6 +958,13 @@ function demoSetup(kind) {
     for (let i = 0; i < 40; i++) step(STEP);
     explosion(P.x, P.z + 10, 7, 120, null);
     for (let i = 0; i < 22; i++) step(STEP);
+  }
+  else if (kind === 'bikecrash') {
+    G.noSpawn = true; G.camMode = 'chase'; const z = -W.HWY + 7.5;
+    new Car('sedan', 25, z, 0, { parked: true, color: '#3a86ff' }); const bike = new Car('motorbike', 6, z, Math.PI / 2);
+    P.x = 6; P.z = z; G.enterCar(bike); bike.v = 30; bike.vx = 30; G.god = true; CAM.yaw = Math.PI / 2 + 0.5; CAM.pitch = 0.25;
+    let n = 0; for (let i = 0; i < 200; i++) { step(STEP); if (!P.inCar && ++n > 14) break; }
+    G.god = false; P.facing = Math.PI / 2;
   }
   else if (kind === 'damage') {
     G.camMode = 'chase'; P.x = W.rp(3) + 2.5; P.z = W.rp(4) + 20; P.facing = CAM.yaw = 0; CAM.pitch = 0.45; CAM.chaseD = 6;
