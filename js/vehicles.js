@@ -29,13 +29,17 @@ function carGeo() {
 }
 function buildCarMesh(type, color) {
   const T = CAR_TYPES[type], g = new THREE.Group(), C = carGeo();
-  const L = T.len, Wd = T.w, mats = [];
+  const L = T.len, Wd = T.w, mats = [], dentable = [], glassMats = [];
+  const glass = '#22303c';
   const box = (w, h, d, x, y, z, c, shadow) => {
     const mat = new THREE.MeshLambertMaterial({ color: c }); mats.push(mat);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z);
-    m.castShadow = shadow !== false; g.add(m); return m;
+    const big = w > 1 && d > 1;
+    const m = new THREE.Mesh(big ? new THREE.BoxGeometry(w, h, d, 3, 2, Math.max(2, Math.round(d))) : new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z);
+    m.castShadow = shadow !== false; g.add(m);
+    if (big && !T.bike) dentable.push({ m, orig: m.geometry.attributes.position.array.slice() });
+    if (c === glass) glassMats.push(mat);
+    return m;
   };
-  const glass = '#22303c';
   if (T.bike) {
     const motor = type === 'motorbike', bmx = type === 'bmx', r = bmx ? 0.3 : 0.36;
     for (const az of [L / 2 - r, -L / 2 + r]) { const w = new THREE.Mesh(C.wheel, lam('#1b1b1e')); w.scale.set(motor ? 0.45 : 0.2, r / 0.38, r / 0.38); w.position.set(0, r, az); w.castShadow = true; g.add(w); }
@@ -119,7 +123,13 @@ function buildCarMesh(type, color) {
     const b = new THREE.Mesh(C.bar, new THREE.MeshBasicMaterial({ color: 0x111166 })); b.position.set(0.28, 1.72, -L * 0.06);
     g.add(r); g.add(b); bar = [r, b];
   }
-  return { g, mats, bar };
+  // bumpers: hard front/rear hits knock them off
+  const bumpers = [];
+  if (type !== 'armored' && type !== 'truck') for (const sz of [1, -1]) {
+    const bm = new THREE.Mesh(new THREE.BoxGeometry(Wd * 0.96, 0.24, 0.26), lam(type === 'police' ? '#1d2733' : '#2b2d31'));
+    bm.position.set(0, 0.48, sz * (L / 2 + 0.08)); bm.castShadow = true; g.add(bm); bumpers.push({ m: bm, sz, on: true });
+  }
+  return { g, mats, bar, dentable, glassMats, bumpers };
 }
 
 class Car {
@@ -136,6 +146,7 @@ class Car {
     this.lane = pick(HWY_LANES);
     const built = buildCarMesh(type, this.color);
     this.mesh = built.g; this.mats = built.mats; this.bar = built.bar; this.rider = built.rider || null;
+    this.dentable = built.dentable || []; this.glassMats = built.glassMats || []; this.bumpers = built.bumpers || []; this.pull = chance(0.5) ? 1 : -1;
     this.mesh.position.set(x, 0, z); this.mesh.rotation.y = h;
     G.scene.add(this.mesh);
     G.cars.push(this);
@@ -150,6 +161,8 @@ class Car {
       if (z === 'forest' && !W.onTrail(this.x, this.z)) mul = 0.55;
     }
     if (this.popped) mul *= 0.5;
+    const cond = clamp(this.hp / this.maxHp, 0, 1);
+    if (!T.pedal && cond < 0.6) mul *= 0.7 + 0.5 * cond;
     if (this.burning > 0) mul *= 0.6;
     const maxV = Math.min(88, T.maxV * mul * (boost ? 1.55 : 1)), accel = T.accel * (boost ? 2.6 : 1) * (mul > 1 ? 1.25 : 1);
     if (thr > 0) {
@@ -161,7 +174,7 @@ class Car {
     if (this.v > maxV) this.v = Math.max(maxV, this.v - 24 * dt);
     if (this.v < -maxV * 0.4) this.v = -maxV * 0.4;
     const sf = clamp(Math.abs(this.v) / 6, 0, 1) * (1 - Math.min(Math.abs(this.v), 40) / 40 * 0.4);
-    this.steerV = damp(this.steerV, steer, 10, dt);
+    this.steerV = damp(this.steerV, steer + (!T.pedal && cond < 0.5 && Math.abs(this.v) > 3 ? this.pull * (0.5 - cond) * 0.35 : 0), 10, dt);
     this.h -= this.steerV * (T.bike ? 3.1 : 2.4) * sf * Math.sign(this.v) * dt * (hb ? 1.7 : 1);
     if (this.popped) this.h += (Math.random() - 0.5) * 0.9 * dt * Math.min(1, Math.abs(this.v) / 10);
     const fx = Math.sin(this.h), fz = Math.cos(this.h), grip = (hb ? 1.8 : 8) * Weather.grip();
@@ -196,7 +209,7 @@ class Car {
       const impact = -vn;
       if (this.T.bike && impact > 11) G.bail(this, impact);
       if (impact > 9) {
-        this.damage((impact - 9) * 1.6, this.x - best.nx, this.z - best.nz);
+        this.damage((impact - 9) * 1.6, this.x - best.nx * 3, this.z - best.nz * 3);
         Sfx.crash(impact / 30, this.x, this.z); if (this.driver === 'player') G.shake(impact * 0.03);
         if (best.c.kind === 'tree') FX.burst(this.x, 2, this.z, 8, ['#2f5d34', '#4f8a3a'], 4, 0.25, 0.8);
       }
@@ -205,6 +218,7 @@ class Car {
   }
   damage(amount, fx, fz, src) {
     if (this.dead || this.wreck) return;
+    if (fx != null && amount > 2 && !this.T.bike) this.dent(fx, fz, amount);
     if (this.T.pedal) {
       // pedal bikes and BMXs never burn or explode: wreck one and it just tips over
       this.hp -= amount;
@@ -218,6 +232,47 @@ class Car {
       if (this.driver === 'player') G.toast('Your car is on fire — get out!', 'warn');
       if (this.driver === 'ai' && this.ai) { this.ai.mode = 'dead'; G.ejectDriver(this); }
     }
+  }
+  /* push panel vertices in around the impact, crack the glass, maybe knock a bumper off */
+  dent(fx, fz, amount) {
+    const c = Math.cos(this.h), s = Math.sin(this.h), dx = fx - this.x, dz = fz - this.z;
+    let lx = dx * c - dz * s, lz = dx * s + dz * c;
+    const L = this.T.len / 2, Wd = this.T.w / 2, sx = Math.abs(lx) / Wd, sz = Math.abs(lz) / L;
+    if (sx > sz) lx = Math.sign(lx) * Wd; else lz = Math.sign(lz) * L;
+    const nl = Math.hypot(lx, lz) || 1, nx = sx > sz ? Math.sign(lx) : 0, nz = sx > sz ? 0 : Math.sign(lz);
+    const depth = Math.min(0.32, amount / 70);
+    for (const d of this.dentable) {
+      const pos = d.m.geometry.attributes.position, a = pos.array, o = d.m.position;
+      for (let i = 0; i < a.length; i += 3) {
+        const vx = a[i] + o.x, vz = a[i + 2] + o.z, dist2 = (vx - lx) ** 2 + (vz - lz) ** 2;
+        if (dist2 > 1.6) continue;
+        const f = (1 - dist2 / 1.6) * depth;
+        a[i] -= nx * f; a[i + 2] -= nz * f;
+        // never fold past 45% of the way in
+        a[i] = clamp(a[i], d.orig[i] - Math.abs(d.orig[i]) * 0.45 - 0.05, d.orig[i] + Math.abs(d.orig[i]) * 0.45 + 0.05);
+        a[i + 2] = clamp(a[i + 2], d.orig[i + 2] - Math.abs(d.orig[i + 2]) * 0.45 - 0.05, d.orig[i + 2] + Math.abs(d.orig[i + 2]) * 0.45 + 0.05);
+      }
+      pos.needsUpdate = true; d.m.geometry.computeVertexNormals();
+    }
+    void nl;
+    const cond = clamp((this.hp - amount) / this.maxHp, 0, 1);
+    for (const g of this.glassMats) g.color.set(cond < 0.3 ? '#cfd8df' : cond < 0.65 ? '#7f93a3' : '#22303c');
+    if (amount > 14 && nz !== 0) {
+      const bp = this.bumpers.find((b) => b.on && b.sz === nz);
+      if (bp) {
+        bp.on = false; this.mesh.remove(bp.m);
+        const wx = this.x + Math.sin(this.h) * nz * (L + 0.3), wz = this.z + Math.cos(this.h) * nz * (L + 0.3);
+        const thrown = Phys.debrisPiece(bp.m, wx, 0.6, wz, this.h, { x: Math.sin(this.h) * nz * 4 + this.vx * 0.5, y: 3, z: Math.cos(this.h) * nz * 4 + this.vz * 0.5 }, { x: rand(-3, 3), y: rand(-3, 3), z: rand(-3, 3) });
+        if (!thrown) FX.burst(wx, 0.5, wz, 6, ['#2b2d31', '#555555'], 4, 0.2, 0.6);
+        Sfx.crash(0.6, this.x, this.z);
+      }
+    }
+  }
+  repair() {
+    for (const d of this.dentable) { d.m.geometry.attributes.position.array.set(d.orig); d.m.geometry.attributes.position.needsUpdate = true; d.m.geometry.computeVertexNormals(); }
+    for (const g of this.glassMats) g.color.set('#22303c');
+    for (const b of this.bumpers) if (!b.on) { const m = b.m.clone(); m.position.set(0, 0.48, b.sz * (this.T.len / 2 + 0.08)); m.quaternion.identity(); this.mesh.add(m); b.m = m; b.on = true; }
+    this.hp = this.maxHp; this.popped = false;
   }
   knockOver() {
     if (this.fallen) return;

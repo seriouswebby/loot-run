@@ -656,6 +656,26 @@ function runAutotest() {
     Phys.kill(prop.body); G.scene.remove(prop.mesh); Phys.props.splice(Phys.props.indexOf(prop), 1); G.noSpawn = false;
     return top > 1.2 || 'crate peak height ' + top.toFixed(2);
   });
+  T('vehicle damage: crashes dent the car and crack the glass', () => {
+    reset(); G.noSpawn = true; const b = W.blocks.find((k) => k.type === 'city');
+    const car = new Car('sedan', b.cx, b.cz - 26, 0); tp(b.cx + 2, b.cz - 26); G.enterCar(car); car.v = 22; car.vz = 22; Input.keys.KeyW = true;
+    steps(1.2); Input.keys.KeyW = false;
+    let moved = 0; for (const d of car.dentable) { const a = d.m.geometry.attributes.position.array; for (let i = 0; i < a.length; i++) moved = Math.max(moved, Math.abs(a[i] - d.orig[i])); }
+    const glass = car.glassMats.length && car.glassMats[0].color.getHexString() !== '22303c';
+    const bumperOff = car.bumpers.some((x) => !x.on);
+    G.exitCar(); car.remove(); G.noSpawn = false;
+    return (moved > 0.05 && car.hp < car.maxHp && bumperOff) || `dent ${moved.toFixed(3)} hp ${car.hp.toFixed(0)}/${car.maxHp} glass changed ${glass} front bumper off ${bumperOff}`;
+  });
+  T('vehicle damage: a wrecked car is slower; Rusty repairs it', () => {
+    const run = (dmg) => { reset(); G.noSpawn = true; tp(-235, -W.HWY - 3); const car = new Car('sedan', -235, -W.HWY + 7.5, Math.PI / 2); G.enterCar(car); car.hp = car.maxHp * dmg; Input.keys.KeyW = true; steps(5); Input.keys.KeyW = false; const v = car.v; G.exitCar(); car.remove(); G.noSpawn = false; return v; };
+    const healthy = run(1), wrecked = run(0.25);
+    reset(); const ch = W.places.chop; tp(ch.x + 3, ch.z); const car = new Car('sedan', ch.x, ch.z, 0); G.enterCar(car);
+    car.damage(60, car.x + 3, car.z); G.S.cash = 5000; const hp0 = car.hp; G.interact = computeInteract();
+    const offered = !!G.interact.r; if (offered) G.interact.r.run();
+    let dent = 0; for (const d of car.dentable) { const a = d.m.geometry.attributes.position.array; for (let i = 0; i < a.length; i++) dent = Math.max(dent, Math.abs(a[i] - d.orig[i])); }
+    const fixed = car.hp === car.maxHp && dent === 0 && G.S.cash < 5000; G.exitCar(); car.remove();
+    return (wrecked < healthy * 0.85 && offered && fixed) || `healthy ${healthy.toFixed(1)} wrecked ${wrecked.toFixed(1)} repair offered ${offered} fixed ${fixed} (hp ${hp0.toFixed(0)}→${car.hp.toFixed(0)}, dent ${dent.toFixed(3)})`;
+  });
   T('save and load', () => {
     G.S.cash = 4321; G.S.storyDone = 3; G.save();
     let ok = false; try { localStorage.setItem('lr.t', '1'); ok = localStorage.getItem('lr.t') === '1'; } catch (e) { ok = false; }

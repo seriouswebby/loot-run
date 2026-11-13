@@ -418,6 +418,16 @@ G.bail = function (car, impact) {
   if (car.T.pedal) { G.remount = { bike: car, t: 1.3, h: car.h }; car.leftT = 120; }
   G.hurtPlayer(Math.min(45, impact * 1.4), P.x - vx, P.z - vz, 0, null);
 };
+G.repairCost = (car) => Math.round(60 + (1 - clamp(car.hp / car.maxHp, 0, 1)) * car.T.value * 0.35);
+G.repairCar = function () {
+  const car = G.player.inCar; if (!car) return false;
+  if (Heat.level > 0) { G.toast("Rusty won't touch it with cops on you. Lose the heat.", 'warn'); Sfx.error(); return false; }
+  const cost = G.repairCost(car);
+  if (G.S.cash < cost) { G.toast('Repairs cost ' + money(cost) + '. Rob something first.'); Sfx.error(); return false; }
+  G.S.cash -= cost; car.repair(); Sfx.buy();
+  G.toast('Rusty patched up the ' + car.T.name.toLowerCase() + ' for ' + money(cost), 'good');
+  return true;
+};
 G.missionCarLost = function (car) { if (Story.active && Story.active.car === car) Story.fail('The truck got wrecked.'); };
 
 /* ---------------- player damage, bust, knockout ---------------- */

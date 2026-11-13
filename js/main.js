@@ -118,6 +118,7 @@ const UI = {
     let ptxt = '';
     if (it.e) ptxt += (it.e.disabled ? '' : '[E] ') + (it.e.disabled || it.e.label);
     if (it.f) ptxt += (ptxt ? '      ' : '') + '[F] ' + it.f.label;
+    if (it.r) ptxt += '      [R] ' + it.r.label;
     this.set('promptText', ptxt);
     $('prompt').hidden = !ptxt || G.state !== 'play';
     const hp = G.hold.key ? clamp(G.hold.t / G.hold.dur, 0, 1) : (G.hold.peek || 0);
@@ -393,7 +394,10 @@ function computeInteract() {
   if (P.inCar) {
     const car = P.inCar, ch = W.places.chop;
     out.f = { label: 'Get out', run: () => G.exitCar() };
-    if (dist(car.x, car.z, ch.x, ch.z) < ch.r + 2) out.e = { id: 'sell', label: 'Sell ' + car.T.name.toLowerCase() + ' to Rusty for ' + money(G.carValue(car)), disabled: Heat.level > 0 ? "Rusty won't buy while you have heat" : null, run: () => G.sellCar() };
+    if (dist(car.x, car.z, ch.x, ch.z) < ch.r + 2) {
+      out.e = { id: 'sell', label: 'Sell ' + car.T.name.toLowerCase() + ' to Rusty for ' + money(G.carValue(car)), disabled: Heat.level > 0 ? "Rusty won't buy while you have heat" : null, run: () => G.sellCar() };
+      if (car.hp < car.maxHp || car.bumpers.some((b) => !b.on) || car.popped) out.r = { label: 'Repair for ' + money(G.repairCost(car)), run: () => G.repairCar() };
+    }
     return out;
   }
   // F: nearest car
@@ -738,6 +742,7 @@ function frameInput() {
   if (Input.hit('KeyE') && G.interact.e && !G.interact.e.hold) {
     if (G.interact.e.disabled) { UI.toast(G.interact.e.disabled); Sfx.error(); } else G.interact.e.run();
   } else if (Input.hit('KeyE') && G.interact.e && G.interact.e.disabled) { UI.toast(G.interact.e.disabled); Sfx.error(); }
+  if (Input.hit('KeyR') && G.interact.r) G.interact.r.run();
   if (Input.hit('KeyQ')) G.cycleWeapon();
   ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'].forEach((k, i) => { if (Input.hit(k)) { if (G.S.weapons[WEAPON_ORDER[i]]) { G.equip(WEAPON_ORDER[i]); Sfx.click(); } else UI.toast(WEAPONS[WEAPON_ORDER[i]].name + ' not owned yet. Gun stores sell it.'); } });
   if (Input.hit('KeyT')) G.throwGrenade();
