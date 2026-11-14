@@ -542,7 +542,7 @@ G.smash = function (c, car, ex, ez) {
     if (car.driver === 'player') G.shake(d.kind === 'tree' ? 0.45 : 0.25);
   }
 };
-G.missionCarLost = function (car) { if (Story.active && Story.active.car === car) Story.fail('The truck got wrecked.'); };
+G.missionCarLost = function (car) { if (Story.active && Story.active.car === car) Story.fail('The ' + car.T.name.toLowerCase() + ' got wrecked.'); };
 
 /* ---------------- player damage, bust, knockout ---------------- */
 G.hurtPlayer = function (dmg, fx, fz, knock, src) {
@@ -838,7 +838,7 @@ const SIDE_JOBS = [
     outro: [[SAL, "Best photo I ever took. Here, you earned this."]] },
   { id: 'tk1', giver: 'sarge', title: 'Heavy Metal', reward: 2500, unlock: 'tank',
     intro: [[SARGE, "Rook. Twenty years in this army, and they're sending my old tank to the scrapyard."], [SARGE, "She's out in front of the middle hangar. Take her before the scrappers do, shake off the military police, and park her at Kade Auto."], [SARGE, "Click to fire the main gun. Try not to flatten anything I'd have to explain."]],
-    steps: [{ t: 'spawnTank', text: '' }, { t: 'steal', missionCar: true, text: 'Get in the tank (in front of the middle hangar)' }, { t: 'setHeat', n: 3, text: '' }, { t: 'loseHeat', text: 'The base is on alert: lose the police' }, { t: 'goto', at: 'hideout', r: 12, text: 'Drive the tank home to Kade Auto' }],
+    steps: [{ t: 'spawnTank', text: '' }, { t: 'steal', missionCar: true, text: 'Get in the tank (in front of the middle hangar)' }, { t: 'setHeat', n: 2, text: '' }, { t: 'loseHeat', text: 'The base is on alert: lose the police' }, { t: 'goto', at: 'hideout', r: 12, inJobCar: true, text: 'Drive the tank home to Kade Auto' }],
     outro: [[SARGE, "She runs like the day I first drove her. She's yours now."], [SARGE, "She'll wait for you at Kade Auto whenever you want her."]] },
 ];
 
@@ -902,7 +902,7 @@ const Story = {
   check(s) {
     const a = this.active, P = G.player, t = G.body();
     switch (s.t) {
-      case 'goto': { const p = W.places[s.at]; return dist(t.x, t.z, p.x, p.z) < (s.r || 4); }
+      case 'goto': { const p = W.places[s.at]; return dist(t.x, t.z, p.x, p.z) < (s.r || 4) && (!s.inJobCar || (!!a.car && P.inCar === a.car)); }
       case 'rob': case 'sell': return a.flag;
       case 'robKind': return a.count >= s.n;
       case 'buy': return G.owns(s.item) || (s.item && G.S.tools[s.item]);
@@ -1178,6 +1178,7 @@ function spawnFixedCars() {
 /* ---------------- your tank ----------------
    Once Sarge's job is done the tank is yours: it waits at Kade Auto whenever you haven't got one out (a wrecked one is
    replaced a minute later, out of sight). The turret follows your aim; click fires the main gun. */
+G.ownsTank = () => !!(G.S.tank || (G.S.jobsDone || []).includes('tk1'));
 const Tanks = {
   t: 0, lostT: 0,
   update(dt) {
@@ -1189,7 +1190,7 @@ const Tanks = {
       if ((Input.mdown || G.attackQ) && !G.uiBlock && P.cd <= 0 && !car.wreck) { G.attackQ = null; this.fire(car); }
     }
     this.t -= dt; if (this.t > 0) return; this.t = 2;
-    if (!G.S.tank || G.autotest && !this.auto) return;
+    if (!G.ownsTank() || G.autotest && !this.auto) return;
     const mine = G.cars.find((c) => !c.dead && c.owned && c.T.tank && !c.wreck), p = W.places.tankDepot;
     if (mine) { this.lostT = 0; return; }
     this.lostT += 2;

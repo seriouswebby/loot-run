@@ -182,7 +182,7 @@ function drawMap(ctx, size, cx, cz, span, full) {
   label(pl.police.x, pl.police.z, 'P', '#6fa8ff');
   if (pl.airport) label(pl.airport.x, pl.airport.z - (full ? 24 : 10), '✈', '#ffffff');
   if (full) for (const d of W.districtLabels) if (inView(d.x, d.z)) label(d.x, d.z, d.text, d.col); // district names on the big map
-  if (G.S.tank && pl.tankDepot && inView(pl.tankDepot.x, pl.tankDepot.z)) label(pl.tankDepot.x - 6, pl.tankDepot.z, 'T', '#a7c957'); // your tank's home
+  if (G.ownsTank() && pl.tankDepot && inView(pl.tankDepot.x, pl.tankDepot.z)) label(pl.tankDepot.x - 6, pl.tankDepot.z, 'T', '#a7c957'); // your tank's home
   if (pl.funland && inView(pl.funland.x, pl.funland.z)) { // a little big-wheel glyph for Funland
     const fx = X(pl.funland.x), fz = Z(pl.funland.z) - (full ? 14 : 7), r = full ? 7 : 5;
     ctx.strokeStyle = '#0f1216'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(fx, fz, r, 0, TAU); ctx.stroke();
@@ -886,7 +886,7 @@ function frameInput() {
   }
   if (Input.hit('KeyN')) { Sfx.setMuted(!Sfx.muted); UI.toast(Sfx.muted ? 'Sound off' : 'Sound on'); }
   if (Input.hit('KeyK')) { if (!Phys.ready) UI.toast('Physics traffic needs the physics engine (it loads online).'); else UI.toast(PhysCar.toggleWorld() ? 'Physics traffic: on (cars near you are physics bodies)' : 'Physics traffic: off (only your car)'); }
-  if (Input.hit('KeyL')) { if (!Phys.ready) UI.toast('Realistic handling needs the physics engine (it loads online).'); else UI.toast(PhysCar.toggle() ? 'Handling: realistic (physics)' : 'Handling: arcade'); }
+  if (Input.hit('KeyL')) { if (!Phys.ready) UI.toast('Realistic handling needs the physics engine (it loads online).'); else UI.toast(PhysCar.toggle() ? 'Your handling: realistic (physics)' : 'Your handling: arcade (K is for the traffic)'); }
   if (Input.hit('KeyV')) { Voice.muted = !Voice.muted; if (Voice.muted) { Voice.stopDialog(); Voice.radioQ.length = 0; } UI.toast(Voice.muted ? 'Voices off (V to turn them back on)' : 'Voices on'); try { localStorage.setItem('lootrun.voices', Voice.muted ? 'off' : 'on'); } catch (e) { /* storage blocked */ } }
   if (Input.wheel) {
     if (G.camMode === 'iso') CAM.zoomIso = clamp(CAM.zoomIso + Input.wheel * 3, 14, 70);

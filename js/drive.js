@@ -103,7 +103,8 @@ class PVeh {
       const wr = this.wr.crossVectors(up, wf).normalize(); // across the wheel
       // contact patch velocity: v + w x r
       const rx = Mx - pos.x, ry = My - d * up.y - pos.y, rz = Mz - pos.z;
-      const vx = lv.x + av.y * rz - av.z * ry, vy = lv.y + av.z * rx - av.x * rz, vz = lv.z + av.x * ry - av.y * rx;
+      // (a tank's tracks resist the hull sliding sideways, not it turning: it skid-steers)
+      const yw = c.T.tank ? 0 : 1, vx = lv.x + (av.y * rz - av.z * ry) * yw, vy = lv.y + (av.z * rx - av.x * rz) * yw, vz = lv.z + (av.x * ry - av.y * rx) * yw;
       const vLong = vx * wf.x + vy * wf.y + vz * wf.z, vLat = vx * wr.x + vy * wr.y + vz * wr.z;
       const mu = mu0 * (hb && !w.front ? 0.5 : 1), N = Fs, cap = mu * N, stopF = Math.abs(vLong) * (m / 4) / dt; // no more than it takes to stop the wheel's share
       // drive (40/60 front/rear), brakes, reverse, rolling resistance, handbrake lock
@@ -118,7 +119,7 @@ class PVeh {
       } else Fx = -Math.sign(vLong) * Math.min(Math.abs(vLong) * m * 0.5, m * 4) / 4;
       if (hb && !w.front) Fx = -Math.sign(vLong) * Math.min(cap * 0.85, stopF);
       if (c.burning > 0 || c.wreck) Fx = -Math.sign(vLong) * Math.min(cap, stopF);
-      let Fy = -vLat * (cap / 1.0) * (c.T.tank && steer ? 0.12 : 1); // full grip at 1 m/s of sideways slip (a pivoting tank's tracks skid)
+      let Fy = -vLat * (cap / 1.0) * (c.T.tank && steer ? (Math.abs(vF) < 3 ? 0.12 : 0.28) : 1); // full grip at 1 m/s of sideways slip (a turning tank's tracks skid: a lot on the spot, some on the move)
       // the friction circle: what's left of the grip after driving or braking goes to cornering
       const tot = Math.hypot(Fx, Fy); if (tot > cap) { Fx *= cap / tot; Fy *= cap / tot; }
       w.slip = Math.abs(vLat) + (hb && !w.front ? Math.abs(vLong) * 0.3 : 0);
@@ -129,15 +130,15 @@ class PVeh {
     }
     // stability assist (keyboard steering is all-or-nothing): nudge the yaw towards what the steering asks for, within
     // what the tyres could give; off with the handbrake, so you can still throw it into a slide
-    if (contacts >= 3 && !hb && Math.abs(vF) > 3) {
+    if (contacts >= 3 && !hb && Math.abs(vF) > 3 && !c.T.tank) {
       const wb = 2 * this.wheels[0].lz, rMax = mu0 * Gr * 1.6 / Math.abs(vF), rDes = clamp(vF * Math.tan(this.steerA) / wb, -rMax, rMax);
       const r = av.x * up.x + av.y * up.y + av.z * up.z, I = m * (c.T.len * c.T.len + c.T.w * c.T.w) / 12 * 0.8, tq = clamp((rDes - r) * I * 3, -m * 6, m * 6);
       b.applyTorque({ x: up.x * tq, y: up.y * tq, z: up.z * tq }, true);
     }
     // a tank's tracks pull against each other: it turns on the spot
-    if (c.T.tank && contacts >= 2) {
-      const r = av.x * up.x + av.y * up.y + av.z * up.z, rDes = -steer * 0.9 * (vF < -0.5 ? -1 : 1), I = m * (c.T.len * c.T.len + c.T.w * c.T.w) / 12, tq = clamp((rDes - r) * I * 5, -m * 40, m * 40);
-      b.applyTorque({ x: up.x * tq, y: up.y * tq, z: up.z * tq }, true);
+    if (c.T.tank && contacts >= 2) { // the tracks have the authority to set the yaw rate (eased in), as tracked vehicles do in games
+      const r = av.x * up.x + av.y * up.y + av.z * up.z, rDes = -steer * 0.9 * (vF < -0.5 ? -1 : 1), d = (rDes - r) * Math.min(1, dt * 8);
+      b.setAngularVelocity({ x: av.x + up.x * d, y: av.y + up.y * d, z: av.z + up.z * d });
     }
     // downforce: the faster you go the harder the air presses the car onto its tyres (about double the grip flat out)
     if (contacts) { const df = m * 0.0065 * vF * vF; b.applyForceToCenter({ x: -up.x * df, y: -up.y * df, z: -up.z * df }, true); }
@@ -213,7 +214,7 @@ class PVeh {
     // hits: a sudden change of speed that our own tyre forces can't explain (walls, props, other physics cars)
     if (this.preV) {
       const dv = Math.hypot(lv.x - this.preV.x, lv.z - this.preV.z);
-      if (dv > 7) PhysCar.impact(this, dv, (this.preV.x - lv.x) / dv, (this.preV.z - lv.z) / dv);
+      if (dv > 4.5) PhysCar.impact(this, dv, (this.preV.x - lv.x) / dv, (this.preV.z - lv.z) / dv);
     }
     if (!this.b) return; // the knock wrecked it
     // stuck on its roof or side: after a moment it rights itself
@@ -315,7 +316,7 @@ const PhysCar = {
     this.on = !q.has('arcade') && pref !== 'arcade';
     this.world = !q.has('arcade') && !q.has('arcadeworld') && world !== 'off';
   },
-  usable(car) { return !!(Phys.ready && this.on && car && !car.T.bike && !car.dead && !car.wreck); },
+  usable(car) { return !!(Phys.ready && car && !car.T.bike && !car.dead && !car.wreck && (car.driver === 'player' ? this.on : this.world)); },
   /* which cars near you become physics bodies (the K key turns the others off, in case they cost too much) */
   eligible(car) {
     if (!car || car.dead || car.T.bike || car.wreck) return false;
@@ -328,8 +329,8 @@ const PhysCar = {
   /* does a car stay a physics body? Yours does; others while they're near and eligible, and (going back to the arcade)
      only once they sit square on their wheels */
   keep(car) {
-    if (car.dead || !this.on || !Phys.ready) return false;
-    if (car.driver === 'player' && G.player.inCar === car) return true;
+    if (car.dead || !Phys.ready) return false;
+    if (car.driver === 'player' && G.player.inCar === car) return this.on;
     const t = G.body(), d = dist(car.x, car.z, t.x, t.z);
     if (this.eligible(car) && d < this.ROFF) return true;
     return !this.settled(car) && d < 220;
@@ -345,7 +346,7 @@ const PhysCar = {
   /* every quarter second: the nearest eligible cars become physics bodies */
   manage(dt) {
     this.mT -= dt; if (this.mT > 0) return; this.mT = 0.25;
-    if (!this.on || !Phys.ready || !this.world) return;
+    if (!Phys.ready || !this.world) return;
     const t = G.body(), cands = [];
     for (const c of G.cars) if (!c.phys && this.eligible(c) && this.usable(c)) { const d = dist(c.x, c.z, t.x, t.z); if (d < this.RON) cands.push([d, c]); }
     cands.sort((a, b) => a[0] - b[0]);
@@ -360,7 +361,7 @@ const PhysCar = {
   toggle() {
     this.on = !this.on;
     try { localStorage.setItem('lootrun.handling', this.on ? 'physics' : 'arcade'); } catch (e) { /* fine */ }
-    if (!this.on) for (const v of [...this.list]) v.destroy(); else if (G.player.inCar) this.attach(G.player.inCar);
+    const mine = G.player.inCar; if (!this.on) { if (mine && mine.phys) mine.phys.destroy(); } else if (mine) this.attach(mine); // L: your car only (K is the traffic)
     return this.on;
   },
   grip(car) { return { tank: 1.7, supercar: 1.4, sports: 1.38, muscle: 1.2, police: 1.3, taxi: 1.22, truck: 1.0, van: 1.05, armored: 1.0, suv: 1.15, pickup: 1.12, hatch: 1.25 }[car.type] || 1.25; },
@@ -374,8 +375,9 @@ const PhysCar = {
     const c = v.car, ix = c.x + nx * 1.5, iz = c.z + nz * 1.5;
     // what hit it? another physics car just over there, if any
     let other = null, bd = 1e9; for (const o of this.list) { if (o === v) continue; const d = dist(o.car.x, o.car.z, c.x, c.z); if (d < (o.car.T.len + c.T.len) / 2 + 1.2 && d < bd) { bd = d; other = o.car; } }
+    const thr = other ? 4.5 : 7; if (dv <= thr) return; // another car (each takes about half the closing speed) or a wall
     const byPlayer = other && other.driver === 'player';
-    c.damage((dv - 7) * 1.8, ix, iz, byPlayer ? G.player : null);
+    c.damage((dv - thr) * 1.8, ix, iz, byPlayer ? G.player : null);
     if (c.parked && !c.wreck && c.alarmT <= 0 && dv > 9) c.alarmT = 5;
     if (!(c.crashT > G.time)) { Sfx.crash(dv / 30, c.x, c.z); c.crashT = G.time + 0.25; if (other) other.crashT = G.time + 0.25; }
     if (v.player || byPlayer) G.shake(dv * 0.03);

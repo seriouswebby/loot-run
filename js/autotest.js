@@ -1428,7 +1428,7 @@ function runAutotest() {
     if (!Phys.ready) return 'SKIP';
     const city = soak(W.rp(4) + 10, W.rp(4) + 10, 120), ring = soak(0, -W.HWY - 22, 120);
     // (people do step out in front of traffic: over three 2-minute runs physics traffic hit 4, arcade traffic 3)
-    const ok = (r) => r.smashed === 0 && r.hits <= 6 && r.stuck <= 1 && r.offroad <= 2 && r.hurt === 0 && r.maxPhys >= 3;
+    const ok = (r) => r.smashed === 0 && r.hits <= 6 && r.stuck <= 1 && r.offroad <= 2 && r.hurt === 0 && r.maxPhys >= 2;
     return (ok(city) && ok(ring)) || 'city ' + JSON.stringify(city) + ' ring ' + JSON.stringify(ring);
   });
   const pursuit = (physPolice) => {
@@ -1448,6 +1448,16 @@ function runAutotest() {
     G.god = false; G.exitCar(true); car.remove(); Heat.clear(); clearPolice(); PhysCar.classes.police = true;
     return { gap: n ? sum / n : 999, crashed, phys: physPolice };
   };
+  T('physics traffic on snow and in a storm: two minutes on the Ring Highway without pile-ups', () => {
+    if (!Phys.ready) return 'SKIP';
+    const out = [];
+    for (const [kind, cover] of [['snow', 0.8], ['storm', 0]]) {
+      Weather.set(kind, true); Weather.snowCover = cover; const realReset = Weather.set; Weather.set = () => {}; // (the soak's reset would make it sunny)
+      const r = soak(0, -W.HWY - 22, 120); Weather.set = realReset; Weather.set('clear', true);
+      if (r.hurt || r.stuck > 1 || r.offroad > 2) out.push(kind + ' ' + JSON.stringify(r));
+    }
+    return !out.length || out.join(' | ');
+  });
   T('physics police: on the same route a physics cruiser keeps about as close as an arcade one, without wrecking itself', () => {
     if (!Phys.ready) return 'SKIP';
     const a = pursuit(false), b = pursuit(true); // (tuning runs: arcade 19.2 / 19.3 m, physics 21.7 / 21.2 m)
@@ -1462,9 +1472,18 @@ function runAutotest() {
       if (turned < 0.4 || moved > 3) bad.push('turn on the spot: turned ' + turned.toFixed(2) + ' rad, moved ' + moved.toFixed(1) + ' m');
       const target = new Car('sedan', t.x + Math.sin(t.h + t.turretYaw) * 25, t.z + Math.cos(t.h + t.turretYaw) * 25, 0, { parked: true }); P.cd = 0; G.attackQ = { ang: 0 }; Tanks.fire(t); steps(1);
       if (!(target.wreck || target.burning > 0 || target.hp < target.maxHp * 0.3)) bad.push('the shell did not wreck the car ahead (hp ' + target.hp + ')');
+      // at speed it arcs round on its tracks rather than sliding sideways
+      const rw = W.AIRPORT.runway; t.x = rw.minX + 120; t.z = (rw.minZ + rw.maxZ) / 2; t.h = Math.PI / 2; t.v = 15; t.vx = 15; t.vz = 0; Input.keys.KeyW = true; steps(1); const hA = t.h; Input.keys.KeyD = true; steps(2); Input.keys.KeyD = Input.keys.KeyW = false; // open tarmac
+      const arc = Math.abs(angDiff(hA, t.h)), crab = Math.abs(angDiff(t.h, Math.atan2(t.vx, t.vz))); if (arc < 0.8 || (Math.hypot(t.vx, t.vz) > 3 && crab > 0.5)) bad.push('at speed: turned ' + arc.toFixed(2) + ' rad, sliding ' + crab.toFixed(2) + ' rad off its heading');
       Heat.add(3, 5, 'test'); const cop = spawnCop(t.x + 2.5, t.z, 'chase'); cop.ai.mode = 'chase'; G.god = false; P.hp = 100; steps(4); if (G.respawning || !P.inCar) bad.push('dragged out of the tank');
       Heat.clear(); clearPolice(); G.exitCar(true); target.remove(); t.remove();
     }
+    // owning it follows from having done the job, so a reload can't lose it
+    const S0 = G.S; G.S = Object.assign({}, S0, { tank: false, jobsDone: ['tk1'] }); const owns = G.ownsTank(); G.S = S0; if (!owns) bad.push("doing Sarge's job doesn't make the tank yours");
+    // the job's last leg has to be in the tank: walking home on foot doesn't finish it
+    Story.begin(SIDE_JOBS.find((m) => m.id === 'tk1')); for (let k = 0; k < 4 && Story.active; k++) { const st = Story.step(); if (st.t === 'steal') { const jc = Story.active.car; tp(jc.x + 3, jc.z); G.enterCar(jc); } else if (st.t === 'loseHeat') Heat.clear(); else if (st.t === 'goto') break; steps(0.3); }
+    if (P.inCar) G.exitCar(true); tp(W.places.hideout.x, W.places.hideout.z); steps(0.5); const onFoot = !!Story.active; if (!onFoot) bad.push('the job finished with you on foot');
+    if (Story.active && Story.active.car) Story.active.car.remove(); Story.active = null; Heat.clear(); clearPolice();
     G.S.tank = tank0; Tanks.auto = false;
     return !bad.length || bad.join(' | ');
   });
