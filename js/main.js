@@ -186,6 +186,7 @@ function drawMap(ctx, size, cx, cz, span, full) {
     ctx.strokeStyle = '#0f1216'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(fx, fz, r, 0, TAU); ctx.stroke();
     ctx.strokeStyle = '#ff5d8f'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(fx, fz, r, 0, TAU); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4; ctx.moveTo(fx + Math.cos(a) * r, fz + Math.sin(a) * r); ctx.lineTo(fx - Math.cos(a) * r, fz - Math.sin(a) * r); } ctx.moveTo(fx - r * 0.6, fz + r * 1.6); ctx.lineTo(fx, fz); ctx.lineTo(fx + r * 0.6, fz + r * 1.6); ctx.stroke();
   }
+  for (const k in GIVERS) { const g = GIVERS[k], p = pl[g.place]; if (k !== 'vera' && p && inView(p.x, p.z)) label(p.x, p.z, g.letter, Story.available(k) ? g.col : '#7d7a72'); } // side-job givers
   if (Story.available()) label(pl.hideout.x, pl.hideout.z, 'V', '#ffd23f'); else label(pl.hideout.x, pl.hideout.z, 'K', '#d9c9a8');
   // cameras nearby
   if (!full) for (const c of W.cams) if (c.deadT <= 0 && inView(c.x, c.z) && dist(c.x, c.z, t.x, t.z) < 70) {
@@ -553,6 +554,7 @@ function computeInteract() {
   if (bh && (!bc || bhd < bd + 1.5)) { const h = bh; out.f = { label: AIRCRAFT_LABEL[h.kind] || 'Fly the helicopter', run: () => G.enterHeli(h) }; }
   // E options by priority
   const pl = W.places;
+  for (const k in GIVERS) { const g = GIVERS[k], p = pl[g.place]; if (k === 'vera' || !p || !Story.available(k) || dist(P.x, P.z, p.x, p.z) > 3) continue; const m = Story.next(k); out.e = { id: 'giver' + k, label: 'Talk to ' + g.first + ': "' + m.title + '"', run: () => Story.start(k) }; return out; }
   if (Story.available() && dist(P.x, P.z, pl.hideout.x, pl.hideout.z) < 3) { const m = Story.next(); out.e = { id: 'vera', label: 'Talk to Vera: "' + m.title + '"', run: () => Story.start() }; return out; }
   for (const s of pl.shops) if (dist(P.x, P.z, s.x, s.z) < 2.4) { out.e = { id: 'shop' + s.id, label: 'Shop at ' + s.name, run: () => UI.openShop(s.name) }; return out; }
   const ride = Funland.prompt(P);
@@ -1006,6 +1008,7 @@ function newWorld() {
   const hv = W.places.hideout;
   const vera = new Actor('ped', hv.x, hv.z - 0.5, { shirt: '#7b2cbf', pants: '#1d1d1d', skin: '#c68642', hair: '#8b2f1b' });
   vera.ai = { mode: 'vera' }; vera.invuln = true; G.npcs.push(vera); G.vera = vera;
+  for (const k in GIVERS) { const g = GIVERS[k], p = W.places[g.place]; if (k === 'vera' || !p) continue; const a = new Actor('ped', p.x, p.z, g.look); a.ai = { mode: 'vera', giver: k }; a.invuln = true; a.facing = p.face || 0; G.npcs.push(a); }
   spawnFixedCars();
   Choppers.init();
   Train.init(); W.trainFloor = (x, z, y) => Train.floorAt(x, z, y);
@@ -1206,6 +1209,7 @@ function demoSetup(kind) {
     G.camMode = 'chase'; P.x = at[0]; P.z = at[1]; P.facing = CAM.yaw = at[2]; CAM.pitch = 0.18; for (let i = 0; i < 30; i++) step(STEP);
   }
   else if (kind === 'hillsiso') { P.x = -700; P.z = -700; CAM.zoomIso = 260; CAM.curIso = 260; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'bigmap') { openBigMap(); BM.span = W.VIEW.span; BM.cx = W.VIEW.cx; BM.cz = W.VIEW.cz; drawBigMap(); }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }

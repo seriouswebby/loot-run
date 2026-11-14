@@ -53,7 +53,7 @@ function buildFunland(trees) {
   F.links = L.map(([a, b]) => [F.nodes[a], F.nodes[b]]);
   for (const k of ['gate', 'hub', 'plazaW', 'plazaE']) F.nodes[k].w = 3;
   F.area = Strollers.add({ name: 'funland', cx: (F.minX + F.maxX) / 2, cz: (F.minZ + F.maxZ) / 2, R: 140, cap: 22, nodes: F.nodes, links: F.links });
-  W.districtLabels.push({ x: gx, z: F.minZ - 40, text: 'FUNLAND', col: '#ff8fb8' });
+  W.districtLabels.push({ x: gx, z: (F.minZ + F.maxZ) / 2 + 30, text: 'FUNLAND', col: '#ff8fb8' });
 
   // fence round the park: candy-striped rails, with the main gate north, a back gate south and a side gate west
   const fence = (x0, z0, x1, z1) => {
@@ -86,6 +86,7 @@ function buildFunland(trees) {
   for (let i = 0; i < 5; i++) FP.box(752.9 + i * 2, 4.7, 94, 2, 0.5, 8.4, i % 2 ? '#ffffff' : '#3a86ff');
   FP.box(751.94, 1.7, 94, 0.12, 1.6, 4, '#a9d6e5'); addSign(751.92, 3.85, 94, 'w', 'GIFTS', '#3a86ff', '#ffffff', 5, 1.1);
   W.places.funland = { id: 'funland', name: 'Funland', x: gx, z: F.minZ - 6 };
+  W.places.dixie = { id: 'dixie', name: 'Dixie Marlowe', x: gx + 29, z: 104, face: -Math.PI / 2 };
 
   // stalls along the avenues: a counter, a striped awning and a sign
   let si = 0;
@@ -498,6 +499,7 @@ function buildMillbrook(trees) {
   link('w-420', 'e-420'); link('w-368', 'e-368'); link('w-349', 'sqW'); link('e-349', 'sqE'); link('sqW', 'sqS'); link('sqS', 'sqE');
   M.area = Strollers.add({ name: 'millbrook', cx: mx, cz: (M.minZ + M.maxZ) / 2, R: 90, cap: 12, nodes, links });
   W.places.millbrook = { id: 'millbrook', name: 'Millbrook', x: mx, z: -470 };
+  W.places.earl = { id: 'earl', name: 'Earl Pruitt', x: ef + 26, z: -430, face: -Math.PI / 2 };
   W.districtLabels.push({ x: mx, z: M.maxZ + 18, text: 'MILLBROOK', col: '#f1e3c4' });
   const mesh = FP.build(S); mesh.geometry.computeBoundingSphere(); mesh.frustumCulled = true;
 }
@@ -590,7 +592,8 @@ function buildDam() {
   }
   const mesh = FP.build(S); mesh.geometry.computeBoundingSphere(); mesh.frustumCulled = true;
   W.places.dam = { id: 'dam', name: 'Bay River Dam', x: D.x, z: D.z };
-  W.districtLabels.push({ x: D.x, z: D.cz, text: 'RESERVOIR', col: '#bfe3f2' }, { x: D.x, z: D.z + 30, text: 'BAY RIVER DAM', col: '#e0ddd4' });
+  W.places.sal = { id: 'sal', name: 'Sal Okafor', x: D.x - 40, z: D.z + 40, face: 0 };
+  W.districtLabels.push({ x: D.x, z: D.cz, text: 'RESERVOIR', col: '#bfe3f2' }, { x: D.x, z: D.z + 85, text: 'BAY RIVER DAM', col: '#e0ddd4' });
 }
 const Dam = {
   t: 0,

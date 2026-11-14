@@ -1144,7 +1144,7 @@ function runAutotest() {
     return (label === 'Ride the Big Drop' && top > 40 && fell > 30 && /^Get off/.test(off) && !P.ride && P.y === 0 && P.hp === 100) || `label ${label} top ${top.toFixed(1)} screaming frames ${fell} off "${off}" ride ${!!P.ride} y ${P.y} hp ${P.hp}`;
   });
   T('Funland visitors stroll the paths, scatter when scared, then go back to strolling', () => {
-    reset(); for (const n of G.npcs) if (n.kind === 'ped') n.remove(); G.npcs = G.npcs.filter((n) => !n.dead);
+    reset(); for (const n of G.npcs) if (n.kind === 'ped' && n.ai.mode !== 'vera') n.remove(); G.npcs = G.npcs.filter((n) => !n.dead); // (not Vera or the other job givers)
     const F = W.FUN; tp(F.gate, 191); for (let i = 0; i < 40; i++) Strollers.populate(P, F.area);
     const vis = G.npcs.filter((n) => n.ai && n.ai.park && !n.dead), at0 = vis.map((n) => [n.x, n.z]);
     steps(8);
@@ -1243,7 +1243,7 @@ function runAutotest() {
     const fields = W.fields.filter((f) => f.x1 > M.minX && f.x0 < M.maxX && f.z1 > M.minZ && f.z0 < M.maxZ).length;
     const robbed = [];
     for (const id of ['diner', 'mercantile', 'millfuel']) { const r = W.places[id]; r.cd = 0; tp(r.x, r.z); const c0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(r) + 0.6); if (G.S.cash > c0 + 150) robbed.push(id); Heat.clear(); clearPolice(); }
-    for (const n of G.npcs) if (n.kind === 'ped') n.remove(); G.npcs = G.npcs.filter((n) => !n.dead);
+    for (const n of G.npcs) if (n.kind === 'ped' && n.ai.mode !== 'vera') n.remove(); G.npcs = G.npcs.filter((n) => !n.dead); // (not Vera or the other job givers)
     tp(M.x, -400); for (let i = 0; i < 30; i++) Strollers.populate(P, M.area);
     const folk = G.npcs.filter((n) => n.ai && n.ai.area === M.area); steps(6);
     const onWalks = folk.filter((n) => !n.dead && Math.min(...M.area.links.map(([a, b]) => segPointDist(n.x, n.z, a.x, a.z, b.x, b.z))) < 3.5).length;
@@ -1303,6 +1303,33 @@ function runAutotest() {
       const rd = Math.min(...W.RIVER.pts.slice(1).map((q, i) => segPointDist(car.x, car.z, W.RIVER.pts[i][0], W.RIVER.pts[i][1], q[0], q[1])));
       if (rd < W.RIVER.w / 2 - 2 || car.physY > 1) bad.push(`river: ${rd.toFixed(1)} m from the middle, ${car.physY.toFixed(1)} m up`); G.exitCar(true); car.remove();
     }
+    return !bad.length || bad.join(' | ');
+  });
+  T("side jobs: Dixie, Earl and Sal wait in their districts with jobs of their own; finishing one moves their chain on, not Vera's story", () => {
+    reset(); G.noSpawn = true; const bad = [], story0 = G.S.storyDone, done0 = G.S.jobsDone.slice(), stunts0 = (G.S.stunts || []).slice();
+    for (const k of ['dixie', 'earl', 'sal']) {
+      const g = GIVERS[k], p = W.places[g.place], npc = G.npcs.find((n) => n.ai && n.ai.giver === k);
+      if (!npc || dist(npc.x, npc.z, p.x, p.z) > 1.5) bad.push(k + ' is not at their spot');
+      if (!Story.available(k)) bad.push(k + ' has no job');
+      tp(p.x + 1.5, p.z); G.interact = computeInteract(); const e = G.interact.e; if (!(e && e.id === 'giver' + k)) bad.push(k + ' prompt: ' + (e && (e.label || e.disabled)));
+      if (W.collideCircle({ x: p.x, z: p.z }, 0.4)) bad.push(k + ' stands inside something');
+    }
+    // Dixie's first job, start to finish
+    tp(W.places.dixie.x + 1.5, W.places.dixie.z); G.interact = computeInteract(); if (G.interact.e) G.interact.e.run();
+    if (!(Story.active && Story.active.m.id === 'dx1')) bad.push('Ticket Money did not start');
+    const tix = W.places.funtix; tp(tix.x, tix.z); G.interact = computeInteract(); hold(G.robHoldTime(tix) + 0.6); Heat.clear(); clearPolice(); steps(0.5);
+    tp(W.places.dixie.x + 1, W.places.dixie.z); steps(0.5);
+    if (Story.active) bad.push('Ticket Money still running at step ' + Story.active.i);
+    if (!G.S.jobsDone.includes('dx1') || G.S.storyDone !== story0) bad.push('after it: jobs ' + G.S.jobsDone.join(',') + ' story ' + story0 + ' to ' + G.S.storyDone);
+    if ((Story.next('dixie') || {}).id !== 'dx2') bad.push("Dixie's next job " + (Story.next('dixie') || {}).id);
+    // the new kinds of step: a named stunt jump, a ute
+    Story.begin(SIDE_JOBS.find((m) => m.id === 'dx3')); G.stunt({ x: 0, z: 0 }, 1.2, 30, W.RAMPS.find((r) => r.name === 'Circle Jump')); steps(0.1);
+    if (!(Story.active && Story.active.i === 1)) bad.push('the stunt step did not advance');
+    Story.active = null; Story.begin(SIDE_JOBS.find((m) => m.id === 'ea2')); const ute = new Car('pickup', P.x + 3, P.z, 0); G.enterCar(ute); steps(0.2);
+    if (!(Story.active && Story.active.i === 1)) bad.push('stealing a ute did not count'); G.exitCar(true); ute.remove(); Story.active = null;
+    // a save keeps side jobs, and Vera's count stays hers
+    G.save(); const sv = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'); if (!(sv.jobsDone || []).includes('dx1') || sv.storyDone !== story0) bad.push('save: ' + JSON.stringify({ j: sv.jobsDone, s: sv.storyDone }));
+    G.S.jobsDone = done0; G.S.storyDone = story0; G.S.stunts = stunts0; G.save();
     return !bad.length || bad.join(' | ');
   });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {

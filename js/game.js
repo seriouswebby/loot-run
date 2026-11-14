@@ -24,7 +24,7 @@ G.loadSave = function () {
       const f = freshState(); s.ammo = Object.assign(f.ammo, s.ammo); s.stats = Object.assign(f.stats, s.stats);
       // saves from before jobs had ids only counted them, in the original eight-job order
       if (!Array.isArray(s.jobsDone)) s.jobsDone = ['first', 'tools', 'atms', 'quiet', 'glimmer', 'truck', 'bank', 'boat'].slice(0, s.storyDone || 0);
-      s.storyDone = s.jobsDone.length;
+      s.storyDone = s.jobsDone.filter((id) => MISSIONS.some((m) => m.id === id)).length; // Vera's jobs; side jobs are kept in the list too
       return Object.assign(f, s);
     }
   } catch (e) { /* ignore */ }
@@ -485,6 +485,7 @@ G.updateTumble = function (dt) {
 G.stunt = function (car, air, distM, ramp) {
   const pay = Math.round(air * 20 + distM * 1.5);
   G.S.stunts = G.S.stunts || [];
+  Story.event('stunt', ramp);
   if (ramp && !G.S.stunts.includes(ramp.name)) {
     G.S.stunts.push(ramp.name);
     UI.banner('STUNT JUMP', ramp.name + ' · ' + distM.toFixed(0) + ' m · ' + air.toFixed(1) + ' s · ' + G.S.stunts.length + ' of ' + W.STUNTS.length, 'done');
@@ -678,7 +679,7 @@ G.attack = function (ang) {
 };
 
 /* ---------------- story missions ---------------- */
-const V = 'Vera Kade';
+const V = 'Vera Kade', DIX = 'Dixie Marlowe', EARL = 'Earl Pruitt', SAL = 'Sal Okafor';
 const MISSIONS = [
   {
     id: 'first', title: 'First Shift', reward: 400,
@@ -788,6 +789,54 @@ const MISSIONS = [
   },
 ];
 
+
+/* ---------------- side jobs: people out in the county with work of their own ----------------
+   Each has a letter on the map (bright when they have a job for you). Their jobs don't count towards Vera's story. */
+const GIVERS = {
+  vera: { name: V, first: 'Vera', letter: 'V', col: '#ffd23f', place: 'hideout' },
+  dixie: { name: DIX, first: 'Dixie', letter: 'D', col: '#ff8fb8', place: 'dixie', look: { shirt: '#ff5d8f', pants: '#3a0ca3', skin: '#f1c27d', hair: '#ffd60a' } },
+  earl: { name: EARL, first: 'Earl', letter: 'E', col: '#f4a261', place: 'earl', look: { shirt: '#6b705c', pants: '#3a3a3a', skin: '#e0ac69', hair: '#d9d9d9', cap: '#7a2e1d' } },
+  sal: { name: SAL, first: 'Sal', letter: 'S', col: '#8ecae6', place: 'sal', look: { shirt: '#f77f00', pants: '#1d3557', skin: '#8d5524', hair: '#111111', cap: '#f1faee' } },
+};
+const SIDE_JOBS = [
+  { id: 'dx1', giver: 'dixie', title: 'Ticket Money', reward: 900,
+    intro: [[DIX, "Name's Dixie. I run the duck pond and the ring toss, and the owner skims every dime we make."], [DIX, "His ticket office by the main gate holds the day's takings. Take it, lose whoever comes after you, then come back to me."]],
+    steps: [{ t: 'rob', target: 'funtix', text: 'Rob the Funland ticket office' }, { t: 'loseHeat', text: 'Lose the cops' }, { t: 'goto', at: 'dixie', text: 'Back to Dixie (D on the map)' }],
+    outro: [[DIX, "Ha! Let him explain that to his accountant. Come and see me again."]] },
+  { id: 'dx2', giver: 'dixie', title: 'View From the Top', reward: 1200,
+    intro: [[DIX, "A sales rep parks his car in our lot every afternoon and never locks it."], [DIX, "Ride the Sky Wheel to the top and spot it for me. Then take a car from the lot and sell it to Rusty."]],
+    steps: [{ t: 'funride', ride: 'wheel', high: 34, text: 'Ride the Sky Wheel to the top (F at its platform)' }, { t: 'steal', parked: true, text: 'Steal a parked car' }, { t: 'sell', text: "Sell it at Rusty's Chop Shop" }],
+    outro: [[DIX, "Rusty says hi. I didn't know he knew how to say hi."]] },
+  { id: 'dx3', giver: 'dixie', title: 'The Flying Act', reward: 1500,
+    intro: [[DIX, "The carnival needs a new act, and it's you, flying."], [DIX, "Land the Circle Jump by the roundabout, then ride the Big Drop to calm your nerves. Then come and take a bow."]],
+    steps: [{ t: 'stunt', name: 'Circle Jump', text: 'Land the Circle Jump (the ramp east of the roundabout)' }, { t: 'funride', ride: 'drop', high: 38, text: 'Ride the Big Drop to the top' }, { t: 'goto', at: 'dixie', text: 'Take a bow with Dixie' }],
+    outro: [[DIX, "The crowd loved it. Well, the ones who didn't call the cops."]] },
+  { id: 'ea1', giver: 'earl', title: 'Store Credit', reward: 1000,
+    intro: [[EARL, "Earl Pruitt. I pump gas and fix tractors, and the Mercantile has been bleeding this town dry for years."], [EARL, "Their cash is behind the counter. Take it, shake the cops out in the hills, and come back for your cut."]],
+    steps: [{ t: 'rob', target: 'mercantile', text: 'Rob the Millbrook Mercantile' }, { t: 'loseHeat', text: 'Lose the cops' }, { t: 'goto', at: 'earl', text: 'Back to Earl (E on the map)' }],
+    outro: [[EARL, "That'll learn them. Here's your share."]] },
+  { id: 'ea2', giver: 'earl', title: 'Farm Truck', reward: 1200,
+    intro: [[EARL, "A feller in the city owes me a truck. He won't be giving it back, so we're taking one."], [EARL, "Bring me a ute. Any ute. Take the dirt roads if you like, it'll handle them."]],
+    steps: [{ t: 'steal', type: 'pickup', text: 'Steal a ute' }, { t: 'goto', at: 'earl', r: 8, text: 'Drive it to Millbrook Fuel' }],
+    outro: [[EARL, "She'll do. Don't tell the sheriff."]] },
+  { id: 'ea3', giver: 'earl', title: 'Pie Money', reward: 1400,
+    intro: [[EARL, "Dot's Diner. On a Friday the register holds the whole county's pie money."], [EARL, "Do it quiet if you can. Cut the alarm, loop the camera, then lose anyone who comes."]],
+    steps: [{ t: 'rob', target: 'diner', text: "Rob Dot's Diner" }, { t: 'loseHeat', text: 'Lose any heat' }, { t: 'goto', at: 'earl', text: 'Back to Earl' }],
+    outro: [[EARL, "I'll miss that pie. I'll get over it."]] },
+  { id: 'sa1', giver: 'sal', title: 'Mesa Hop', reward: 1300,
+    intro: [[SAL, "Sal Okafor. I look after the dam. Nobody comes out here unless they're hiding from something."], [SAL, "Show me you can drive. Take an SUV into the badlands and land the Mesa Hop."]],
+    steps: [{ t: 'steal', type: 'suv', text: 'Steal an SUV' }, { t: 'stunt', name: 'Mesa Hop', text: 'Land the Mesa Hop in the badlands' }, { t: 'goto', at: 'sal', r: 8, text: 'Back to Sal at the dam (S on the map)' }],
+    outro: [[SAL, "Not bad. Not bad at all."]] },
+  { id: 'sa2', giver: 'sal', title: 'Tanker Money', reward: 1500,
+    intro: [[SAL, "Millbrook Fuel keeps cash in a lockbox for the tanker driver."], [SAL, "Take it, and Dot's register while you're there. Then lose them out here in the canyon."]],
+    steps: [{ t: 'rob', target: 'millfuel', text: 'Rob Millbrook Fuel' }, { t: 'rob', target: 'diner', text: "Rob Dot's Diner" }, { t: 'loseHeat', text: 'Lose the cops' }, { t: 'goto', at: 'sal', r: 8, text: 'Back to Sal at the dam' }],
+    outro: [[SAL, "Quiet out here, isn't it? That's why I like it."]] },
+  { id: 'sa3', giver: 'sal', title: 'Spillway Shot', reward: 2000,
+    intro: [[SAL, "The news chopper sits at the airport most afternoons. Borrow it."], [SAL, "Fly over the dam so I can get my picture, then set it down on the runway like nothing happened."]],
+    steps: [{ t: 'board', kinds: ['news'], text: 'Steal the news chopper at the airport' }, { t: 'goto', at: 'dam', r: 45, text: 'Fly over the dam' }, { t: 'land', at: 'runway', text: 'Land on the airport runway' }],
+    outro: [[SAL, "Best photo I ever took. Here, you earned this."]] },
+];
+
 /* marker rings for the flying jobs: [x, z, altitude] */
 const RINGS = {
   circuit: [[-560, 300, 30], [-330, 200, 45], [-280, -60, 55], [-560, -250, 60], [-950, -150, 50], [-1150, 150, 35]],
@@ -797,17 +846,24 @@ const Story = {
   active: null, rings: [],
   get done() { return G.S.storyDone; },
   // jobsDone (ids) is the record; storyDone is its count. Setting storyDone directly (tests, old code) re-derives the list.
-  sync() { const S = G.S; if (!Array.isArray(S.jobsDone) || S.jobsDone.length !== S.storyDone) S.jobsDone = MISSIONS.slice(0, S.storyDone).map((m) => m.id); },
-  available() { this.sync(); return !!this.next() && !this.active; },
-  next() { this.sync(); return MISSIONS.find((m) => !G.S.jobsDone.includes(m.id)); },
-  start() {
-    const m = this.next(); if (!m) return;
-    UI.dialog(m.intro, () => this.begin());
+  sync() {
+    const S = G.S, main = (id) => MISSIONS.some((m) => m.id === id);
+    if (!Array.isArray(S.jobsDone)) S.jobsDone = [];
+    if (S.jobsDone.filter(main).length !== S.storyDone) S.jobsDone = MISSIONS.slice(0, S.storyDone).map((m) => m.id).concat(S.jobsDone.filter((id) => !main(id)));
   },
-  begin() {
-    const m = this.next(); if (!m) return;
+  // a giver's chain of jobs: Vera's story, or Dixie's, Earl's, Sal's side jobs
+  chain(giver) { return giver && giver !== 'vera' ? SIDE_JOBS.filter((m) => m.giver === giver) : MISSIONS; },
+  available(giver) { this.sync(); return !!this.next(giver) && !this.active; },
+  next(giver) { this.sync(); return this.chain(giver).find((m) => !G.S.jobsDone.includes(m.id)); },
+  start(giver) {
+    const m = this.next(giver); if (!m) return;
+    UI.dialog(m.intro, () => this.begin(m));
+  },
+  begin(m) {
+    if (!m || !m.steps) m = this.next(m); if (!m) return;
     this.active = { m, i: -1, count: 0, flag: false, t: 0, car: null };
-    UI.banner(m.title.toUpperCase(), 'Job ' + (G.S.storyDone + 1) + ' of ' + MISSIONS.length, 'job');
+    const ch = this.chain(m.giver), side = m.giver && m.giver !== 'vera';
+    UI.banner(m.title.toUpperCase(), (side ? GIVERS[m.giver].first + "'s job " : 'Job ') + (ch.indexOf(m) + 1) + ' of ' + ch.length, 'job');
     this.advance();
   },
   step() { return this.active && this.active.m.steps[this.active.i]; },
@@ -838,7 +894,9 @@ const Story = {
       case 'rob': case 'sell': return a.flag;
       case 'robKind': return a.count >= s.n;
       case 'buy': return G.owns(s.item) || (s.item && G.S.tools[s.item]);
-      case 'steal': return !!P.inCar && (!s.parked || P.inCar.wasParked) && (!s.missionCar || P.inCar === a.car);
+      case 'steal': return !!P.inCar && (!s.parked || P.inCar.wasParked) && (!s.type || P.inCar.type === s.type) && (!s.missionCar || P.inCar === a.car);
+      case 'funride': return !!P.ride && P.ride.kind === s.ride && P.y >= (s.high || 0);
+      case 'stunt': return a.flag;
       case 'loseHeat': return Heat.level === 0;
       case 'cutAlarm': { const al = W.places[s.target].sec.alarm; return al.cutT > 0; }
       case 'loopCams': return W.places[s.target].sec.cams.every((c) => c.loopT > 0 || c.deadT > 0);
@@ -877,6 +935,7 @@ const Story = {
     if (type === 'rob' && s.t === 'rob' && payload.id === s.target) a.flag = true;
     if (type === 'rob' && s.t === 'robKind' && payload.kind === s.kind) { a.count++; if (a.count < s.n) G.toast(a.count + ' of ' + s.n + ' ATMs cracked'); }
     if (type === 'sell' && s.t === 'sell' && (!s.missionCar || payload === a.car)) a.flag = true;
+    if (type === 'stunt' && s.t === 'stunt' && payload && (!s.name || payload.name === s.name)) a.flag = true;
   },
   update(dt) {
     const a = this.active; if (!a) return;
@@ -903,7 +962,7 @@ const Story = {
     if (a.target && !a.target.dead) a.target.remove();
     this.clearRings();
     this.active = null;
-    G.toast('Job failed: ' + reason + ' Talk to Vera to try again.', 'warn');
+    G.toast('Job failed: ' + reason + ' Talk to ' + (GIVERS[a.m.giver] || GIVERS.vera).first + ' to try again.', 'warn');
     if (!quiet) UI.banner('JOB FAILED', reason, 'ko');
     Sfx.sting('fail');
   },
@@ -911,12 +970,13 @@ const Story = {
     const m = this.active.m; this.clearRings();
     if (this.active.target && !this.active.target.dead && !this.active.target.wreck) this.active.target.mission = false;
     this.active = null;
-    this.sync(); if (!G.S.jobsDone.includes(m.id)) G.S.jobsDone.push(m.id); G.S.storyDone = G.S.jobsDone.length;
-    if (G.S.storyDone >= MISSIONS.length) { Heat.clear(); clearPolice(); }
+    this.sync(); if (!G.S.jobsDone.includes(m.id)) G.S.jobsDone.push(m.id); G.S.storyDone = G.S.jobsDone.filter((id) => MISSIONS.some((q) => q.id === id)).length;
+    const main = !m.giver || m.giver === 'vera';
+    if (main && G.S.storyDone >= MISSIONS.length) { Heat.clear(); clearPolice(); }
     G.addCash(m.reward, G.player.x, G.player.z);
     G.save();
     UI.banner('JOB DONE', m.title + ' · +' + money(m.reward), 'done'); Sfx.sting('done');
-    if (m.outro && !G.autotest) setTimeout(() => UI.dialog(m.outro, () => { if (G.S.storyDone >= MISSIONS.length) UI.ending(); }), 1600);
+    if (m.outro && !G.autotest) setTimeout(() => UI.dialog(m.outro, () => { if (main && G.S.storyDone >= MISSIONS.length) UI.ending(); }), 1600);
   },
   target() {
     const a = this.active;
@@ -927,7 +987,12 @@ const Story = {
       case 'rob': return W.places[s.target];
       case 'robKind': { const P = G.player; let best = null, bd = 1e9; for (const r of W.robs) if (r.kind === s.kind && r.cd <= 0) { const d = dist(r.x, r.z, P.x, P.z); if (d < bd) { bd = d; best = r; } } return best; }
       case 'buy': return G.owns(s.item) ? null : nearestShop();
-      case 'steal': return s.missionCar ? a.car : (G.player.inCar ? null : nearestParked());
+      case 'steal': {
+        if (s.missionCar) return a.car; if (G.player.inCar) return null; if (!s.type) return nearestParked();
+        const P = G.player; let best = null, bd = 1e9; for (const c of G.cars) if (!c.dead && !c.wreck && c.type === s.type) { const d = dist(c.x, c.z, P.x, P.z); if (d < bd) { bd = d; best = c; } } return best;
+      }
+      case 'funride': { const r = Funland.RIDES[s.ride]; return { x: r.x, z: r.z }; }
+      case 'stunt': { const r = s.name && W.RAMPS.find((q) => q.name === s.name); return r ? { x: r.x - r.fx * 40, z: r.z - r.fz * 40 } : null; }
       case 'sell': return W.places.chop;
       case 'cutAlarm': return W.places[s.target].sec.alarm;
       case 'loopCams': { const c = W.places[s.target].sec.cams.find((k) => k.loopT <= 0 && k.deadT <= 0); return c || null; }

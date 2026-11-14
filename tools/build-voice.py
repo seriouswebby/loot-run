@@ -2,7 +2,7 @@
 """Render every spoken line in Loot Run with the Kokoro text-to-speech model and embed them in js/voicedata.js.
 
 Kokoro-82M (https://huggingface.co/hexgrad/Kokoro-82M) is an open-weight TTS model under the Apache-2.0 license;
-this uses the ONNX build (kokoro-onnx). Lines come from tools/voice-lines.json plus Vera's mission dialogue,
+this uses the ONNX build (kokoro-onnx). Lines come from tools/voice-lines.json plus the mission dialogue (Vera, Dixie, Earl, Sal),
 read straight out of js/game.js so the voice always matches the text on screen.
 
 Run it with uv, which fetches a compatible Python and the packages:
@@ -20,12 +20,17 @@ FORMATS = {  # sample rate, bitrate per kind of line
 }
 
 
-def vera_lines():
+SPEAKERS = {'V': 'vera', 'DIX': 'dixie', 'EARL': 'earl', 'SAL': 'sal'}  # the constants game.js uses in [WHO, 'line'] pairs
+
+
+def dialog_lines():
+    """every mission line, as (speaker, text), in the order they appear in js/game.js"""
     src = open(os.path.join(ROOT, 'js', 'game.js'), encoding='utf8').read()
     out = []
-    for m in re.finditer(r"\[V, (\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')\]", src):
-        s = m.group(1)[1:-1].replace("\\'", "'").replace('\\"', '"')
-        if s not in out: out.append(s)
+    for m in re.finditer(r"\[(V|DIX|EARL|SAL), (\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')\]", src):
+        s = m.group(2)[1:-1].replace("\\'", "'").replace('\\"', '"')
+        key = (SPEAKERS[m.group(1)], s)
+        if key not in out: out.append(key)
     return out
 
 
@@ -43,7 +48,10 @@ def main():
     spec = json.load(open(os.path.join(ROOT, 'tools', 'voice-lines.json')))
     V = spec['voices']
     jobs = []  # (key, text, voice, speed, kind)
-    for i, t in enumerate(vera_lines()): jobs.append((f'vera/{i}', t, V['vera'], 1.0, 'vera'))
+    count = {}
+    for who, t in dialog_lines():
+        i = count.get(who, 0); count[who] = i + 1
+        jobs.append((f'{who}/{i}', t, V[who], 1.0 if who == 'vera' else 0.97, 'vera'))
     for g, b in spec['barks'].items():
         # every line in every voice of the role: a person picks one voice and keeps it for everything they shout
         for i, t in enumerate(b['lines']):
