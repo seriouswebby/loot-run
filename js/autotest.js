@@ -1080,6 +1080,19 @@ function runAutotest() {
     G.exitCar(); car.remove(); G.noSpawn = false;
     return (moved > 0.05 && car.hp < car.maxHp && bumperOff) || `dent ${moved.toFixed(3)} hp ${car.hp.toFixed(0)}/${car.maxHp} glass changed ${glass} front bumper off ${bumperOff}`;
   });
+  T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
+    reset(); G.noSpawn = true;
+    const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };
+    const find = (ok) => { for (let x = -W.OUT + 60; x < W.OUT - 60; x += 7) for (let z = -W.OUT + 60; z < W.SHORE - 2; z += 7) if (ok(x, z)) return [x, z]; return null; };
+    const flat = (x, z) => !W.groundAt(x - 3, z) && !W.groundAt(x + 3, z) && !W.groundAt(x, z - 3) && !W.groundAt(x, z + 3);
+    const grass = find((x, z) => W.zoneAt(x, z) === 'outskirts' && flat(x, z)), sand = [0, W.SHORE - 8];
+    const tr = W.trails[0], trail = [(tr[0] + tr[2]) / 2, (tr[1] + tr[3]) / 2];
+    const out = {}, want = { grass: [25 * 1.1, 26 * 1.1 * 1.25], sand: [25, 26 * 1.25], trail: [25 * 0.95, 26 * 0.95 * 1.25] };
+    for (const [k, p] of [['grass', grass], ['sand', sand], ['trail', trail]]) out[k] = [top('sedan', p[0], p[1]), top('suv', p[0], p[1])];
+    const zones = [W.zoneAt(sand[0], sand[1]), W.zoneAt(trail[0], trail[1]), W.onTrail(trail[0], trail[1])];
+    const ok = Object.keys(want).every((k) => Math.abs(out[k][0] - want[k][0]) < 0.3 && Math.abs(out[k][1] - want[k][1]) < 0.3) && zones[0] === 'beach' && zones[1] === 'forest' && zones[2];
+    return ok || `speeds ${JSON.stringify(out)} want ${JSON.stringify(want)} zones ${zones} grass at ${grass}`;
+  });
   T('vehicle damage: a wrecked car is slower; Rusty repairs it', () => {
     const run = (dmg) => { reset(); G.noSpawn = true; tp(-235, -W.HWY - 3); const car = new Car('sedan', -235, -W.HWY + 7.5, Math.PI / 2); G.enterCar(car); car.hp = car.maxHp * dmg; Input.keys.KeyW = true; steps(5); Input.keys.KeyW = false; const v = car.v; G.exitCar(); car.remove(); G.noSpawn = false; return v; };
     const healthy = run(1), wrecked = run(0.25);

@@ -88,14 +88,14 @@ W.ZONES = {
   highway: { label: 'HIGHWAY', hint: 'Fast · exposed · roadblocks · choppers see far', sight: 95, evade: 1.3, car: 1.6 },
   street: { label: 'STREETS', hint: 'Traffic · patrols', sight: 45, evade: 1, car: 1.15 },
   alley: { label: 'ALLEY', hint: 'Hidden · tight · dead ends · cover from choppers', sight: 18, evade: 0.55, car: 0.7 },
-  forest: { label: 'FOREST PARK', hint: 'Hidden · slow · 4 exits · trees block choppers', sight: 16, evade: 0.5, car: 0.75 },
+  forest: { label: 'FOREST PARK', hint: 'Hidden · dirt trails · 4 exits · trees block choppers', sight: 16, evade: 0.5, car: 0.95 },
   rooftop: { label: 'ROOFTOP', hint: 'Cops on the street can\'t reach or see you · choppers can', sight: 8, evade: 0.8, car: 1 },
-  outskirts: { label: 'OUTSKIRTS', hint: 'Open ground', sight: 60, evade: 1.1, car: 0.95 },
+  outskirts: { label: 'OUTSKIRTS', hint: 'Open ground', sight: 60, evade: 1.1, car: 1.1 },
   train: { label: 'ON THE TRAIN', hint: "Cops can't follow you up here · choppers can", sight: 70, evade: 0.9, car: 1 },
   tunnel: { label: 'PINE RIDGE TUNNEL', hint: 'Covered · choppers can\'t see you · no way out but the ends', sight: 30, evade: 0.6, car: 1.25 },
   airport: { label: 'AIRPORT', hint: 'Wide open · aircraft to steal · runway = drag strip', sight: 85, evade: 1.25, car: 1.45 },
   country: { label: 'COUNTRY ROAD', hint: 'Open road · fast · cops see you coming', sight: 75, evade: 1.15, car: 1.35 },
-  beach: { label: 'BEACH', hint: 'Open sand · no cover', sight: 70, evade: 1.2, car: 0.8 },
+  beach: { label: 'BEACH', hint: 'Open sand · no cover', sight: 70, evade: 1.2, car: 1.0 },
   air: { label: 'AIRBORNE', hint: 'Fast · every cop can see you', sight: 90, evade: 1.5, car: 1 },
 };
 

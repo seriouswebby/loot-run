@@ -158,16 +158,18 @@ class Car {
     if (this.driver === 'player' || (this.police && this.ai && this.ai.mode !== 'patrol')) {
       const z = W.zoneAt(this.x, this.z);
       mul = W.ZONES[z].car;
-      if (z === 'forest' && !W.onTrail(this.x, this.z)) mul = 0.55;
+      if (z === 'forest' && !W.onTrail(this.x, this.z)) mul = 0.78; // weaving through the trees, off the dirt trails
       // the fastest machines are tamed on city streets (nitro still gives the full kick)
       if ((z === 'street' || z === 'alley') && CITY_TAME[this.type] && !boost) mul *= CITY_TAME[this.type];
+      // SUVs (and to a lesser degree utes) are built for grass, dirt trails and sand
+      if (OFFROAD[this.type] && OFFROAD_ZONES.includes(z)) mul *= OFFROAD[this.type];
     }
     if (this.popped) mul *= 0.5;
     const cond = clamp(this.hp / this.maxHp, 0, 1);
     if (!T.pedal && cond < 0.6) mul *= 0.7 + 0.5 * cond;
     if (this.burning > 0) mul *= 0.6;
     const maxV = Math.min(88, T.maxV * mul * (boost ? 1.55 : 1)), accel = T.accel * (boost ? 2.6 : 1) * (mul > 1 ? 1.25 : 1);
-    if (this.y <= 0.001) { const sl = W.slopeAlong(this.x, this.z, Math.sin(this.h), Math.cos(this.h)); if (sl) this.v -= sl * 9 * dt; }
+    if (this.y <= 0.001) { const sl = W.slopeAlong(this.x, this.z, Math.sin(this.h), Math.cos(this.h)); if (sl) this.v -= sl * (OFFROAD[this.type] ? 5 : 9) * dt; } // 4x4s pull up hills better
     if (thr > 0) {
       if (this.v < 0) this.v = Math.min(0, this.v + 32 * dt); else if (this.v < maxV) this.v = Math.min(maxV, this.v + accel * thr * dt);
     } else if (thr < 0) {
@@ -530,6 +532,7 @@ function navPoints(car) {
 }
 /* top-speed factor on city streets for the fastest vehicles */
 const CITY_TAME = { supercar: 0.72, sports: 0.8, motorbike: 0.76 };
+const OFFROAD = { suv: 1.25, pickup: 1.12 }, OFFROAD_ZONES = ['outskirts', 'beach', 'forest'];
 function initTraffic(car, from, to) {
   car.ai = Object.assign(car.ai || {}, { mode: car.police ? 'patrol' : 'traffic', from, to, blockT: 0, ignoreT: 0, checkT: 0, blocked: null, stuckT: 0, revT: 0 });
   navPoints(car); car.ai.stage = 'run';
