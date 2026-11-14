@@ -526,6 +526,23 @@ function runAutotest() {
     G.exitCar(true); car.remove(); G.noSpawn = false;
     return (inner === 0 && path.length > 2 && ringOk && closest > 9) || `route points inside the island ${inner} (path ${path.length}) ring ok ${ringOk} car got within ${closest.toFixed(1)} m of the centre`;
   });
+  T('Pine Ridge: drive through the tunnel; choppers lose you inside; the ridge is solid', () => {
+    const bad = [], T = W.TUNNEL;
+    reset(); G.noSpawn = true; const car = new Car('sedan', -100 + 2.5, T.maxZ + 30, Math.PI); tp(-100 + 2.5, T.maxZ + 34); G.enterCar(car);
+    Input.keys.KeyW = true; let inside = false; for (let i = 0; i < 600 && car.z > T.minZ - 20; i++) { step(STEP); if (W.zoneAt(car.x, car.z) === 'tunnel') inside = true; } Input.keys.KeyW = false;
+    if (!(inside && car.z < T.minZ - 15)) bad.push('through the tunnel: inside ' + inside + ' z ' + car.z.toFixed(0));
+    G.exitCar(true); car.remove();
+    tp(-100, (T.minZ + T.maxZ) / 2); G.playerZone = W.zoneAt(P.x, P.z); Heat.add(3, 5, 'test');
+    const h = Choppers.spawnAI(); h.x = P.x; h.z = P.z; h.spotX = P.x; h.spotZ = P.z; let seen = 0; for (let i = 0; i < 100; i++) if (heliSees(h, P.x, P.z)) seen++;
+    if (seen) bad.push('chopper saw you in the tunnel ' + seen + '/100'); h.remove(); Heat.clear(); clearPolice();
+    // off-road into the ridge, and a chopper flying into it low
+    const c2 = new Car('sedan', -300, -1020, Math.PI); tp(-300, -1016); G.enterCar(c2); Input.keys.KeyW = true; steps(4); Input.keys.KeyW = false;
+    if (c2.z < W.RIDGE[0].maxZ - 1) bad.push('drove into the mountain, z ' + c2.z.toFixed(0)); G.exitCar(true); c2.remove();
+    const tour = new Chopper('tour', -300, -1030, Math.PI, { y: 20 }); tour.rotor = 1; tp(-300, -1030); G.enterHeli(tour); tour.y = 20;
+    Input.keys.KeyW = true; steps(4); Input.keys.KeyW = false; if (tour.z < W.RIDGE[0].maxZ - 1 && tour.y < 50) bad.push('flew into the mountain, z ' + tour.z.toFixed(0) + ' y ' + tour.y.toFixed(0));
+    G.exitHeli(true); tour.remove(); G.noSpawn = false;
+    return !bad.length || bad.join(' | ');
+  });
   T('county: no trees standing on the country roads', () => {
     const bad = [];
     for (const e of W.countyEdges) {

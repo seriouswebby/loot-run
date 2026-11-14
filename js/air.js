@@ -186,6 +186,7 @@ function heliSees(h, tx, tz) {
   for (const c of Smoke.clouds) if (dist(c.x, c.z, tx, tz) < c.r) return false;
   const dH = dist(h.x, h.z, tx, tz), dS = dist(h.spotX, h.spotZ, tx, tz);
   if (zone === 'air') return dH < 110;
+  if (zone === 'tunnel') return false;
   // trees: in the forest the spotlight has to land right on you and still only catches a glimpse now and then;
   // a lone tree in town gives nearly as much cover while you stand under it
   if (zone === 'forest') {
@@ -421,6 +422,15 @@ function flyHeli(h, dt, fw, st, up, down) {
 }
 function heliCollide(h) {
   const r = 3;
+  // the ridge: solid below its crest
+  for (const b of W.RIDGE || []) {
+    if (h.y >= b.h || h.x + r < b.minX || h.x - r > b.maxX || h.z + r < b.minZ || h.z - r > b.maxZ) continue;
+    const dx = Math.min(h.x - b.minX, b.maxX - h.x), dz = Math.min(h.z - b.minZ, b.maxZ - h.z), up = b.h - h.y;
+    if (up < Math.min(dx, dz) && up < 12) { h.y = b.h; if (h.vy < 0) h.vy = 0; continue; } // skim over the crest
+    let nx = 0, nz = 0; if (dx < dz) nx = h.x - b.minX < b.maxX - h.x ? -1 : 1; else nz = h.z - b.minZ < b.maxZ - h.z ? -1 : 1;
+    h.x += nx * (Math.min(dx, dz) + r); h.z += nz * (Math.min(dx, dz) + r);
+    const vn = h.vx * nx + h.vz * nz; if (vn < 0) { h.vx -= nx * vn * 1.5; h.vz -= nz * vn * 1.5; if (-vn > 8) { h.damage((-vn - 8) * 4, null); Sfx.crash(-vn / 30, h.x, h.z); } }
+  }
   for (const b of W.buildings) {
     if (h.y >= b.h - 0.6) continue; // a roof you're level with is floor, not wall
     if (h.x + r < b.minX || h.x - r > b.maxX || h.z + r < b.minZ || h.z - r > b.maxZ) continue;

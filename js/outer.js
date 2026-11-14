@@ -33,6 +33,7 @@ W.inCounty = (x, z) => Math.abs(x) > W.BOUND + 0.5 || z < -W.BOUND - 0.5;
     { kind: 'airport', minX: -W.OUT + 25, maxX: -B - 70, minZ: 40, maxZ: W.SHORE - 25 },
     { kind: 'lake', cx: -280, cz: -830, r: 150 },
     { kind: 'river', minX: 868, maxX: 972, minZ: -W.OUT - 60, maxZ: W.SHORE + 40 },
+    { kind: 'mountain', minX: -640, maxX: 290, minZ: -1205, maxZ: -1050 },
   ];
 })();
 W.inReserve = function (x, z, pad) {
@@ -60,6 +61,7 @@ function buildCounty() {
     && !W.buildings.some((b) => x > b.minX - 4 - (pad || 0) && x < b.maxX + 4 + (pad || 0) && z > b.minZ - 4 - (pad || 0) && z < b.maxZ + 4 + (pad || 0));
   buildAirport(OP);
   buildWater(OP);
+  buildMountain(OP);
   countyFarms(OP, free);
   const trees = countyWoods(free);
   countyTreeMeshes(trees);
@@ -352,4 +354,46 @@ function segSegT(ax, az, bx, bz, cx, cz, dx, dz) {
   if (Math.abs(den) < 1e-9) return null;
   const t = ((cx - ax) * sz - (cz - az) * sx) / den, u = ((cx - ax) * rz - (cz - az) * rx) / den;
   return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? [t, u] : null;
+}
+
+/* ---------------- Pine Ridge and its tunnel ----------------
+   A rocky ridge across the north county. Lakeside Drive goes through it in a lit tunnel: inside, police choppers
+   can't see you. The ridge is solid to cars, people and aircraft below its crest. */
+W.RIDGE = [{ minX: -620, maxX: -108, minZ: -1180, maxZ: -1078, h: 55 }, { minX: -92, maxX: 270, minZ: -1180, maxZ: -1078, h: 55 }];
+W.TUNNEL = { minX: -108, maxX: -92, minZ: -1184, maxZ: -1074 };
+W.inTunnel = (x, z) => { const t = W.TUNNEL; return x > t.minX && x < t.maxX && z > t.minZ && z < t.maxZ; };
+function buildMountain(OP) {
+  const T = W.TUNNEL, cx = -100, mats = [];
+  // peaks: lumpy, flat-shaded rock with grass and a snowy top on the tallest
+  const peak = (x, z, sx, sy, sz, col) => {
+    const g = new THREE.IcosahedronGeometry(1, 2), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < -0.05) p.setY(i, -0.05); else { const k = 1 + (rnd() - 0.5) * 0.16; p.setXYZ(i, p.getX(i) * k, y * (1 + (rnd() - 0.5) * 0.14), p.getZ(i) * k); } }
+    g.computeVertexNormals();
+    const m = new THREE.MeshLambertMaterial({ color: col, flatShading: true }); mats.push(m);
+    const mesh = new THREE.Mesh(g, m); mesh.scale.set(sx, sy, sz); mesh.position.set(x, 0, z); mesh.castShadow = true; mesh.receiveShadow = true; S.add(mesh);
+    return mesh;
+  };
+  const xs = [-580, -500, -420, -330, -240, -160, -45, 40, 130, 220];
+  xs.forEach((x, i) => {
+    const tall = 34 + rnd() * 26 + (i === 4 || i === 7 ? 14 : 0);
+    peak(x + rnd() * 20, -1130 + (rnd() - 0.5) * 20, 55 + rnd() * 30, tall, 48 + rnd() * 10, pick(['#7b7468', '#857d6f', '#6f6a60']));
+    if (tall > 58) peak(x, -1130, 22, tall + 2, 20, '#f1f3f5'); // snow cap
+    peak(x + 30, -1095 + rnd() * 6, 40, tall * 0.45, 30, '#5f7d48'); // grassy foothills
+    peak(x - 20, -1165, 40, tall * 0.5, 28, '#5f7d48');
+  });
+  for (const r of W.RIDGE) W.addCollider(r.minX, r.minZ, r.maxX, r.maxZ, r.h, 'rock');
+  // the tunnel: walls, ceiling, lights, portals
+  const len = T.maxZ - T.minZ, mz = (T.minZ + T.maxZ) / 2;
+  const wall = new THREE.MeshLambertMaterial({ color: 0x8a8781 });
+  const box = (w, h, d, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.receiveShadow = true; S.add(b); return b; };
+  box(1.2, 8, len, T.minX - 0.6, 4, mz, wall); box(1.2, 8, len, T.maxX + 0.6, 4, mz, wall); box(T.maxX - T.minX + 2.4, 1, len, cx, 8.5, mz, wall);
+  const lampM = new THREE.MeshBasicMaterial({ color: 0xffe6a0 });
+  for (let z = T.minZ + 6; z < T.maxZ - 4; z += 10) { box(0.5, 0.15, 2.2, T.minX + 1.2, 7.4, z, lampM); box(0.5, 0.15, 2.2, T.maxX - 1.2, 7.4, z, lampM); }
+  for (const z of [T.minZ, T.maxZ]) {
+    OP.box(cx, 9.6, z, T.maxX - T.minX + 8, 3.2, 2, '#b3aea4'); for (const s of [-1, 1]) OP.box(cx + s * (T.maxX - T.minX + 6) / 2, 4.5, z, 3, 9, 2, '#b3aea4');
+  }
+  addSign(cx, 9.6, T.maxZ + 1.05, 's', 'PINE RIDGE TUNNEL', '#1f6f45', '#ffffff', 11, 1.6);
+  for (let k = 0; k < 2; k++) W.addCollider(k ? T.maxX : T.minX - 1.2, T.minZ, k ? T.maxX + 1.2 : T.minX, T.maxZ, 9, 'wall');
+  W.ridgeMats = mats;
+  W.zoneRects = (W.zoneRects || []).concat([{ zone: 'tunnel', ...T }]);
 }

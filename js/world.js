@@ -91,6 +91,7 @@ W.ZONES = {
   forest: { label: 'FOREST PARK', hint: 'Hidden · slow · 4 exits · trees block choppers', sight: 16, evade: 0.5, car: 0.75 },
   rooftop: { label: 'ROOFTOP', hint: 'Cops on the street can\'t reach or see you · choppers can', sight: 8, evade: 0.8, car: 1 },
   outskirts: { label: 'OUTSKIRTS', hint: 'Open ground', sight: 60, evade: 1.1, car: 0.95 },
+  tunnel: { label: 'PINE RIDGE TUNNEL', hint: 'Covered · choppers can\'t see you · no way out but the ends', sight: 30, evade: 0.6, car: 1.25 },
   airport: { label: 'AIRPORT', hint: 'Wide open · aircraft to steal · runway = drag strip', sight: 85, evade: 1.25, car: 1.45 },
   country: { label: 'COUNTRY ROAD', hint: 'Open road · fast · cops see you coming', sight: 75, evade: 1.15, car: 1.35 },
   beach: { label: 'BEACH', hint: 'Open sand · no cover', sight: 70, evade: 1.2, car: 0.8 },
@@ -241,6 +242,7 @@ W.zoneAt = function (x, z) {
   if (z > W.HWY + W.HWH + 0.5) return 'beach';
   if (Math.abs(x) <= W.HALF + 6 && Math.abs(z) <= W.HALF + 6) return 'street';
   if (W.inAirport && W.inAirport(x, z)) return 'airport';
+  if (W.inTunnel && W.inTunnel(x, z)) return 'tunnel';
   if (W.inCounty && W.inCounty(x, z)) return W.nearCountyRoad(x, z, 6.5) ? 'country' : 'outskirts';
   for (const e of W.edges) if (!e.hwy && segPointDist(x, z, W.nodes[e.a].x, W.nodes[e.a].z, W.nodes[e.b].x, W.nodes[e.b].z) <= 6.5) return 'street';
   return 'outskirts';
@@ -983,6 +985,8 @@ function buildMinimap() {
     g.strokeStyle = '#2c6f93'; g.lineWidth = W.RIVER.w * k; g.lineJoin = 'round'; g.lineCap = 'butt'; g.beginPath();
     W.RIVER.pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z)))); g.stroke(); g.lineCap = 'square';
   }
+  // Pine Ridge
+  if (W.RIDGE) { g.fillStyle = '#6f6a60'; for (const r of W.RIDGE) g.fillRect(X(r.minX - 30), Z(r.minZ - 20), (r.maxX - r.minX + 60) * k, (r.maxZ - r.minZ + 40) * k); g.fillStyle = '#e8e9ea'; g.fillRect(X(-250), Z(-1140), 30 * k, 20 * k); g.fillRect(X(-60), Z(-1140), 40 * k, 20 * k); }
   // the airport: tarmac, runway paint, fence
   if (W.AIRPORT) {
     const A = W.AIRPORT, R = (q, col) => { g.fillStyle = col; g.fillRect(X(q.minX), Z(q.minZ), (q.maxX - q.minX) * k, (q.maxZ - q.minZ) * k); };
