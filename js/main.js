@@ -204,10 +204,24 @@ function drawMap(ctx, size, cx, cz, span, full) {
       ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.restore();
     }
   }
+  // your own waypoint: a pink pin (an arrow on the minimap's edge when it's out of view)
+  const wp = G.waypoint;
+  if (wp) {
+    if (inView(wp.x, wp.z)) {
+      const px = X(wp.x), pz = Z(wp.z), r = full ? 8 : 5.5;
+      ctx.beginPath(); ctx.moveTo(px, pz); ctx.arc(px, pz - r * 1.6, r, Math.PI * 0.75, Math.PI * 2.25); ctx.closePath();
+      ctx.fillStyle = WP_COL; ctx.fill(); ctx.strokeStyle = '#0f1216'; ctx.lineWidth = 1.8; ctx.stroke();
+      ctx.beginPath(); ctx.arc(px, pz - r * 1.6, r * 0.38, 0, TAU); ctx.fillStyle = '#ffffff'; ctx.fill();
+    } else if (!full) {
+      const a = Math.atan2(wp.z - cz, wp.x - cx), r = size / 2 - 9;
+      ctx.save(); ctx.translate(size / 2 + Math.cos(a) * r, size / 2 + Math.sin(a) * r); ctx.rotate(a);
+      ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fillStyle = WP_COL; ctx.fill(); ctx.restore();
+    }
+  }
   // GPS route
   if (GPS.path && GPS.path.length > 1) {
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    for (const [col, wdt] of [['#0f1216', full ? 7 : 6], ['#ffd23f', full ? 4 : 3.2]]) {
+    for (const [col, wdt] of [['#0f1216', full ? 7 : 6], [GPS.toWaypoint ? WP_COL : '#ffd23f', full ? 4 : 3.2]]) {
       ctx.beginPath(); ctx.strokeStyle = col; ctx.lineWidth = wdt;
       GPS.path.forEach(([x, z], i) => (i ? ctx.lineTo(X(x), Z(z)) : ctx.moveTo(X(x), Z(z))));
       ctx.stroke();
@@ -228,10 +242,23 @@ function drawBigMap() {
   const c = $('bigmapCanvas'), ctx = c.getContext('2d');
   drawMap(ctx, c.width, 0, 0, 2 * W.MAPH, true);
 }
+/* waypoints: click the big map to set one, click it again (or right-click) to clear it */
+const WP_COL = '#ff4fd8';
+G.setWaypoint = function (x, z) {
+  G.waypoint = x == null ? null : { x: clamp(x, -W.MAPH, W.MAPH), z: clamp(z, -W.MAPH, W.MAPH) };
+  GPS.t = 0; GPS.update(0);
+};
+function bigMapClick(fx, fy, clear) {
+  // fx, fy: click position as a fraction of the canvas (0..1)
+  const span = 2 * W.MAPH, x = (fx - 0.5) * span, z = (fy - 0.5) * span, wp = G.waypoint;
+  if (clear || (wp && dist(wp.x, wp.z, x, z) < span * 0.02)) { G.setWaypoint(null); Sfx.click(); }
+  else { G.setWaypoint(x, z); Sfx.tick(); }
+  drawBigMap();
+}
 
 /* ---------------- GPS: shortest road route to the objective ---------------- */
 const GPS = {
-  path: null, t: 0, arrow: null,
+  path: null, t: 0, arrow: null, beam: null, toWaypoint: false,
   route(ax, az, bx, bz) {
     if (dist(ax, az, bx, bz) < 35 && !W.segBlocked(ax, az, bx, bz)) return [[ax, az], [bx, bz]];
     const N = W.nodes.length, s = W.nearestNode(ax, az), e = W.nearestNode(bx, bz);
@@ -256,7 +283,11 @@ const GPS = {
   },
   update(dt) {
     this.t -= dt;
-    const obj = G.state === 'play' ? Story.target() : null, B = G.body();
+    const B = G.body();
+    if (G.waypoint && G.state === 'play' && dist(B.x, B.z, G.waypoint.x, G.waypoint.z) < (G.player.inHeli ? 25 : 9)) { G.waypoint = null; G.toast('Waypoint reached.', 'good'); Sfx.tick(); this.t = 0; }
+    // your own waypoint wins over the story objective
+    const obj = G.state === 'title' ? null : G.waypoint || (G.state === 'play' || G.state === 'map' ? Story.target() : null);
+    if (this.toWaypoint !== !!(obj && obj === G.waypoint)) { this.toWaypoint = !this.toWaypoint; this.t = 0; }
     if (!obj) { this.path = null; }
     else if (this.t <= 0) {
       this.t = 0.4;
@@ -267,7 +298,14 @@ const GPS = {
       const g = new THREE.ShapeGeometry(sh); g.rotateX(Math.PI / 2);
       this.arrow = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }));
       this.arrow.renderOrder = 5; G.scene.add(this.arrow);
+      // a tall light beam standing on the waypoint, visible from across the city
+      this.beam = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 70, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xff4fd8, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
+      this.beam.renderOrder = 4; G.scene.add(this.beam);
     }
+    const wp = G.waypoint;
+    this.beam.visible = !!wp && dist(B.x, B.z, wp.x, wp.z) > 12;
+    if (wp) { this.beam.position.set(wp.x, 35, wp.z); this.beam.material.opacity = 0.25 + Math.sin(G.time * 3) * 0.08; }
+    this.arrow.material.color.set(this.toWaypoint ? 0xff4fd8 : 0xffd23f);
     const a = this.arrow, p = this.path;
     if (!p || p.length < 2 || G.player.inHeli || dist(B.x, B.z, obj.x, obj.z) < 7) { a.visible = false; return; }
     let nx = p[1][0], nz = p[1][1];
@@ -873,7 +911,7 @@ function newWorld() {
 function startGame(state) {
   G.S = state || freshState();
   const P = G.player, sp = W.places.spawn;
-  G.respawning = false; G.resetPlayer(sp.x, sp.z); P.hp = 100;
+  G.respawning = false; G.resetPlayer(sp.x, sp.z); P.hp = 100; G.waypoint = null;
   G.equip(G.S.weapons.pistol ? 'pistol' : G.S.weapons.bat ? 'bat' : 'fists');
   Heat.clear(); Story.active = null;
   CAM.fx = P.x; CAM.fz = P.z;
@@ -900,7 +938,12 @@ function bootUI() {
   $('shopClose').addEventListener('click', () => UI.closeShop());
   $('dialog').addEventListener('click', () => UI.advanceDialog());
   $('btnEndPlay').addEventListener('click', () => { $('ending').hidden = true; G.state = 'play'; });
-  $('bigmap').addEventListener('click', () => { $('bigmap').hidden = true; G.state = 'play'; });
+  $('bigmap').addEventListener('click', (e) => {
+    const cv = $('bigmapCanvas');
+    if (e.target === cv) { const r = cv.getBoundingClientRect(); bigMapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, false); return; }
+    $('bigmap').hidden = true; G.state = 'play';
+  });
+  $('bigmapCanvas').addEventListener('contextmenu', (e) => { e.preventDefault(); bigMapClick(0, 0, true); });
   for (const id of ['shop', 'pause', 'title', 'dialog', 'ending', 'bigmap']) {
     $(id).addEventListener('mouseenter', () => { G.uiBlock = true; }); $(id).addEventListener('mouseleave', () => { G.uiBlock = false; });
   }
@@ -975,6 +1018,8 @@ function demoSetup(kind) {
     car.damage(30, car.x + 3, car.z + 1); car.damage(25, car.x - 1, car.z + 4); car.damage(35, car.x + 1, car.z - 4); car.damage(20, car.x - 3, car.z);
     for (let i = 0; i < 30; i++) step(STEP);
   }
+  else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); G.state = 'map'; $('bigmap').hidden = false; drawBigMap(); }
+  else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); G.state = 'map'; $('bigmap').hidden = false; drawBigMap(); }
   else if (kind === 'beach') { P.x = 30; P.z = W.SHORE - 8; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'dialog') { Story.start(); }

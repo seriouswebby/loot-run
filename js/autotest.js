@@ -383,6 +383,16 @@ function runAutotest() {
     G.god = false;
     return (cop.down && Heat.level >= 3) || `cop down ${cop.down} heat ${Heat.level}`;
   });
+  T('map waypoint: click to set, GPS routes there, click again to clear, clears on arrival', () => {
+    reset(); tp(0, 25); const ch = W.places.chop, span = 2 * W.MAPH, fx = ch.x / span + 0.5, fy = ch.z / span + 0.5;
+    bigMapClick(fx, fy, false); const set = !!G.waypoint && dist(G.waypoint.x, G.waypoint.z, ch.x, ch.z) < 1;
+    GPS.t = 0; GPS.update(STEP); const p = GPS.path, end = p && p[p.length - 1];
+    const routed = GPS.toWaypoint && p && p.length > 2 && dist(end[0], end[1], ch.x, ch.z) < 1 && GPS.beam.visible;
+    bigMapClick(fx + 0.002, fy, false); const cleared = !G.waypoint;
+    bigMapClick(fx, fy, false); bigMapClick(0, 0, true); const rightClick = !G.waypoint;
+    bigMapClick(fx, fy, false); tp(ch.x + 2, ch.z); steps(0.2); GPS.update(STEP); const reached = !G.waypoint && !GPS.toWaypoint;
+    return (set && routed && cleared && rightClick && reached) || `set ${set} routed ${routed} (path ${p && p.length}) cleared ${cleared} right-click ${rightClick} reached ${reached}`;
+  });
   T('crimes need a witness: nobody around, nobody calls it in', () => {
     reset(); G.noSpawn = true; const x = -235, z = -W.HWY - 4;
     for (const n of G.npcs.slice()) if (dist(n.x, n.z, x, z) < 70) n.remove();
