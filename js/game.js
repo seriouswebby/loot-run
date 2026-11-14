@@ -52,7 +52,7 @@ const SHOP = [
   { id: 'smoke', cat: 'Supplies', name: 'Smoke Bombs ×2', price: 300, desc: 'Press G on foot. Blocks police line of sight for 12 s.', stack: ['smoke', 2, 6] },
   { id: 'grenade', cat: 'Explosives', name: 'Grenades ×3', price: 300, desc: 'Press T to throw at your aim point. Blasts crack ATMs and wreck cameras.', stack: ['grenade', 3, 9] },
   { id: 'c4', cat: 'Explosives', name: 'C4 Charges ×2', price: 450, desc: 'Press B to plant (it sticks to nearby cars). Press B again to detonate.', stack: ['c4', 2, 6] },
-  { id: 'rpg', cat: 'Explosives', name: 'Rocket Launcher', price: 4500, desc: 'Weapon 6. Rockets home in on police helicopters. Comes with 4 rockets.', weapon: 'rpg', ammo: ['rockets', 4] },
+  { id: 'rpg', cat: 'Explosives', name: 'Rocket Launcher', price: 4500, desc: 'Weapon 6. One rocket destroys any car, motorbike, helicopter or plane; they home in on police helicopters. Comes with 4 rockets.', weapon: 'rpg', ammo: ['rockets', 4] },
   { id: 'ammo_rockets', cat: 'Explosives', name: 'Rockets ×4', price: 600, needs: 'rpg', ammo: ['rockets', 4] },
   { id: 'parachute', cat: 'Supplies', name: 'Parachute', price: 250, desc: 'Press SPACE while falling to open it. Bail out of a flying helicopter (F) or jump off rooftops safely.', stack: ['parachute', 1, 3] },
   { id: 'spikes', cat: 'Supplies', name: 'Spike Strips ×2', price: 400, desc: 'Press G while driving to drop spikes behind you.', stack: ['spikes', 2, 6] },
@@ -368,6 +368,13 @@ G.completeRob = function (r) {
 
 /* ---------------- cars: steal, carjack, sell ---------------- */
 G.carValue = function (car) { return Math.round(car.T.value * (0.35 + 0.65 * clamp(car.hp / car.maxHp, 0, 1)) * (car.popped ? 0.85 : 1)); };
+/* killed outright (a rocket to the bike they were riding): thrown by the blast, and they don't get up again */
+G.killActor = function (a, fx, fz, src) {
+  if (!a || a.dead) return;
+  a.yv = 7; a.y = Math.max(a.y, 0.02);
+  if (!a.down) a.hurt(a.hp + 9999, fx, fz, 14, src);
+  a.killed = true; a.downT = Infinity; if (a.stars) a.stars.visible = false;
+};
 G.ejectDriver = function (car) {
   const fx = Math.sin(car.h), fz = Math.cos(car.h);
   const x = car.x + fz * (car.T.w / 2 + 0.8), z = car.z - fx * (car.T.w / 2 + 0.8);

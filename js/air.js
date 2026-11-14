@@ -533,11 +533,17 @@ const Ordnance = {
         r.vx = damp(r.vx, tx / L * 52, 6, dt); r.vy = damp(r.vy, ty / L * 52, 6, dt); r.vz = damp(r.vz, tz / L * 52, 6, dt);
       }
       const nx = r.x + r.vx * dt, ny = r.y + r.vy * dt, nz = r.z + r.vz * dt;
-      let boom = false, hitHeli = null;
-      for (const h of Choppers.list) if (!h.dead && h !== P.inHeli && Math.hypot(h.x - nx, h.y + 1.8 - ny, h.z - nz) < 3.2) { boom = true; hitHeli = h; }
+      let boom = false, hitHeli = null, hitCar = null;
+      // (a plane is hit on its wings too, not just its middle)
+      for (const h of Choppers.list) if (!h.dead && h !== P.inHeli && Math.hypot(h.x - nx, h.y + 1.8 - ny, h.z - nz) < (h.wing ? 5.5 : 3.2)) { boom = true; hitHeli = h; }
       if (!boom && ny < 3) {
         if (W.segBlocked(r.x, r.z, nx, nz)) boom = true;
-        for (const c of G.cars) if (!c.dead && c !== P.inCar && c !== r.from && dist(c.x, c.z, nx, nz) < Math.max(1.8, c.T.w * 0.6)) boom = true;
+        // anywhere on a vehicle's body: a long truck's tail as much as its middle
+        for (const c of G.cars) {
+          if (c.dead || c === P.inCar || c === r.from) continue;
+          const s = Math.sin(c.h), co = Math.cos(c.h), dx = nx - c.x, dz = nz - c.z;
+          if (Math.abs(dx * s + dz * co) < c.T.len / 2 + 0.3 && Math.abs(dx * co - dz * s) < c.T.w / 2 + 0.3) { boom = true; hitCar = c; }
+        }
         for (const n of G.npcs) if (!n.dead && !n.down && dist(n.x, n.z, nx, nz) < 0.8) boom = true;
       }
       if (ny < 0.2) boom = true;
@@ -546,8 +552,8 @@ const Ordnance = {
       if (Math.random() < 0.8) FX.spawn(nx, ny, nz, rand(-0.3, 0.3), rand(0, 0.5), rand(-0.3, 0.3), pick(['#d9d9d9', '#bfbfbf', '#ffb703']), 0.35, 0.6, { grav: 0, grow: 2 });
       if (boom || r.life <= 0) {
         G.scene.remove(r.m); this.rockets.splice(i, 1);
-        if (hitHeli) { hitHeli.damage(340, P); FX.burst(nx, ny, nz, 30, ['#ff6b1a', '#ffb703', '#fff3b0'], 10, 0.5, 0.8); Sfx.explode(nx, nz); }
-        else explosion(nx, nz, r.r || 7, r.dmg || 95, P);
+        if (hitHeli) { hitHeli.damage(Math.max(340, hitHeli.hp + 1), P); FX.burst(nx, ny, nz, 30, ['#ff6b1a', '#ffb703', '#fff3b0'], 10, 0.5, 0.8); Sfx.explode(nx, nz); } // one rocket brings any aircraft down
+        else explosion(nx, nz, r.r || 7, r.dmg || 95, P, { rocket: true, hit: hitCar });
       }
     }
     for (let i = this.grenades.length - 1; i >= 0; i--) {

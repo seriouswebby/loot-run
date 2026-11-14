@@ -385,6 +385,33 @@ function runAutotest() {
     G.attack(Math.atan2(h.x - P.x, h.z - P.z)); G.heliAim = null; steps(4); G.god = false;
     return ((h.falling > 0 || h.dead) && Heat.level >= 4) || `heli hp ${h.hp} falling ${h.falling} heat ${Heat.level}`;
   });
+  T('rockets: one hit destroys cars, motorbikes, helicopters and planes, and kills whoever rides a bike (not the tank)', () => {
+    const bad = [], z = -W.HWY + 7.5, x0 = -250;
+    const shoot = (tx, tz, target) => { Ordnance.fireRocket(P, Math.atan2(tx - P.x, tz - P.z), target || null); for (let i = 0; i < 120 && Ordnance.rockets.length; i++) step(STEP); steps(0.5); };
+    const setup = () => { reset(); G.noSpawn = true; G.god = true; for (const c of G.cars.slice()) if (!c.persistent && Math.abs(c.z - z) < 40 && Math.abs(c.x - x0) < 80) c.remove(); G.cars = G.cars.filter((c) => !c.dead); tp(x0, z); };
+    // a long truck, hit on its tail rather than its middle
+    setup(); { const c = new Car('truck', x0 + 15, z, 0, { parked: true }); steps(0.2); shoot(c.x, c.z - c.T.len / 2 + 0.8); if (!c.wreck) bad.push('truck hit on the tail: hp ' + Math.round(c.hp) + ' wreck ' + c.wreck); c.remove(); }
+    // bikes with riders: motorbikes and dirt bikes blow up, a pedal bike goes over; every rider is killed and stays down
+    for (const type of ['motorbike', 'dirtbike', 'bicycle']) {
+      setup(); const c = new Car(type, x0 + 12, z, Math.PI / 2, { driver: 'ai' }); const n = W.nearestNode(c.x, c.z); initTraffic(c, n, W.nodes[n].adj[0]);
+      const before = new Set(G.npcs); shoot(c.x, c.z);
+      const rider = G.npcs.find((p) => !before.has(p) && p.killed);
+      if (c.T.pedal ? !c.fallen || c.wreck : !c.wreck) bad.push(type + ': wreck ' + c.wreck + ' fallen ' + c.fallen);
+      if (!rider || !rider.down) bad.push(type + ': rider ' + (rider ? 'not down' : 'not killed') + ' (driver ' + c.driver + ')');
+      else { steps(25); if (!rider.down) bad.push(type + ': the rider got back up'); }
+      c.remove();
+    }
+    // aircraft: an attack helicopter (the toughest) and a fighter jet hit on its wingtip
+    for (const [kind, side] of [['attack', 0], ['fighter', 4.5]]) {
+      setup(); const h = new Chopper(kind, x0 + 14, z, 0); steps(0.2);
+      shoot(h.x, h.z + side, h.wing ? null : h); if (!(h.falling > 0 || h.dead)) bad.push(kind + ': hp ' + Math.round(h.hp) + ' of ' + h.maxHp + ', still flying');
+      h.dead = true; if (h.m) G.scene.remove(h.m.root); Choppers.list = Choppers.list.filter((q) => q !== h);
+    }
+    // the tank's armour shrugs a rocket off
+    setup(); { const c = new Car('tank', x0 + 15, z, 0, { parked: true }); steps(0.2); shoot(c.x, c.z); if (c.wreck) bad.push('the tank went up in one hit'); c.remove(); }
+    G.god = false; G.noSpawn = false;
+    return !bad.length || bad.join(' | ');
+  });
   T('grenade blast cracks an ATM', () => {
     reset(); const atm = W.robs.find((r) => r.kind === 'atm' && r.cd <= 0); tp(atm.x, atm.z); G.god = true;
     G.aimX = atm.x + 0.5; G.aimZ = atm.z; G.S.grenade = 1; const c0 = G.S.cash; G.throwGrenade(); steps(2.5); G.god = false;
@@ -1389,9 +1416,10 @@ function runAutotest() {
     reset(); let i = 0; for (; i < 60 * 60 && Train.v < 12; i++) step(STEP);
     const c = Train.cars[2], fx = Math.sin(c.h), fz = Math.cos(c.h), side = 3.4; tp(c.x + fz * side, c.z - fx * side); P.y = 0;
     G.interact = computeInteract(); const label = G.interact.e && G.interact.e.label;
-    G.jumpQ = true; steps(0.1); const on = !!Train.onTrain(P); steps(1); const stays = !!Train.onTrain(P) && P.y > 3;
+    // (its speed as you grab on: by the end it may be braking for a station)
+    const vGrab = Train.v; G.jumpQ = true; steps(0.1); const on = !!Train.onTrain(P); steps(1); const stays = !!Train.onTrain(P) && P.y > 3;
     if (P.y > 0.5) { P.y = 0; P.yv = 0; tp(c.x + fz * 30, c.z - fx * 30); }
-    return (Train.v >= 12 && /moving train/.test(label || '') && on && stays) || `train speed ${Train.v.toFixed(1)} prompt "${label}" grabbed on ${on} still riding ${stays}`;
+    return (vGrab >= 12 && /moving train/.test(label || '') && on && stays) || `train speed ${vGrab.toFixed(1)} prompt "${label}" grabbed on ${on} still riding ${stays}`;
   });
   T('physics traffic: parked cars near you are physics bodies; ram one and it slides off with its alarm going; K turns it off', () => {
     if (!Phys.ready) return 'SKIP';

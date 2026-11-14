@@ -531,13 +531,14 @@ function carHitsActors(car) {
   }
 }
 
-function explosion(x, z, r, dmg, src) {
+function explosion(x, z, r, dmg, src, o) {
   FX.burst(x, 1.5, z, 40, ['#ff6b1a', '#ffb703', '#e63946', '#fff3b0'], 12, 0.5, 0.9, { grav: 4 });
   // a fireball, then a rolling cloud of dark smoke
   for (let i = 0; i < 26; i++) { const a = rand(0, TAU), s = rand(1, 5); Puffs.add(x + Math.cos(a) * rand(0, 2), rand(0.8, 2.5), z + Math.sin(a) * rand(0, 2), Math.cos(a) * s, rand(1.5, 4), Math.sin(a) * s, rand(1.4, 2.4), 3.2, rand(0.5, 0.8), pick(['#ff8c1a', '#ffc04d', '#ff5a1f']), 0.9, 1); }
   for (let i = 0; i < 30; i++) { const a = rand(0, TAU), s = rand(0.5, 4); Puffs.add(x + Math.cos(a) * rand(0, 3), rand(1, 3.5), z + Math.sin(a) * rand(0, 3), Math.cos(a) * s, rand(1, 3.5), Math.sin(a) * s, rand(1.6, 2.6), 4.5, rand(3, 5), pick(['#2a2a2a', '#3d3d3d', '#555555']), 0.7, 1.1); }
   Sfx.explode(x, z); G.shake(clamp(1.2 - dist(x, z, G.player.x, G.player.z) / 60, 0, 1));
   const P = G.player;
+  if (o && o.rocket) rocketKills(x, z, src, o.hit); // (first: the ordinary blast below would only throw a bike's rider clear)
   const hitA = (a) => {
     const d = dist(a.x, a.z, x, z); if (d > r || a.dead || a.y > 4) return; // blasts on the street don't reach people high above
     const f = 1 - d / r;
@@ -552,6 +553,24 @@ function explosion(x, z, r, dmg, src) {
   Phys.explode(x, z, r);
   panic(x, z, 45);
   if (src === P) { G.crime('explosion', x, z, {}); G.blastLoot(x, z, r); }
+}
+
+/* a rocket (or a tank's shell) destroys the vehicle it hits outright, and anything right beside the blast: cars and
+   motorbikes go up, aircraft come down, and whoever was riding a bike is killed. A pedal bike just goes over (they never
+   burn), and a tank's armour shrugs it off (it takes the blast's damage like anything else) */
+function rocketKills(x, z, src, hit) {
+  const P = G.player;
+  const beside = (c) => { const s = Math.sin(c.h), co = Math.cos(c.h), dx = x - c.x, dz = z - c.z; return Math.hypot(Math.max(0, Math.abs(dx * s + dz * co) - c.T.len / 2), Math.max(0, Math.abs(dx * co - dz * s) - c.T.w / 2)) < 1.5; };
+  for (const c of G.cars.filter((k) => !k.dead && !k.wreck && !k.T.tank && (k === hit || beside(k)))) {
+    c.lastHitBy = src;
+    if (c.T.bike) { // the rider takes the full blast
+      if (c.driver === 'ai') { const a = G.ejectDriver(c); c.driver = null; c.ai = null; c.parked = true; if (a) { a.x = c.x; a.z = c.z; G.killActor(a, x, z, src); } }
+      else if (c.driver === 'player' && P.inCar === c) { G.exitCar(true); G.hurtPlayer(9999, x, z, 14, null); }
+      if (c.T.pedal) { c.knockOver(); continue; }
+    }
+    c.damage(c.hp + 1, x, z, src); if (!c.wreck && !c.dead) c.explode();
+  }
+  for (const h of Choppers.list) if (!h.dead && h.falling <= 0 && h.y < 7 && dist(h.x, h.z, x, z) < (h.wing ? 6 : 4)) h.damage(h.hp + 1, src);
 }
 
 /* ---------------- AI driving ---------------- */
