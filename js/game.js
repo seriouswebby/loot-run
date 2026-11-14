@@ -453,7 +453,8 @@ G.bail = function (car, impact, vx, vz) {
 G.updateTumble = function (dt) {
   const P = G.player, T = P.tumble; if (!T) return;
   T.t += dt;
-  if (P.down || G.respawning || !P.ragdoll || P.ragdoll.frozen) { P.tumble = null; return; }
+  if (P.down || G.respawning || !P.ragdoll) { P.tumble = null; return; }
+  if (P.ragdoll.frozen) { Phys.unragdoll(P); P.tumble = null; return; }
   if ((T.t > 1.4 && P.ragdoll.spd < 1.2) || T.t > 5) {
     Phys.unragdoll(P); P.tumble = null; P.safeT = G.time + 0.5; P.kx = P.kz = 0;
   }

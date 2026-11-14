@@ -478,7 +478,7 @@ const Sfx = {
     const R = SL.rotor;
     if (s.playing && s.heli) {
       const p = this.place(s.heli.x, s.heli.z, 230);
-      if (R) { R.g.gain.setTargetAtTime(0.55 * Math.max(p.g, 0.05), t, 0.15); this.setPan(R.p, p.pan, t); R.f.frequency.setTargetAtTime(1200 + p.g * p.g * 14000, t, 0.2); H.g.gain.setTargetAtTime(0, t, 0.1); }
+      if (R) { R.g.gain.setTargetAtTime(1.0 * Math.max(p.g, 0.05), t, 0.15); this.setPan(R.p, p.pan, t); R.f.frequency.setTargetAtTime(1200 + p.g * p.g * 14000, t, 0.2); H.g.gain.setTargetAtTime(0, t, 0.1); }
       else H.g.gain.setTargetAtTime(0.42 * Math.max(p.g, 0.05), t, 0.15);
       this.setPan(H.p, p.pan, t);
     } else { H.g.gain.setTargetAtTime(0, t, 0.4); if (R) R.g.gain.setTargetAtTime(0, t, 0.4); }

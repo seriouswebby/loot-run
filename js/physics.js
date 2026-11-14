@@ -65,7 +65,8 @@ const Phys = {
   ],
   ragdoll(a, vel, spin) {
     if (!this.ready || a.ragdoll || a.dead) return false;
-    if (this.ragdolls.length >= 8) this.freeze(this.ragdolls[0]);
+    // too many: freeze the oldest — never the player, who has to get back up
+    if (this.ragdolls.length >= 8) { const old = this.ragdolls.find((r) => r !== G.player); if (old) this.freeze(old); }
     const rg = a.rig, group = -(++this.group % 30000 + 1);
     rg.root.updateMatrixWorld(true);
     this.ensureStatics(a.x, a.z, 14);

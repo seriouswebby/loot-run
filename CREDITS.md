@@ -43,7 +43,7 @@ All sound effects are public-domain (CC0 1.0) recordings from [Freesound](https:
 | `engine_car` | [car idle](https://freesound.org/s/269771/) | seth-m | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `engine_bike` | [XSR700 tickover loop.wav](https://freesound.org/s/432304/) | richwise | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `screech` | [Tires Squeaking.aif](https://freesound.org/s/104026/) | RutgerMuller | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
-| `rotor` | [helicopter.wav](https://freesound.org/s/232818/) | lezaarth | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `rotor` | [helicopter1.wav](https://freesound.org/s/181071/) | dwareing | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `amb_city` | [Paris_traffic.wav](https://freesound.org/s/512142/) | lupalenzuela | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `amb_wind` | [wind.ogg](https://freesound.org/s/22331/) | sleepCircle | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `amb_rain` | [Heavy Rain Sound - Inu Etc.mp3](https://freesound.org/s/507902/) | inuetc | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |

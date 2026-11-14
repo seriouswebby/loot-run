@@ -360,6 +360,17 @@ function runAutotest() {
     // the far side of the sedan is at x ≈ 26: the rider should land beyond it
     return (thrownAt >= 0 && limp && top > 1.8 && far > 28 && up) || `thrown at ${thrownAt.toFixed(1)} limp ${limp} peak ${top.toFixed(2)} furthest x ${far.toFixed(1)} up ${up} ragdoll ${!!P.ragdoll} tumble ${JSON.stringify(P.tumble)} down ${P.down}`;
   });
+  T('tumbling rider still gets up when the ragdoll cap is hit', () => {
+    if (!Phys.ready) return 'SKIP';
+    reset(); G.noSpawn = true; const z = -W.HWY + 7.5; const bike = new Car('motorbike', 0, z, Math.PI / 2);
+    tp(0, z + 2); G.enterCar(bike); G.god = true; G.bail(bike, 20, 25, 0); const tumbling = !!P.tumble;
+    const peds = []; for (let i = 0; i < 9; i++) { const p = spawnPed(10 + i, z - 8, W.nearestBlock(10, z), 1, 1); peds.push(p); p.knockOut(); }
+    const stillLimp = !!P.ragdoll && !P.ragdoll.frozen;
+    for (let i = 0; i < 400 && P.tumble; i++) step(STEP);
+    const up = !P.tumble && !P.ragdoll && !P.down;
+    G.god = false; for (const p of peds) p.remove(); bike.remove(); G.noSpawn = false;
+    return (tumbling && stillLimp && up) || `tumbling ${tumbling} player kept simulating ${stillLimp} up ${up}`;
+  });
   T('bike into a wall: thrown, no tunneling, and bikes do not mow down trees', () => {
     reset(); const b = W.blocks.find((k) => k.type === 'city');
     const bike = new Car('motorbike', b.cx, b.cz - 26, 0); tp(b.cx + 1.5, b.cz - 26); G.enterCar(bike);
