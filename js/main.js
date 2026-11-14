@@ -883,6 +883,7 @@ function frameInput() {
     }
   }
   if (Input.hit('KeyN')) { Sfx.setMuted(!Sfx.muted); UI.toast(Sfx.muted ? 'Sound off' : 'Sound on'); }
+  if (Input.hit('KeyK')) { if (!Phys.ready) UI.toast('Physics traffic needs the physics engine (it loads online).'); else UI.toast(PhysCar.toggleWorld() ? 'Physics traffic: on (cars near you are physics bodies)' : 'Physics traffic: off (only your car)'); }
   if (Input.hit('KeyL')) { if (!Phys.ready) UI.toast('Realistic handling needs the physics engine (it loads online).'); else UI.toast(PhysCar.toggle() ? 'Handling: realistic (physics)' : 'Handling: arcade'); }
   if (Input.hit('KeyV')) { Voice.muted = !Voice.muted; if (Voice.muted) { Voice.stopDialog(); Voice.radioQ.length = 0; } UI.toast(Voice.muted ? 'Voices off (V to turn them back on)' : 'Voices on'); try { localStorage.setItem('lootrun.voices', Voice.muted ? 'off' : 'on'); } catch (e) { /* storage blocked */ } }
   if (Input.wheel) {

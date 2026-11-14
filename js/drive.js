@@ -297,16 +297,59 @@ class PVeh {
 }
 
 const PhysCar = {
-  on: true, list: new Set(),
+  on: true, world: true, list: new Set(), mT: 0,
   RIDE: 0.83, R: 0.36, L0: 0.52, G: 20,
+  MAX: 16, RON: 55, ROFF: 80, // up to 16 physics cars, within 55 m of you; past 80 m they go back to the arcade model
+  classes: { parked: true, traffic: false, police: false }, // which kinds of car near you become physics bodies
 
   init() {
-    let pref = null; try { pref = localStorage.getItem('lootrun.handling'); } catch (e) { /* private window */ }
-    this.on = !new URLSearchParams(location.search).has('arcade') && pref !== 'arcade';
+    let pref = null, world = null; try { pref = localStorage.getItem('lootrun.handling'); world = localStorage.getItem('lootrun.physWorld'); } catch (e) { /* private window */ }
+    const q = new URLSearchParams(location.search);
+    this.on = !q.has('arcade') && pref !== 'arcade';
+    this.world = !q.has('arcade') && !q.has('arcadeworld') && world !== 'off';
   },
   usable(car) { return !!(Phys.ready && this.on && car && !car.T.bike && !car.dead && !car.wreck); },
-  /* which cars stay physics bodies: the one you're driving */
-  keep(car) { return !car.dead && this.on && Phys.ready && car.driver === 'player' && G.player.inCar === car; },
+  /* which cars near you become physics bodies (the K key turns the others off, in case they cost too much) */
+  eligible(car) {
+    if (!car || car.dead || car.T.bike || car.wreck) return false;
+    if (car.driver === 'player') return true;
+    if (!this.world) return false;
+    if (!car.driver || car.parked || (car.ai && (car.ai.mode === 'parked' || car.ai.mode === 'dead'))) return this.classes.parked;
+    if (car.police) return this.classes.police;
+    return car.driver === 'ai' && this.classes.traffic;
+  },
+  /* does a car stay a physics body? Yours does; others while they're near and eligible, and (going back to the arcade)
+     only once they sit square on their wheels */
+  keep(car) {
+    if (car.dead || !this.on || !Phys.ready) return false;
+    if (car.driver === 'player' && G.player.inCar === car) return true;
+    const t = G.body(), d = dist(car.x, car.z, t.x, t.z);
+    if (this.eligible(car) && d < this.ROFF) return true;
+    return !this.settled(car) && d < 220;
+  },
+  settled(car) { const v = car.phys; return !v || (v.contacts >= 3 && v.upsideT === 0 && !v.wasAir && Math.abs(car.physY || 0) < 0.3); },
+  overlaps(c) {
+    for (const v of this.list) {
+      const o = v.car; if (dist(o.x, o.z, c.x, c.z) > (o.T.len + c.T.len) / 2 + 0.5) continue;
+      for (const p of o.circles()) for (const q of c.circles()) if (dist(p[0], p[1], q[0], q[1]) < o.r + c.r + 0.2) return true;
+    }
+    return false;
+  },
+  /* every quarter second: the nearest eligible cars become physics bodies */
+  manage(dt) {
+    this.mT -= dt; if (this.mT > 0) return; this.mT = 0.25;
+    if (!this.on || !Phys.ready || !this.world) return;
+    const t = G.body(), cands = [];
+    for (const c of G.cars) if (!c.phys && this.eligible(c) && this.usable(c)) { const d = dist(c.x, c.z, t.x, t.z); if (d < this.RON) cands.push([d, c]); }
+    cands.sort((a, b) => a[0] - b[0]);
+    for (const [, c] of cands) { if (this.list.size >= this.MAX) break; if (!this.overlaps(c)) new PVeh(c); }
+  },
+  toggleWorld() {
+    this.world = !this.world;
+    try { localStorage.setItem('lootrun.physWorld', this.world ? 'on' : 'off'); } catch (e) { /* fine */ }
+    if (!this.world) for (const v of [...this.list]) if (!v.player) v.destroy();
+    return this.world;
+  },
   toggle() {
     this.on = !this.on;
     try { localStorage.setItem('lootrun.handling', this.on ? 'physics' : 'arcade'); } catch (e) { /* fine */ }
@@ -316,13 +359,19 @@ const PhysCar = {
   grip(car) { return { supercar: 1.4, sports: 1.38, muscle: 1.2, police: 1.3, taxi: 1.22, truck: 1.0, van: 1.05, armored: 1.0, suv: 1.15, pickup: 1.12, hatch: 1.25 }[car.type] || 1.25; },
   attach(car) { if (!this.usable(car)) return false; if (!car.phys) new PVeh(car); return true; },
   detach(car) { car = car || this.car; if (car && car.phys) car.phys.destroy(); },
-  preStep(dt) { for (const v of [...this.list]) v.preStep(dt); },
+  preStep(dt) { this.manage(dt); for (const v of [...this.list]) v.preStep(dt); },
   postStep(dt) { for (const v of [...this.list]) v.postStep(dt); },
   pose(car) { if (car.phys) car.phys.pose(); },
   /* a physics car took a knock: damage, a crash, a dent where it was hit */
   impact(v, dv, nx, nz) {
     const c = v.car, ix = c.x + nx * 1.5, iz = c.z + nz * 1.5;
-    c.damage((dv - 7) * 1.8, ix, iz); Sfx.crash(dv / 30, c.x, c.z); if (v.player) G.shake(dv * 0.03);
+    // what hit it? another physics car just over there, if any
+    let other = null, bd = 1e9; for (const o of this.list) { if (o === v) continue; const d = dist(o.car.x, o.car.z, c.x, c.z); if (d < (o.car.T.len + c.T.len) / 2 + 1.2 && d < bd) { bd = d; other = o.car; } }
+    const byPlayer = other && other.driver === 'player';
+    c.damage((dv - 7) * 1.8, ix, iz, byPlayer ? G.player : null);
+    if (c.parked && !c.wreck && c.alarmT <= 0 && dv > 9) c.alarmT = 5;
+    if (!(c.crashT > G.time)) { Sfx.crash(dv / 30, c.x, c.z); c.crashT = G.time + 0.25; if (other) other.crashT = G.time + 0.25; }
+    if (v.player || byPlayer) G.shake(dv * 0.03);
   },
   /* the player's physics car, for the camera, the HUD and the tests */
   get cur() { const c = G.player && G.player.inCar; return (c && c.phys) || null; },

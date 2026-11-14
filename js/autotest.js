@@ -1392,6 +1392,19 @@ function runAutotest() {
     if (P.y > 0.5) { P.y = 0; P.yv = 0; tp(c.x + fz * 30, c.z - fx * 30); }
     return (Train.v >= 12 && /moving train/.test(label || '') && on && stays) || `train speed ${Train.v.toFixed(1)} prompt "${label}" grabbed on ${on} still riding ${stays}`;
   });
+  T('physics traffic: parked cars near you are physics bodies; ram one and it slides off with its alarm going; K turns it off', () => {
+    if (!Phys.ready) return 'SKIP';
+    reset(); G.noSpawn = true; for (const c of G.cars.slice()) if (!c.persistent) c.remove(); G.cars = G.cars.filter((c) => !c.dead);
+    const x = 40, z = W.SHORE - 40, car = physDrive('suv', x, z, 0), parked = new Car('sedan', x, z + 14, 0, { parked: true }); parked.locked = true;
+    steps(0.5); const was = !!parked.phys;
+    car.v = 16; car.vz = 16; Input.keys.KeyW = true; steps(1.2); Input.keys.KeyW = false;
+    const moved = dist(parked.x, parked.z, x, z + 14), alarm = parked.alarmT > 0, hurt = parked.hp < parked.maxHp;
+    const on = PhysCar.toggleWorld(); steps(0.5); const off = !on && !parked.phys; car.x -= 8; car.z -= 8; steps(0.2); PhysCar.toggleWorld(); steps(0.5); // (back off first: a car doesn't turn physical while touching another)
+    const back = !!parked.phys; G.exitCar(true); steps(0.3); const stays = !!car.phys; // your car stays physical when you get out
+    tp(x + 400, z - 300); steps(3); const handed = !parked.phys && !car.phys;
+    car.remove(); parked.remove();
+    return (was && moved > 1 && alarm && hurt && off && back && stays && handed) || `physics ${was} pushed ${moved.toFixed(1)} m alarm ${alarm} dented ${hurt} · K off ${off} on again ${back} · stays after you get out ${stays} · back to arcade when far ${handed}`;
+  });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;
     const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };

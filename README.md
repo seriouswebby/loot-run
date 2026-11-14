@@ -29,6 +29,7 @@ Progress saves in your browser after every story job.
 | M | Map: click to set a waypoint, right-click to teleport, scroll to zoom | | |
 | Esc · N · V | Pause · sound on/off · voices on/off | | |
 | L | | Handling: realistic (physics) or arcade | |
+| K | Physics traffic on/off (cars near you as physics bodies; turn off if frames suffer) | | |
 
 Cars drive on realistic handling when the physics engine has loaded (it comes from the internet): a Box3D body on sprung wheels with tyre grip, so they pitch, roll, ride up kerbs and slide. Press L for the arcade handling instead (it's also what you get offline). Bikes always use the arcade handling.
 

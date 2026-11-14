@@ -414,6 +414,7 @@ function carPairs() {
     const a = cs[i]; if (a.dead) continue;
     for (let j = i + 1; j < cs.length; j++) {
       const b = cs[j]; if (b.dead) continue;
+      if (a.phys && b.phys) continue; // two physics cars: Box3D handles the contact
       if (a.y > 0.9 || b.y > 0.9) continue; // a hopping BMX sails over
       const reach = (a.T.len + b.T.len) / 2 + 0.5;
       if (Math.abs(a.x - b.x) > reach || Math.abs(a.z - b.z) > reach) continue;
