@@ -182,6 +182,14 @@ class Actor {
       rg.armL.rotation.x = rg.armR.rotation.x = v.mantle ? -2.9 + k * 1.8 : -1.0;
       return;
     }
+    if (this.ride) { // sitting in a coaster car or drop-tower seat (arms up when it gets wild), or standing in a gondola
+      const s = this.ride.s || {}, pose = s.pose || 'sit';
+      rg.root.rotation.order = 'YXZ'; rg.root.rotation.x = s.pitch || 0;
+      rg.body.rotation.set(0, 0, 0); rg.body.position.set(0, 0, 0);
+      rg.legL.rotation.x = rg.legR.rotation.x = pose === 'stand' ? 0 : -1.45;
+      rg.armL.rotation.x = rg.armR.rotation.x = pose === 'scream' ? -2.9 : pose === 'sit' ? -0.9 : 0;
+      return;
+    }
     if (this.chute) {
       rg.body.rotation.set(0, 0, 0); rg.legL.rotation.x = 0.15; rg.legR.rotation.x = -0.1; rg.armL.rotation.x = rg.armR.rotation.x = -2.8;
       return;

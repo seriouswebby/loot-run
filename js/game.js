@@ -595,7 +595,7 @@ G.resetPlayer = function (x, z) {
   if (P.ragdoll) Phys.unragdoll(P);
   P.x = x; P.z = z; P.y = 0; P.yv = 0; P.vx = P.vz = 0; P.kx = P.kz = 0;
   P.down = false; P.downT = 0; P.handsUp = 0; P.spin = 0; P.cd = 0; P.atkT = 0; P.aimT = 0;
-  P.chute = false; P.jumping = false; P.vault = null; P.top = null; P.tumble = null; P.carHitT = 0;
+  P.chute = false; P.jumping = false; P.vault = null; P.top = null; P.tumble = null; P.carHitT = 0; P.ride = null;
   P.safeT = G.time + 1;
   if (P.stars) P.stars.visible = false;
   P.rig.root.visible = true; P.resetPose();

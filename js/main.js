@@ -286,6 +286,7 @@ G.teleport = function (x, z) {
     if (P.inHeli || (!W.collideCircle(p, r, 0) && !W.buildings.some((b) => px > b.minX - r && px < b.maxX + r && pz > b.minZ - r && pz < b.maxZ + r))) { sx = px; sz = pz; break; }
   }
   if (P.ragdoll) Phys.unragdoll(P);
+  if (P.ride) { P.ride = null; P.rig.root.rotation.x = 0; }
   P.tumble = null; P.vault = null; P.chute = false; P.jumping = false; P.kx = P.kz = 0;
   if (veh) { veh.x = sx; veh.z = sz; if (P.inCar) { veh.v = 0; veh.vx = veh.vz = 0; } }
   P.x = sx; P.z = sz; P.y = P.inHeli ? P.y : 0; P.yv = 0;
@@ -496,6 +497,7 @@ const AIRCRAFT_LABEL = { police: 'Steal the police helicopter (+2 heat)', attack
 function computeInteract() {
   const P = G.player, out = { e: null, f: null };
   if (G.respawning || P.down || P.tumble || P.handsUp > 0) return out;
+  if (P.ride) { out.f = { label: Funland.leaveLabel(), run: () => Funland.leave() }; return out; }
   if (P.inHeli) { const h = P.inHeli; out.f = { label: G.heliLanded(h) ? 'Get out' : G.S.parachute > 0 ? 'Bail out with your parachute' : h.wing ? 'Land and stop first (S brakes)' : 'Land first (hold Shift)', run: () => G.exitHeli() }; return out; }
   if (P.y > 1.5) {
     for (const h of Choppers.list) if (!h.dead && !h.pilot && h.falling <= 0 && G.heliLanded(h) && Math.abs(h.y - P.y) < 2.5 && dist(h.x, h.z, P.x, P.z) < 5.5) { const hh = h; out.f = { label: AIRCRAFT_LABEL[hh.kind] || 'Fly the helicopter', run: () => G.enterHeli(hh) }; }
@@ -532,6 +534,8 @@ function computeInteract() {
   const pl = W.places;
   if (Story.available() && dist(P.x, P.z, pl.hideout.x, pl.hideout.z) < 3) { const m = Story.next(); out.e = { id: 'vera', label: 'Talk to Vera: "' + m.title + '"', run: () => Story.start() }; return out; }
   for (const s of pl.shops) if (dist(P.x, P.z, s.x, s.z) < 2.4) { out.e = { id: 'shop' + s.id, label: 'Shop at ' + s.name, run: () => UI.openShop(s.name) }; return out; }
+  const ride = Funland.prompt(P);
+  if (ride) { if (ride.f) out.f = ride.f; else out.e = ride.e; return out; }
   const tc = Train.near(P.x, P.z, 2.5);
   if (tc) { out.e = { id: 'train', label: 'Climb onto the train', run: () => Train.climb(tc) }; return out; }
   for (const r of W.robs) {
@@ -643,6 +647,7 @@ function updatePlayer(dt) {
     P.x = car.x; P.z = car.z; P.vx = car.vx; P.vz = car.vz;
     return;
   }
+  if (P.ride) { P.vx = P.vz = 0; G.jumpQ = false; G.attackQ = null; return; } // on a Funland ride: the ride moves you
   if (P.down || P.tumble || P.handsUp > 0 || G.respawning) { P.vx = P.vz = 0; P.vault = null; if (P.handsUp > 0 && !G.respawning) P.handsUp -= dt; return; }
   if (P.vault) { stepVault(P, dt); return; }
   const f = G.camFwd || { x: -Math.SQRT1_2, z: -Math.SQRT1_2 }, r = { x: -f.z, z: f.x };
@@ -745,7 +750,7 @@ function stepVault(P, dt) {
 
 function separateActors() {
   const P = G.player, all = [];
-  if (!P.inCar && !P.inHeli && !P.down) all.push(P);
+  if (!P.inCar && !P.inHeli && !P.down && !P.ride) all.push(P);
   for (const n of G.npcs) if (!n.dead && !n.down) all.push(n);
   for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
     const a = all[i], b = all[j], dx = b.x - a.x, dz = b.z - a.z, rr = a.r + b.r;
@@ -759,7 +764,7 @@ function updateZone(dt) {
   zoneT -= dt; if (zoneT > 0) return; zoneT = 0.2;
   const t = G.body(), prev = G.playerZone, h = G.player.inHeli;
   const py = G.player.y, standing = py > 3 && py - W.floorAt(t.x, t.z, py) < 1;
-  G.playerZone = h && h.y - roofAt(h.x, h.z, 1.5) > 4 ? 'air' : !G.player.inCar && !h && py > 3 ? (standing ? (Train.onTrain(G.player) ? 'train' : 'rooftop') : 'air') : W.zoneAt(t.x, t.z);
+  G.playerZone = G.player.ride ? 'funland' : h && h.y - roofAt(h.x, h.z, 1.5) > 4 ? 'air' : !G.player.inCar && !h && py > 3 ? (standing ? (Train.onTrain(G.player) ? 'train' : 'rooftop') : 'air') : W.zoneAt(t.x, t.z);
   G.curAlley = G.playerZone === 'alley' ? W.alleys.find((a) => t.x >= a.minX && t.x <= a.maxX && t.z >= a.minZ && t.z <= a.maxZ) : null;
   if (prev !== G.playerZone) onZoneChange(prev, G.playerZone);
 }
@@ -786,7 +791,7 @@ function step(dt) {
   processHold(dt);
   for (const n of G.npcs) { if (n.dead) continue; if (n.kind === 'cop') copAI(n, dt); else pedAI(n, dt); }
   Heat.update(dt);
-  if (!P.inCar && !P.inHeli) P.physics(dt);
+  if (!P.inCar && !P.inHeli && !P.ride) P.physics(dt);
   for (const n of G.npcs) if (!n.dead) n.physics(dt);
   separateActors();
   for (const c of G.cars) {
@@ -1125,6 +1130,8 @@ function demoSetup(kind) {
   else if (kind === 'funland') { G.camMode = 'chase'; P.x = 735; P.z = 66; P.facing = CAM.yaw = 0; CAM.pitch = 0.05; for (let i = 0; i < 400; i++) step(STEP); P.x = 735; P.z = 66; for (let i = 0; i < 4; i++) step(STEP); }
   else if (kind === 'funland2') { G.camMode = 'chase'; P.x = 735; P.z = 200; P.facing = CAM.yaw = -2.2; CAM.pitch = 0.1; for (let i = 0; i < 1500; i++) step(STEP); P.x = 735; P.z = 200; for (let i = 0; i < 4; i++) step(STEP); }
   else if (kind === 'viper') { G.camMode = 'chase'; P.x = 676; P.z = 238; P.facing = CAM.yaw = -2.5; CAM.pitch = -0.12; const c = W.FUN.rides.coaster; for (let i = 0; i < 9000 && !(c.state === 'run' && c.trip > (c.sTop - c.sStop + c.V.len) % c.V.len + 8); i++) step(STEP); P.x = 676; P.z = 238; step(STEP); }
+  else if (kind === 'ridecoaster') { G.camMode = 'chase'; G.noSpawn = true; const c = W.FUN.rides.coaster; c.state = 'load'; c.dwell = 3; P.x = 718.5; P.z = 248; Funland.board('viper'); for (let i = 0; i < 9000 && !(c.state === 'run' && c.trip > (c.sTop - c.sStop + c.V.len) % c.V.len + 6); i++) step(STEP); CAM.yaw = P.facing; CAM.pitch = 0.25; for (let i = 0; i < 3; i++) step(STEP); }
+  else if (kind === 'ridewheel') { G.camMode = 'chase'; G.noSpawn = true; P.x = 802; P.z = 140; Funland.board('wheel'); for (let i = 0; i < 9000 && P.y < 30; i++) step(STEP); CAM.yaw = -Math.PI / 2 + 0.4; CAM.pitch = 0.3; for (let i = 0; i < 3; i++) step(STEP); }
   else if (kind === 'funlandiso') { P.x = 735; P.z = 200; CAM.zoomIso = 260; CAM.curIso = 260; for (let i = 0; i < 300; i++) step(STEP); P.x = 735; P.z = 200; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'airportiso') { P.x = -760; P.z = 210; CAM.zoomIso = 230; CAM.curIso = 230; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'planes') { G.camMode = 'chase'; P.x = -680; P.z = 150; P.facing = CAM.yaw = Math.PI * 0.85; CAM.pitch = 0.22; for (let i = 0; i < 30; i++) step(STEP); }

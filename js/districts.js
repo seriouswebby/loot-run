@@ -149,7 +149,9 @@ function buildFunland(trees) {
   wb.box(0, 0, 0, 3.6, 1.8, 1.8, '#3a0ca3');
   const wheel = wb.build(S); wheel.position.set(WX, WY, WZ);
   const gb = new PropBatch();
-  gb.box(0, 0, 0, 2, 1.1, 2.2, '#ffffff'); gb.box(0, 0.9, 0, 2.1, 0.7, 2.3, '#bde0fe'); gb.box(0, 1.35, 0, 2.3, 0.2, 2.5, '#ffffff'); gb.box(0, 1.85, 0, 0.12, 0.9, 0.12, '#adb5bd');
+  // an open-sided gondola: a tub, four corner posts and a roof, so you can see who's riding
+  gb.box(0, -0.15, 0, 2, 0.8, 2.2, '#ffffff'); for (const sx of [-1, 1]) for (const sz of [-1, 1]) gb.box(sx * 0.94, 0.75, sz * 1.04, 0.1, 1.0, 0.1, '#ffffff');
+  gb.box(0, 1.35, 0, 2.3, 0.2, 2.5, '#ffffff'); gb.box(0, 1.85, 0, 0.12, 0.9, 0.12, '#adb5bd');
   const gm = gb.build(S); S.remove(gm);
   const gond = new THREE.InstancedMesh(gm.geometry, gm.material, 16); gond.castShadow = true; gond.frustumCulled = false; S.add(gond);
   const gcols = ['#ff5d8f', '#ffd60a', '#3a86ff', '#06d6a0'];
@@ -272,6 +274,64 @@ const Funland = {
     else if (t > 27.4 && t <= 30) { const y0 = top - 0.5 * 9.81 * 2.4 ** 2, k = (t - 27.4) / 2.6; y = 1.4 + (y0 - 1.4) * (1 - k) * (1 - k); }
     D.vy = (y - D.y) / Math.max(dt, 1e-4); D.y = y; D.mesh.position.y = y; D.loading = t <= 6 || t > 30;
     this.coaster(dt);
+    this.carry();
+  },
+  /* ---- riding: walk up to a ride's boarding spot, F to get on, F to get off (or jump off mid-ride) ---- */
+  RIDES: {
+    viper: { name: 'the Viper', x: 718.5, z: 248, r: 3.4, ex: 719.5, ez: 251 },
+    wheel: { name: 'the Sky Wheel', x: 802, z: 140, r: 4, ex: 800.5, ez: 140 },
+    drop: { name: 'the Big Drop', x: 808.5, z: 290, r: 3.5, ex: 807.5, ez: 290 },
+  },
+  ready(kind) {
+    const R = W.FUN.rides;
+    if (kind === 'viper') return R.coaster.state === 'load' && R.coaster.dwell > 0.8;
+    if (kind === 'drop') { const t = G.time % R.drop.cycle; return t < 5.2 || t > 30.5; }
+    return true;
+  },
+  prompt(P) {
+    if (!W.FUN.rides || !W.inFunland(P.x, P.z) || P.y > 0.5) return null;
+    for (const k in this.RIDES) {
+      const r = this.RIDES[k]; if (dist(P.x, P.z, r.x, r.z) > r.r) continue;
+      if (!this.ready(k)) return { e: { id: 'ride', disabled: k === 'viper' ? 'The Viper is out on the track. Wait for it to pull in.' : 'Wait for the seats to come back down.' } };
+      return { f: { label: 'Ride ' + r.name, run: () => this.board(k) } };
+    }
+    return null;
+  },
+  board(kind) {
+    const P = G.player, R = W.FUN.rides; if (P.inCar || P.inHeli || P.ride || !this.ready(kind)) return false;
+    let seat = 0;
+    if (kind === 'wheel') { let lo = 1e9; for (let i = 0; i < R.wheel.n; i++) { const y = this.gondola(i).y; if (y < lo) { lo = y; seat = i; } } }
+    if (kind === 'drop') { let best = -2; for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU, d = (Math.sin(a) * (P.x - R.drop.x) + Math.cos(a) * (P.z - R.drop.z)); if (d > best) { best = d; seat = i; } } }
+    if (kind === 'viper') R.coaster.dwell = Math.max(R.coaster.dwell, 2);
+    P.ride = { kind, seat }; P.vx = P.vz = P.kx = P.kz = 0; P.yv = 0; P.jumping = false; P.chute = false; P.vault = null; P.top = null; P.tumble = null;
+    this.carry(); Sfx.whoosh(P.x, P.z);
+    G.toast('Riding ' + this.RIDES[kind].name + '. F to get off (or jump off mid-ride).', 'good');
+    return true;
+  },
+  /* where the rider sits right now, which way they face, how fast they're moving, and whether the ride is at rest */
+  seat() {
+    const P = G.player, r = P.ride, R = W.FUN.rides;
+    if (r.kind === 'viper') {
+      const c = R.coaster, p = c.pos, sp = Math.hypot(p.vx, p.vy, p.vz) || 1;
+      return { x: p.x, y: Math.max(0, p.y - 0.05), z: p.z, facing: p.yaw, pitch: -Math.asin(clamp(p.vy / sp, -1, 1)) * (c.v > 0.1 ? 1 : 0), vx: p.vx, vy: p.vy, vz: p.vz, rest: c.state === 'load', pose: c.v > 9 ? 'scream' : 'sit' };
+    }
+    if (r.kind === 'wheel') { const g = this.gondola(r.seat); return { x: g.x, y: g.y - 0.55, z: g.z, facing: -Math.PI / 2, pitch: 0, vx: 0, vy: 0, vz: 0, rest: g.y < 4, pose: 'stand' }; }
+    const D = R.drop, a = (r.seat / 8) * TAU;
+    return { x: D.x + Math.sin(a) * 3, y: Math.max(0, D.y - 1.65), z: D.z + Math.cos(a) * 3, facing: a, pitch: 0, vx: 0, vy: D.vy, vz: 0, rest: D.loading, pose: D.vy < -4 ? 'scream' : 'sit' };
+  },
+  carry() {
+    const P = G.player; if (!P.ride) return;
+    if (P.down || G.respawning) { this.leave(true); return; }
+    const s = this.seat(); P.x = s.x; P.z = s.z; P.y = s.y; P.facing = s.facing; P.vx = P.vz = P.kx = P.kz = 0; P.yv = 0; P.ride.s = s;
+  },
+  leaveLabel() { const P = G.player, s = this.seat(); return s.rest ? 'Get off ' + this.RIDES[P.ride.kind].name : 'Jump off ' + this.RIDES[P.ride.kind].name + (s.y > 8 ? (G.S.parachute > 0 ? ' (then SPACE: parachute)' : ' (long way down!)') : ''); },
+  leave(knocked) {
+    const P = G.player, r = P.ride; if (!r) return;
+    const s = this.seat(), e = this.RIDES[r.kind]; P.ride = null; P.rig.root.rotation.x = 0;
+    if (s.rest) { P.x = e.ex; P.z = e.ez; P.y = 0; P.yv = 0; P.top = null; P.jumping = false; W.collideCircle(P, P.r); return; }
+    // off mid-ride: you carry the ride's speed and fall (the parachute works if you have one)
+    P.x = s.x; P.z = s.z; P.y = s.y; P.kx = s.vx; P.kz = s.vz; P.yv = s.vy + (knocked ? 0 : 2.5); P.top = P.y; P.jumping = !knocked;
+    if (!knocked) { Sfx.jump(P.x, P.z); if (P.y > 8) G.toast(G.S.parachute > 0 ? 'You jumped! Press SPACE to open your parachute.' : "You jumped — and you've no parachute!", 'warn'); }
   },
   gondola(i) { const w = W.FUN.rides.wheel, a = w.ang + (i / w.n) * TAU; return { x: w.x, y: w.y - w.r * Math.cos(a) - 2.1, z: w.z - w.r * Math.sin(a) }; },
   coaster(dt) {

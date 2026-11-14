@@ -1106,6 +1106,40 @@ function runAutotest() {
     const ok = turned && lowRail > 0.5 && back && t > 25 && maxY > 24 && maxV > 15 && lo < 2 && hi > 40 && fall < -18 && pushed;
     return ok || `wheel turned ${turned} lowest rail ${lowRail.toFixed(2)} coaster back ${back} after ${t.toFixed(0)}s top ${maxY.toFixed(1)} fastest ${maxV.toFixed(1)} drop ${lo.toFixed(1)}..${hi.toFixed(1)} fall ${fall.toFixed(1)} chopper pushed out ${pushed} (x ${h.x.toFixed(1)})`;
   });
+  T('ride the Viper: board at the station, ride a full lap, step off on the platform unhurt', () => {
+    reset(); G.noSpawn = true; const c = W.FUN.rides.coaster, V = c.V;
+    c.state = 'run'; c.trip = V.len - 40; c.v = 6; tp(718.5, 248); G.interact = computeInteract(); const wait = G.interact.e && G.interact.e.disabled;
+    for (let i = 0; i < 60 * 30 && c.state !== 'load'; i++) step(STEP);
+    G.interact = computeInteract(); const label = G.interact.f && G.interact.f.label; if (G.interact.f) G.interact.f.run();
+    const on = !!P.ride; let top = 0, left = false, lap = false, t = 0, zone = '';
+    for (; t < 170 && !lap; t += STEP) { G.interact = computeInteract(); step(STEP); top = Math.max(top, P.y); if (c.state === 'run') left = true; else if (left) lap = true; if (P.y > 20) zone = G.playerZone; }
+    const still = !!P.ride; G.interact = computeInteract(); const offLabel = G.interact.f && G.interact.f.label; if (G.interact.f) G.interact.f.run(); steps(0.5);
+    const ok = !!wait && label === 'Ride the Viper' && on && top > 24 && lap && still && zone === 'funland' && /^Get off/.test(offLabel) && !P.ride && P.y === 0 && P.hp === 100 && dist(P.x, P.z, 719.5, 251) < 2 && P.rig.root.rotation.x === 0;
+    return ok || `wait prompt ${wait} label ${label} on ${on} top ${top.toFixed(1)} lap ${lap} after ${t.toFixed(0)}s still on ${still} zone ${zone} off "${offLabel}" ride ${!!P.ride} y ${P.y} hp ${P.hp} at ${P.x.toFixed(1)},${P.z.toFixed(1)}`;
+  });
+  T('Sky Wheel: ride to the top, jump out, parachute down safely; respawning mid-ride leaves the ride behind', () => {
+    reset(); G.noSpawn = true; G.S.armor = 0; P.hp = 100; G.S.parachute = 1; tp(802, 140); G.interact = computeInteract();
+    const label = G.interact.f && G.interact.f.label; if (G.interact.f) G.interact.f.run(); const on = !!P.ride;
+    let t = 0; for (; t < 90 && P.y < 34; t += STEP) { G.interact = computeInteract(); step(STEP); }
+    const high = P.y; G.interact = computeInteract(); const jl = G.interact.f && G.interact.f.label; if (G.interact.f) G.interact.f.run();
+    steps(0.5); G.jumpQ = true; steps(0.1); const open = !!P.chute;
+    for (let i = 0; i < 60 * 40 && (P.chute || P.y > 0.01); i++) step(STEP);
+    steps(0.3); const safe = P.y === 0 && P.hp === 100 && !P.chute && !P.ride;
+    // knocked out mid-ride: the ride lets you go, you respawn on the ground, upright
+    tp(802, 140); G.interact = computeInteract(); if (G.interact.f) G.interact.f.run(); steps(12); const up = P.y;
+    G.hurtPlayer(500, P.x - 1, P.z, 0, null); for (let i = 0; i < 900 && (G.respawning || P.down); i++) step(STEP); steps(0.5);
+    const clean = !P.ride && P.y === 0 && !P.down && P.rig.root.rotation.x === 0 && G.playerZone !== 'funland';
+    return (label === 'Ride the Sky Wheel' && on && high > 34 && /^Jump off/.test(jl) && open && safe && up > 3 && clean) || `label ${label} on ${on} high ${high.toFixed(1)} after ${t.toFixed(0)}s jump "${jl}" chute ${open} safe ${safe} (y ${P.y} hp ${P.hp}) rode up ${up.toFixed(1)} clean ${clean} zone ${G.playerZone}`;
+  });
+  T('Big Drop: board at the bottom, get hauled up, scream down, get off at the bottom', () => {
+    reset(); G.noSpawn = true; const D = W.FUN.rides.drop;
+    tp(808.5, 290); let i = 0; for (; i < 60 * 40 && !Funland.ready('drop'); i++) step(STEP);
+    for (; i < 60 * 40 && !(G.time % D.cycle < 1.5); i++) step(STEP);
+    G.interact = computeInteract(); const label = G.interact.f && G.interact.f.label; if (G.interact.f) G.interact.f.run();
+    let top = 0, fell = 0; for (let k = 0; k < 60 * 32; k++) { step(STEP); top = Math.max(top, P.y); if (P.ride && P.ride.s.pose === 'scream') fell++; }
+    G.interact = computeInteract(); const off = G.interact.f && G.interact.f.label; if (G.interact.f) G.interact.f.run(); steps(0.3);
+    return (label === 'Ride the Big Drop' && top > 40 && fell > 30 && /^Get off/.test(off) && !P.ride && P.y === 0 && P.hp === 100) || `label ${label} top ${top.toFixed(1)} screaming frames ${fell} off "${off}" ride ${!!P.ride} y ${P.y} hp ${P.hp}`;
+  });
   T('Funland visitors stroll the paths, scatter when scared, then go back to strolling', () => {
     reset(); for (const n of G.npcs) if (n.kind === 'ped') n.remove(); G.npcs = G.npcs.filter((n) => !n.dead);
     const F = W.FUN; tp(F.gate, 191); for (let i = 0; i < 40; i++) Funland.populate(P);
