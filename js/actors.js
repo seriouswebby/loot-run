@@ -142,7 +142,7 @@ class Actor {
     const kd = Math.exp(-(this.y > 0 && !this.jumping ? 0.8 : 7) * dt); this.kx *= kd; this.kz *= kd;
     const roofs = this.kind === 'player';
     const floor = roofs && this.y > 0.5 ? W.floorAt(this.x, this.z, this.y) : 0;
-    if (this.y > floor + 0.001 || this.yv > 0) {
+    if (this.y > floor + 0.001 || this.yv !== 0) { // airborne, or the ground rose to meet us mid-fall: either way we land properly
       if (this.top == null || this.yv > 0) this.top = Math.max(this.top || 0, this.y);
       this.yv -= 22 * dt; if (this.chute) this.yv = Math.max(this.yv, -2.6);
       this.y += this.yv * dt; if (!this.jumping && !this.chute) this.spin += dt * 9;

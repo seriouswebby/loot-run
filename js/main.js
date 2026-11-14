@@ -1158,6 +1158,11 @@ function demoSetup(kind) {
     const car = new Car('supercar', x, z, Math.atan2(r.fx, r.fz)); P.x = x; P.z = z; G.enterCar(car); car.v = 40; car.vx = r.fx * 40; car.vz = r.fz * 40; Input.keys.KeyW = true;
     for (let i = 0; i < 400 && !(car.y > 6 || (car.airT > 0.4 && car.y > 3)); i++) step(STEP); Input.keys.KeyW = false; CAM.carYaw = car.h + 0.7; CAM.carPitch = 0.2; CAM.wasInCar = true;
   }
+  else if (kind === 'highlands' || kind === 'badlands' || kind === 'hills') {
+    const at = { highlands: [-820, -700, -Math.PI * 0.75], badlands: [760, -800, Math.PI * 0.6], hills: [-60, -620, Math.PI] }[kind];
+    G.camMode = 'chase'; P.x = at[0]; P.z = at[1]; P.facing = CAM.yaw = at[2]; CAM.pitch = 0.18; for (let i = 0; i < 30; i++) step(STEP);
+  }
+  else if (kind === 'hillsiso') { P.x = -700; P.z = -700; CAM.zoomIso = 260; CAM.curIso = 260; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }

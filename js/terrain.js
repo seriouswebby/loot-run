@@ -6,7 +6,7 @@
    Everything that exists on flat ground — the city, roads, rail, water, the airport, fields, buildings — sits in
    zones where the ground is exactly 0. Stunt ramps add their own height on top. */
 
-W.HILLS = false; // switched on once everything that draws knows about the ground
+W.HILLS = true;
 W.TERRAIN = null;
 W.RAMPS = [];
 
@@ -33,7 +33,7 @@ function rawHeight(x, z) {
   if (b.woods > 0) h += b.woods * 13 * tFbm(x / 120, z / 120, 23, 4);
   if (b.high > 0) { const n = tFbm(x / 230, z / 230, 37, 5); h += b.high * (8 + 70 * Math.pow(n, 2.2)); }
   if (b.bad > 0) { // mesas: flat tops with steep sides, low dunes between
-    const n = tFbm(x / 190, z / 190, 53, 3), plateau = sstep(0.56, 0.6, n) * 16 + sstep(0.66, 0.69, n) * 9;
+    const n = tFbm(x / 190, z / 190, 53, 3), plateau = sstep(0.52, 0.62, n) * 16 + sstep(0.65, 0.72, n) * 9;
     h += b.bad * (plateau + 1.6 * tFbm(x / 40, z / 40, 61, 2));
   }
   return h;
@@ -79,6 +79,13 @@ function buildTerrain() {
     const x = x0 + i * C, z = z0 + j * C;
     const m = flatMask(x, z, near.get(key(Math.floor((x - x0) / P), Math.floor((z - z0) / P))) || []);
     H[j * nx + i] = m > 0 ? rawHeight(x, z) * m : 0;
+  }
+  // no slope steeper than 0.6 m per metre: sweep the grid both ways, capping each point at its neighbours plus that
+  // rise (flat zones stay at 0, peaks and mesa sides become climbable, and flat-zone edges ease in)
+  const S = 0.6 * C;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const k = j * nx + i; let h = H[k]; if (i) h = Math.min(h, H[k - 1] + S); if (j) h = Math.min(h, H[k - nx] + S); H[k] = h; }
+    for (let j = nz - 1; j >= 0; j--) for (let i = nx - 1; i >= 0; i--) { const k = j * nx + i; let h = H[k]; if (i < nx - 1) h = Math.min(h, H[k + 1] + S); if (j < nz - 1) h = Math.min(h, H[k + nx] + S); H[k] = h; }
   }
   // aircraft follow a smooth envelope over the hills instead of every bump
   const E = 4, ex = Math.ceil(nx / E), ez = Math.ceil(nz / E), env = new Float32Array(ex * ez);
@@ -169,3 +176,80 @@ function buildRamps() {
 }
 /* which ramp (if any) is under a point */
 W.rampUnder = function (x, z) { for (const r of W.RAMPS) { const dx = x - r.x, dz = z - r.z, along = dx * r.fx + dz * r.fz, side = dx * r.fz - dz * r.fx; if (Math.abs(along) <= r.len / 2 + 0.5 && Math.abs(side) <= r.w / 2 + 0.5) return r; } return null; };
+
+/* ---------------- the terrain mesh: 256 m tiles coloured by biome and height ---------------- */
+function terrainColor(x, z, h, slope, out) {
+  const b = W.biomeAt(x, z), n = tFbm(x / 30, z / 30, 91, 2);
+  // farmland and woods: greens; highlands: grass, then rock, then snow; badlands: sand, red rock sides, pale tops
+  let r = 0.42 + 0.08 * n, g = 0.66 + 0.1 * n, bl = 0.27;
+  if (b.woods > 0) { r -= 0.1 * b.woods; g -= 0.12 * b.woods; bl -= 0.05 * b.woods; }
+  if (b.high > 0) {
+    const rock = sstep(18, 34, h) * b.high, snow = sstep(46, 58, h) * b.high;
+    r = r + (0.5 - r) * rock; g = g + (0.48 - g) * rock; bl = bl + (0.44 - bl) * rock;
+    r = r + (0.95 - r) * snow; g = g + (0.96 - g) * snow; bl = bl + (0.98 - bl) * snow;
+  }
+  if (b.bad > 0) {
+    const side = sstep(0.25, 0.6, slope), top = sstep(12, 15, h) * (1 - side);
+    let br = 0.86 + 0.06 * n, bg = 0.6 + 0.05 * n, bb = 0.36; // sand
+    br = br + (0.68 - br) * side; bg = bg + (0.34 - bg) * side; bb = bb + (0.24 - bb) * side; // red rock
+    br = br + (0.84 - br) * top; bg = bg + (0.66 - bg) * top; bb = bb + (0.46 - bb) * top;
+    r = r + (br - r) * b.bad; g = g + (bg - g) * b.bad; bl = bl + (bb - bl) * b.bad;
+  }
+  out[0] = r; out[1] = g; out[2] = bl;
+}
+function buildTerrainMesh(scene) {
+  const T = W.TERRAIN; if (!T || !W.HILLS) return null;
+  // a neutral speckle texture; the colour comes from the vertices
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g2 = cv.getContext('2d'), rr = mulberry32(5);
+  g2.fillStyle = '#d0d0d0'; g2.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 700; i++) { const v = 170 + Math.floor(rr() * 85); g2.fillStyle = `rgb(${v},${v},${v})`; g2.fillRect(Math.floor(rr() * 64), Math.floor(rr() * 64), 2, 2); }
+  const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = 4;
+  const mat = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true });
+  // snow dusts the hills too
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.snowCover = W.snowUniform = { value: 0 };
+    sh.fragmentShader = 'uniform float snowCover;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.95, 0.97), snowCover * 0.9);');
+  };
+  W.terrainMat = mat;
+  const TC = 32, col = [0, 0, 0], H = T.H, nx = T.nx, meshes = [];
+  for (let tj = 0; tj < T.nz - 1; tj += TC) for (let ti = 0; ti < T.nx - 1; ti += TC) {
+    const cx = Math.min(TC, T.nx - 1 - ti), cz = Math.min(TC, T.nz - 1 - tj), vx = cx + 1, vz = cz + 1;
+    const pos = new Float32Array(vx * vz * 3), colr = new Float32Array(vx * vz * 3), uv = new Float32Array(vx * vz * 2), idx = [];
+    let hmin = 1e9, hmax = -1e9;
+    for (let j = 0; j < vz; j++) for (let i = 0; i < vx; i++) {
+      const gi = ti + i, gj = tj + j, x = T.x0 + gi * T.C, z = T.z0 + gj * T.C, h = H[gj * nx + gi], k = j * vx + i;
+      const sx = (H[gj * nx + Math.min(nx - 1, gi + 1)] - H[gj * nx + Math.max(0, gi - 1)]) / (2 * T.C), sz = (H[Math.min(T.nz - 1, gj + 1) * nx + gi] - H[Math.max(0, gj - 1) * nx + gi]) / (2 * T.C);
+      pos[k * 3] = x; pos[k * 3 + 1] = h; pos[k * 3 + 2] = z; uv[k * 2] = x / 12; uv[k * 2 + 1] = z / 12;
+      terrainColor(x, z, h, Math.hypot(sx, sz), col); colr[k * 3] = col[0]; colr[k * 3 + 1] = col[1]; colr[k * 3 + 2] = col[2];
+      hmin = Math.min(hmin, h); hmax = Math.max(hmax, h);
+    }
+    for (let j = 0; j < cz; j++) for (let i = 0; i < cx; i++) { const a = j * vx + i, b = a + 1, c = a + vx, d = c + 1; idx.push(a, c, b, b, c, d); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(colr, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setIndex(idx); geo.computeVertexNormals(); geo.computeBoundingSphere();
+    const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; scene.add(m); meshes.push(m);
+  }
+  return meshes;
+}
+/* county trees were planted before the hills: lift each one onto the ground and fix the tiles' culling bounds */
+function plantTreesOnHills() {
+  if (!W.HILLS) return;
+  const m4 = new THREE.Matrix4(), tiles = new Set();
+  for (const t of W.trees) {
+    if (!t.tm) continue;
+    const y = W.groundAt(t.x, t.z); if (!y) continue;
+    for (const [mesh, i] of [[t.tm, t.ti], [t.cm, t.ci]]) { mesh.getMatrixAt(i, m4); m4.elements[13] += y; mesh.setMatrixAt(i, m4); mesh.instanceMatrix.needsUpdate = true; tiles.add(mesh); }
+  }
+  for (const mesh of tiles) {
+    const list = mesh.userData.trees || []; let lo = 1e9, hi = -1e9; for (const t of list) { const y = W.groundAt(t.x, t.z); lo = Math.min(lo, y); hi = Math.max(hi, y); }
+    const bs = mesh.geometry.boundingSphere; if (!bs || !list.length) continue;
+    bs.center.y = (lo + hi) / 2 + 4; bs.radius = Math.hypot(bs.radius, (hi - lo) / 2 + 6);
+  }
+}
+/* hills block line of sight: sample the ground along the sight line */
+W.terrainBlocks = function (ax, az, bx, bz, ya, yb) {
+  if (!W.HILLS || !W.TERRAIN) return false;
+  const ha = W.groundAt(ax, az) + (ya || 1.6), hb = W.groundAt(bx, bz) + (yb || 1.6), n = Math.min(10, Math.ceil(dist(ax, az, bx, bz) / 12));
+  for (let i = 1; i < n; i++) { const t = i / n; if (W.groundAt(ax + (bx - ax) * t, az + (bz - az) * t) > ha + (hb - ha) * t + 0.4) return true; }
+  return false;
+};

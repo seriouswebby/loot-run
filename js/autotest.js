@@ -601,7 +601,7 @@ function runAutotest() {
     return (reached && turned > 0.3 && jumped && robbed) || `reached the gold car ${reached} (fell ${fell}) through a bend ${turned.toFixed(2)} rad, jump landed on the train ${jumped}, robbed ${robbed} (cash +${G.S.cash - cash0})`;
   });
   T('stunt ramps: jump the river and the highway barrier, land, get the bonus; a ramp is solid from behind', () => {
-    const bad = []; G.S.stunts = [];
+    const bad = []; G.S.stunts = []; const calls = [], real = G.stunt; G.stunt = (c, air, d, r) => { calls.push((r ? r.name : 'none') + ' ' + air.toFixed(1) + 's ' + d.toFixed(0) + 'm'); real(c, air, d, r); };
     const jump = (name, speed) => {
       const r = W.RAMPS.find((q) => q.name === name); reset(); G.noSpawn = true; for (const c of G.cars.slice()) if (!c.persistent) c.remove();
       const x = r.x - r.fx * 45, z = r.z - r.fz * 45, car = new Car('supercar', x, z, Math.atan2(r.fx, r.fz)); tp(x, z); G.enterCar(car);
@@ -616,13 +616,42 @@ function runAutotest() {
     if (!(river.air > 0.9 && river.top > 4 && rd > W.RIVER.w / 2 && river.x > 940)) bad.push(`river: air ${river.air.toFixed(1)} s top ${river.top.toFixed(1)} m landed at x ${river.x.toFixed(0)} (${rd.toFixed(0)} m from the water's middle)`);
     const bar = jump('Barrier Breaker', 32);
     if (!(bar.z < -W.HWY + W.HWH && bar.air > 0.6)) bad.push(`barrier: landed z ${bar.z.toFixed(0)} air ${bar.air.toFixed(1)}`);
-    if (!(G.S.stunts.includes('River Run') && G.S.stunts.includes('Barrier Breaker'))) bad.push('stunts recorded: ' + G.S.stunts.join(','));
+    G.stunt = real;
+    if (!(G.S.stunts.includes('River Run') && G.S.stunts.includes('Barrier Breaker'))) bad.push('stunts recorded: ' + G.S.stunts.join(',') + ' (calls: ' + calls.join('; ') + ')');
     // from behind: the back wall under the lip stops you
     const r = W.RAMPS.find((q) => q.name === 'Circle Jump'); reset(); G.noSpawn = true;
     const bx = r.x + r.fx * 30, bz = r.z + r.fz * 30, car = new Car('sedan', bx, bz, Math.atan2(-r.fx, -r.fz)); tp(bx, bz); G.enterCar(car); Input.keys.KeyW = true; steps(3); Input.keys.KeyW = false;
     const along = (car.x - r.x) * r.fx + (car.z - r.z) * r.fz; if (along < r.len / 2 - 0.5) bad.push('drove through the back of a ramp, along ' + along.toFixed(1));
     G.exitCar(true); car.remove(); G.noSpawn = false;
     return !bad.length || bad.join(' | ');
+  });
+  T('hills: everything built on flat ground stays exactly flat; hills are real but drivable; things are drawn on them; hills block sight', () => {
+    const bad = [], flat = (x, z, what) => { const g = W.groundAt(x, z) - W.rampAt(x, z); if (Math.abs(g) > 0.01) bad.push(what + ' ' + g.toFixed(2) + ' m @' + Math.round(x) + ',' + Math.round(z)); };
+    for (const e of W.countyEdges) { const L = dist(e.ax, e.az, e.bx, e.bz); for (let t = 0; t <= L; t += 4) { const x = e.ax + (e.bx - e.ax) * t / L, z = e.az + (e.bz - e.az) * t / L, nx = -(e.bz - e.az) / L, nz = (e.bx - e.ax) / L; for (const o of [-6, 0, 6]) flat(x + nx * o, z + nz * o, 'road'); } }
+    for (let s2 = 0; s2 < W.RAILLEN; s2 += 5) { const p = W.railPoint(s2); flat(p.x, p.z, 'rail'); }
+    const A = W.AIRPORT.fence; for (let x = A.minX; x <= A.maxX; x += 20) for (let z = A.minZ; z <= A.maxZ; z += 20) flat(x, z, 'airport');
+    for (const f of W.fields) for (const [x, z] of [[f.x0, f.z0], [f.x1, f.z1], [(f.x0 + f.x1) / 2, (f.z0 + f.z1) / 2]]) flat(x, z, 'field');
+    for (const b of W.buildings) for (const [x, z] of [[b.minX, b.minZ], [b.maxX, b.maxZ]]) flat(x, z, 'building');
+    for (let x = -W.BOUND; x <= W.BOUND; x += 25) for (let z = -W.BOUND; z <= W.SHORE; z += 25) flat(x, z, 'city');
+    flat(W.LAKE.x + W.LAKE.r, W.LAKE.z, 'lake shore');
+    // real hills: high in the highlands, mesas in the badlands, and no cliff you'd have to step up
+    let maxH = 0, maxS = 0, mesa = 0;
+    for (let x = -W.OUT; x <= W.OUT; x += 8) for (let z = -W.OUT; z <= 300; z += 8) {
+      const g = W.groundAt(x, z) - W.rampAt(x, z); maxH = Math.max(maxH, g); if (W.biomeAt(x, z).bad > 0.8 && g > 12) mesa++;
+      if (!W.rampAt(x, z) && !W.rampAt(x + 8, z)) { const sl = Math.abs(W.groundAt(x + 8, z) - g) / 8; if (sl > maxS) { maxS = sl; G.maxSAt = [x, z, JSON.stringify(W.biomeAt(x, z)), g.toFixed(1)]; } }
+    }
+    if (maxH < 40 || mesa < 50 || maxS > 1.3) bad.push(`highest ${maxH.toFixed(0)} m, mesa samples ${mesa}, steepest slope ${maxS.toFixed(2)} at ${G.maxSAt}`);
+    // drawn on the hillside: a person, a car and a parked chopper
+    let hx = 0, hz = 0, hy = 0; for (let x = -1200; x < -500 && hy < 15; x += 10) for (let z = -1000; z < -400 && hy < 15; z += 10) { const g = W.groundAt(x, z); if (g > hy) { hy = g; hx = x; hz = z; } }
+    reset(); G.noSpawn = true; tp(hx, hz); steps(0.1); P.animate(STEP);
+    if (Math.abs(P.rig.root.position.y - (P.y + W.groundAt(P.x, P.z))) > 0.05 || P.y > 0.01) bad.push('player drawn at ' + P.rig.root.position.y.toFixed(2) + ' ground ' + W.groundAt(P.x, P.z).toFixed(2));
+    const car = new Car('sedan', hx + 4, hz, 0, { parked: true }); car.update(STEP); if (Math.abs(car.mesh.position.y - W.groundAt(car.x, car.z)) > 0.05) bad.push('car drawn at ' + car.mesh.position.y.toFixed(2) + ' ground ' + W.groundAt(car.x, car.z).toFixed(2)); car.remove();
+    const h = new Chopper('tour', hx - 8, hz, 0); h.sync(STEP); if (Math.abs(h.m.root.position.y - W.groundAt(h.x, h.z)) > 0.05) bad.push('chopper drawn at ' + h.m.root.position.y.toFixed(2)); h.remove();
+    // a hill between two people hides them from each other
+    let blocked = false; for (let k = 0; k < 400 && !blocked; k++) { const x = rand(-1200, -500), z = rand(-1000, -350), g = W.groundAt(x, z); if (g > 25 && W.groundAt(x - 120, z) < g - 20 && W.groundAt(x + 120, z) < g - 20) blocked = W.segBlocked(x - 120, z, x + 120, z); }
+    if (!blocked) bad.push('no hill blocked a sight line');
+    G.noSpawn = false; tp(0, 25);
+    return !bad.length || [...new Set(bad)].slice(0, 6).join(' | ') + (bad.length > 6 ? ' (+' + (bad.length - 6) + ')' : '');
   });
   T('county: no trees, buildings or fields on the country roads', () => {
     const bad = [];

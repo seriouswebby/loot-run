@@ -178,6 +178,8 @@ function countyFarms(OP, free) {
 function countyWoods(free) {
   const out = [];
   const add = (x, z, type) => {
+    if (W.biomeAt && W.biomeAt(x, z).bad > 0.45) return; // no trees out in the badlands
+    if (W.biomeAt && W.biomeAt(x, z).high > 0.5) type = 'pine';
     const t = { x, z, type, s: 0.8 + rnd() * 0.6 };
     t.col = W.addCircle(x, z, 0.45, 'tree'); t.col.destructible = { kind: 'tree', ref: t };
     W.trees.push(t); out.push(t);
@@ -216,6 +218,7 @@ function countyTreeMeshes(trees) {
     rounds.forEach((t, i) => { t.ci = i; t.cm = rm; d.position.set(t.x, 0, t.z); d.rotation.set(rnd(), rnd() * TAU, 0); d.scale.setScalar(t.s); d.updateMatrix(); rm.setMatrixAt(i, d.matrix); rm.setColorAt(i, col.set(pick(['#4f8a3a', '#5e9a3f', '#477f36', '#6aa64a']))); });
     for (const m of [tm, pm, rm]) {
       if (!m.count) continue;
+      m.userData.trees = list;
       // instanced meshes are culled by the geometry's bounds, which know nothing about the instances: give each tile real bounds
       let x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9; for (const t of list) { x0 = Math.min(x0, t.x); z0 = Math.min(z0, t.z); x1 = Math.max(x1, t.x); z1 = Math.max(z1, t.z); }
       m.geometry = m.geometry.clone(); m.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, 4, (z0 + z1) / 2), Math.hypot(x1 - x0, z1 - z0) / 2 + 8);

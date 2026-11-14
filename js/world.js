@@ -203,7 +203,7 @@ W.segAABB = segAABB;
 W.segBlocked = function (ax, az, bx, bz, y) {
   const list = W.queryBox(Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
   for (const c of list) { if (c.noLos || (y > 0 && c.h <= y)) continue; if (segAABB(ax, az, bx, bz, c) >= 0) return true; }
-  return false;
+  return !!(W.terrainBlocks && W.terrainBlocks(ax, az, bx, bz));
 };
 /* the roof you'd be standing on at height y (0 = street level) */
 W.floorAt = function (x, z, y) {
@@ -992,6 +992,17 @@ function buildMinimap() {
   g.fillStyle = '#41583a'; g.fillRect(0, 0, SZ, SZ);
   g.fillStyle = '#d9c58f'; g.fillRect(0, Z(W.HWY + W.HWH + 0.6), SZ, (W.SHORE - W.HWY - W.HWH - 0.6) * k);
   g.fillStyle = '#2c6f93'; g.fillRect(0, Z(W.SHORE), SZ, SZ);
+  // hills: biome colour and shading (lit from the north-west) over the county
+  if (W.HILLS && W.TERRAIN) {
+    const st = 16, col = [0, 0, 0];
+    for (let z = W.VIEW.cz - W.VIEW.span / 2; z < W.SHORE; z += st) for (let x = W.VIEW.cx - W.VIEW.span / 2; x < W.VIEW.cx + W.VIEW.span / 2; x += st) {
+      const h = W.groundAt(x, z); if (h < 0.3) continue;
+      const sx = W.groundAt(x + 4, z) - W.groundAt(x - 4, z), sz = W.groundAt(x, z + 4) - W.groundAt(x, z - 4), shade = clamp(0.5 - (sx + sz) * 0.06, 0, 1);
+      terrainColor(x, z, h, Math.hypot(sx, sz) / 8, col);
+      const r = Math.round(col[0] * 205 * (0.75 + shade * 0.4)), gg = Math.round(col[1] * 190 * (0.75 + shade * 0.4)), b = Math.round(col[2] * 190 * (0.75 + shade * 0.4));
+      g.fillStyle = `rgba(${Math.min(255, r)},${Math.min(255, gg)},${Math.min(255, b)},${clamp(h / 12, 0.25, 0.85)})`; g.fillRect(X(x), Z(z), st * k + 0.5, st * k + 0.5);
+    }
+  }
   // the lake and the river
   if (W.LAKE) {
     g.fillStyle = '#d8c690'; g.beginPath(); g.arc(X(W.LAKE.x), Z(W.LAKE.z), (W.LAKE.r + 9) * k, 0, TAU); g.fill();
@@ -1063,7 +1074,7 @@ W.build = function (scene, seed) {
   const gw = 2 * W.OUT + 200, gz0 = -W.OUT - 100, gz1 = W.HWY + W.HWH + 0.7;
   const gtex = TEX.grass.clone(); gtex.needsUpdate = true; gtex.repeat.set(gw / 10, (gz1 - gz0) / 10);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(gw, gz1 - gz0), new THREE.MeshLambertMaterial({ map: gtex }));
-  ground.rotation.x = -Math.PI / 2; ground.position.z = (gz0 + gz1) / 2; ground.receiveShadow = true; S.add(ground);
+  ground.rotation.x = -Math.PI / 2; ground.position.z = (gz0 + gz1) / 2; ground.receiveShadow = true; S.add(ground); W.groundPlane = ground;
 
   buildGraph();
   for (let j = 0; j < W.N; j++) {
@@ -1098,6 +1109,8 @@ W.build = function (scene, seed) {
   buildCounty();
   buildTerrain();
   buildRamps();
+  if (buildTerrainMesh(S)) W.groundPlane.visible = false;
+  plantTreesOnHills();
   for (const k in GB) GB[k].build(S);
   P.build(S);
   buildMinimap();

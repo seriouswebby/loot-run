@@ -124,6 +124,7 @@ const Weather = {
     this.apply();
     const wx = this.windX(), wz = this.windZ();
     this.updateClouds(dt, fx, fz, wx, wz);
+    if (W.snowUniform) W.snowUniform.value = this.snowCover;
     const bl = this.blanket; bl.visible = this.snowCover > 0.01; if (bl.visible) { bl.material.opacity = this.snowCover; bl.position.set(Math.round(fx / 20) * 20, 0.07, Math.round(fz / 20) * 20); }
     this.updateRain(dt, fx, fy, fz, wx, wz);
     this.updatePts(this.snowP, this.p.snow, dt, fx, fy, fz, 3.2, wx * 5, wz * 5, 1.2, 0.95);
