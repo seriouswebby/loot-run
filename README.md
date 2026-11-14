@@ -27,7 +27,9 @@ Progress saves in your browser after every story job.
 | H | Medkit | | |
 | C | Camera: isometric · top-down · 3rd person | | |
 | M | Map: click to set a waypoint, right-click to teleport, scroll to zoom | | |
-| Esc · N | Pause · sound | | |
+| Esc · N · V | Pause · sound on/off · voices on/off | | |
+
+Planes and jets: W/S throttle, build speed on the runway, Space to pull up, Shift to dive, A/D to bank; land and brake (S) to get out. Click fires the gun on police choppers, gunships and fighter jets. Next to the county train, E climbs on; Space jumps off.
 
 ## Code layout
 

@@ -834,6 +834,7 @@ function frameInput() {
     }
   }
   if (Input.hit('KeyN')) { Sfx.setMuted(!Sfx.muted); UI.toast(Sfx.muted ? 'Sound off' : 'Sound on'); }
+  if (Input.hit('KeyV')) { Voice.muted = !Voice.muted; if (Voice.muted) { Voice.stopDialog(); Voice.radioQ.length = 0; } UI.toast(Voice.muted ? 'Voices off (V to turn them back on)' : 'Voices on'); try { localStorage.setItem('lootrun.voices', Voice.muted ? 'off' : 'on'); } catch (e) { /* storage blocked */ } }
   if (Input.wheel) {
     if (G.camMode === 'iso') CAM.zoomIso = clamp(CAM.zoomIso + Input.wheel * 3, 14, 70);
     else if (G.camMode === 'top') CAM.zoomTop = clamp(CAM.zoomTop + Input.wheel * 6, 25, 140);

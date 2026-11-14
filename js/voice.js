@@ -8,7 +8,8 @@
 
 const Voice = {
   bufs: new Map(), loading: new Map(), ctx: null, log: [], cd: 0, radioQ: [], radioBusy: false, dlgSrc: null, dlgKey: null,
-  ok() { return typeof VOICE_DATA !== 'undefined' && Sfx.ready && Sfx.ctx; },
+  muted: (() => { try { return localStorage.getItem('lootrun.voices') === 'off'; } catch (e) { return false; } })(),
+  ok() { return !this.muted && typeof VOICE_DATA !== 'undefined' && Sfx.ready && Sfx.ctx; },
   has(key) { return typeof VOICE_DATA !== 'undefined' && !!VOICE_DATA[key]; },
   note(what) { this.log.push({ what, t: G.time }); if (this.log.length > 60) this.log.shift(); },
   /* decode a clip for the current audio context (cached) */
