@@ -115,13 +115,13 @@ const Phys = {
   },
   syncRagdolls(dt) {
     for (const a of this.ragdolls) {
-      const r = a.ragdoll;
+      const r = a.ragdoll; { const t0 = r.parts.torso.b.getPosition(); r.gnd = W.groundAt(t0.x, t0.z); }
       for (const k in r.parts) {
         const p = r.parts[k], pos = p.b.getPosition(), rot = p.b.getRotation();
         if (!isFinite(pos.x + pos.y + pos.z)) continue;
         p.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
         this.v.set(0, -p.off, 0).applyQuaternion(p.mesh.quaternion);
-        p.mesh.position.set(pos.x + this.v.x, pos.y + this.v.y, pos.z + this.v.z);
+        p.mesh.position.set(pos.x + this.v.x, pos.y + this.v.y + r.gnd, pos.z + this.v.z);
       }
       const t = r.parts.torso.b.getPosition();
       if (isFinite(t.x + t.z)) {
@@ -130,7 +130,7 @@ const Phys = {
         // a body flying across the map needs the walls ahead of it to exist in the physics world
         if (Math.abs(t.x - r.sx) > 5 || Math.abs(t.z - r.sz) > 5) { r.sx = t.x; r.sz = t.z; this.ensureStatics(t.x, t.z, 16); }
       }
-      if (a.stars) { const h = r.parts.head.b.getPosition(); a.stars.position.set(h.x, h.y + 0.5, h.z); a.stars.rotation.y += 0.05; }
+      if (a.stars) { const h = r.parts.head.b.getPosition(); a.stars.position.set(h.x, h.y + 0.5 + r.gnd, h.z); a.stars.rotation.y += 0.05; }
     }
   },
 
@@ -184,7 +184,7 @@ const Phys = {
       const pos = p.body.getPosition(), rot = p.body.getRotation();
       if (!isFinite(pos.x + pos.y + pos.z)) continue;
       p.x = pos.x; p.y = pos.y; p.z = pos.z; p.q.set(rot.x, rot.y, rot.z, rot.w);
-      p.mesh.position.set(p.x, p.y, p.z); p.mesh.quaternion.copy(p.q);
+      p.mesh.position.set(p.x, p.y + W.groundAt(p.x, p.z), p.z); p.mesh.quaternion.copy(p.q);
     }
   },
 
@@ -206,7 +206,7 @@ const Phys = {
       const d = this.debris[i], pos = d.b.getPosition(), rot = d.b.getRotation();
       d.t -= dt;
       if (d.t <= 0 || !isFinite(pos.x)) { this.kill(d.b); G.scene.remove(d.mesh); this.debris.splice(i, 1); continue; }
-      d.mesh.position.set(pos.x, pos.y, pos.z); d.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+      d.mesh.position.set(pos.x, pos.y + W.groundAt(pos.x, pos.z), pos.z); d.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
     }
   },
 

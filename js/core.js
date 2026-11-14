@@ -101,7 +101,7 @@ const FX = {
   spawn(x, y, z, vx, vy, vz, color, size, life, o) {
     const m = this.pool.pop();
     if (!m) return;
-    m.visible = true; m.position.set(x, y, z); m.scale.setScalar(size);
+    m.visible = true; m.position.set(x, y + (typeof W !== 'undefined' && W.groundAt ? W.groundAt(x, z) : 0), z); m.scale.setScalar(size);
     m.material.color.set(color); m.material.opacity = 1;
     m.rotation.set(Math.random() * 3, Math.random() * 3, 0);
     this.live.push({ m, vx, vy, vz, life, max: life, size, grav: o && o.grav != null ? o.grav : 14, grow: (o && o.grow) || 0, drag: (o && o.drag) || 0.5 });
@@ -121,7 +121,8 @@ const FX = {
       const k = Math.exp(-p.drag * dt);
       p.vx *= k; p.vz *= k; p.vy = p.vy * k - p.grav * dt;
       p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.m.position.z += p.vz * dt;
-      if (p.m.position.y < 0.05) { p.m.position.y = 0.05; p.vy *= -0.3; p.vx *= 0.6; p.vz *= 0.6; }
+      const fl = 0.05 + (typeof W !== 'undefined' && W.groundAt ? W.groundAt(p.m.position.x, p.m.position.z) : 0);
+      if (p.m.position.y < fl) { p.m.position.y = fl; p.vy *= -0.3; p.vx *= 0.6; p.vz *= 0.6; }
       const f = p.life / p.max;
       p.m.material.opacity = Math.min(1, f * 2);
       if (p.grow) p.m.scale.setScalar(p.size * (1 + (1 - f) * p.grow));
@@ -136,6 +137,7 @@ const Floaters = {
   list: [], el: null, v: null,
   init(el) { this.el = el; this.v = new THREE.Vector3(); },
   add(x, y, z, text, cls) {
+    if (typeof W !== 'undefined' && W.groundAt) y += W.groundAt(x, z);
     if (!this.el) return;
     const d = document.createElement('div');
     d.className = 'floater ' + (cls || '');

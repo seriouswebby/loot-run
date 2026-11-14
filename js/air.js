@@ -79,7 +79,7 @@ class Chopper {
   sync(dt) {
     const m = this.m;
     this.spin += dt * (2 + this.rotor * 30);
-    m.root.position.set(this.x, this.y, this.z);
+    m.root.position.set(this.x, W.airY(this.x, this.z, this.y), this.z);
     m.root.rotation.set(0, this.yaw, 0);
     m.body.rotation.set(this.tilt, 0, -this.roll);
     m.rotor.rotation.y = this.spin; m.tail.rotation.x = this.spin * 1.5;
@@ -91,12 +91,12 @@ class Chopper {
       const vis = !this.falling && !this.leaving;
       this.cone.visible = this.spotDisc.visible = vis;
       if (vis) {
-        const sx = this.spotX, sz = this.spotZ, top = new THREE.Vector3(this.x, this.y + 0.6, this.z), bot = new THREE.Vector3(sx, 0.08, sz);
+        const sx = this.spotX, sz = this.spotZ, top = new THREE.Vector3(this.x, W.airY(this.x, this.z, this.y) + 0.6, this.z), bot = new THREE.Vector3(sx, 0.08 + W.groundAt(sx, sz), sz);
         const dir = bot.clone().sub(top), L = dir.length();
         this.cone.position.copy(top).addScaledVector(dir, 0.5);
         this.cone.scale.set(3.4, L, 3.4);
         this.cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir.normalize());
-        this.spotDisc.position.set(sx, 0.09, sz);
+        this.spotDisc.position.set(sx, 0.09 + W.groundAt(sx, sz), sz);
         const locked = this.ai && this.ai.sees;
         this.spotDisc.material.color.set(locked ? 0xffffff : 0xfff2b0); this.spotDisc.material.opacity = locked ? 0.5 : 0.32;
         this.cone.material.opacity = locked ? 0.17 : 0.11;
@@ -147,7 +147,7 @@ const Choppers = {
     let m = this.pool.pop();
     if (!m) { m = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1), new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true })); G.scene.add(m); }
     m.visible = true; m.material.color.set(color || 0xffe08a);
-    const a = new THREE.Vector3(ax, ay, az), b = new THREE.Vector3(bx, by, bz);
+    const a = new THREE.Vector3(ax, W.airY(ax, az, ay), az), b = new THREE.Vector3(bx, W.airY(bx, bz, by), bz);
     m.position.copy(a).add(b).multiplyScalar(0.5); m.scale.set(1, 1, a.distanceTo(b)); m.lookAt(b);
     this.tracers.push({ m, life: 0.09 });
   },
@@ -539,7 +539,7 @@ const Ordnance = {
       }
       if (ny < 0.2) boom = true;
       r.x = nx; r.y = ny; r.z = nz; r.life -= dt;
-      r.m.position.set(nx, ny, nz); r.m.lookAt(nx + r.vx, ny + r.vy, nz + r.vz);
+      const ry = ny + W.groundAt(nx, nz); r.m.position.set(nx, ry, nz); r.m.lookAt(nx + r.vx, ry + r.vy, nz + r.vz);
       if (Math.random() < 0.8) FX.spawn(nx, ny, nz, rand(-0.3, 0.3), rand(0, 0.5), rand(-0.3, 0.3), pick(['#d9d9d9', '#bfbfbf', '#ffb703']), 0.35, 0.6, { grav: 0, grow: 2 });
       if (boom || r.life <= 0) {
         G.scene.remove(r.m); this.rockets.splice(i, 1);
@@ -553,13 +553,13 @@ const Ordnance = {
       if (g.y < 0.22) { g.y = 0.22; g.vy *= -0.35; g.vx *= 0.6; g.vz *= 0.6; }
       const ox = g.vx, oz = g.vz, hit = W.collideCircle(g, 0.22);
       if (hit) { const vn = ox * hit.nx + oz * hit.nz; if (vn < 0) { g.vx -= hit.nx * vn * 1.6; g.vz -= hit.nz * vn * 1.6; } }
-      g.m.position.set(g.x, g.y, g.z); g.m.rotation.x += dt * 10;
+      g.m.position.set(g.x, g.y + W.groundAt(g.x, g.z), g.z); g.m.rotation.x += dt * 10;
       g.fuse -= dt;
       if (g.fuse <= 0) { G.scene.remove(g.m); this.grenades.splice(i, 1); explosion(g.x, g.z, 6.5, 85, P); }
     }
     for (const b of this.c4) {
       if (b.car) { if (b.car.dead) b.car = null; else { const c = Math.cos(b.car.h), s = Math.sin(b.car.h); b.x = b.car.x + b.ox; b.z = b.car.z + b.oz; b.y = 1.3; void c; void s; } }
-      b.m.position.set(b.x, b.y, b.z);
+      b.m.position.set(b.x, b.y + W.groundAt(b.x, b.z), b.z);
       b.led.material.color.set(Math.floor(G.time * 3) % 2 ? 0xff2020 : 0x330000);
     }
   },

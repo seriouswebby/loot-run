@@ -444,7 +444,7 @@ G.bail = function (car, impact, vx, vz) {
   const launch = (a) => {
     // start from the saddle, above the bike's own physics box
     a.x = car.x; a.z = car.z; a.y = 0.95; a.facing = Math.atan2(dx, dz); a.carHitT = G.time + 1.5;
-    a.rig.root.position.set(a.x, a.y, a.z); a.rig.root.rotation.set(0, a.facing, 0);
+    a.rig.root.position.set(a.x, a.y + W.groundAt(a.x, a.z), a.z); a.rig.root.rotation.set(0, a.facing, 0);
   };
   if (car.driver === 'ai') {
     const a = G.ejectDriver(car); car.driver = null; car.ai = null; car.parked = true;
@@ -846,7 +846,7 @@ const Story = {
     list.forEach(([x, z, y], i) => {
       if (i < k || i > k + 1) return;
       const m = new THREE.Mesh(new THREE.TorusGeometry(10, 0.7, 8, 36), new THREE.MeshBasicMaterial({ color: i === k ? 0xffd23f : 0xfff3b0, transparent: true, opacity: i === k ? 0.9 : 0.35 }));
-      const [px, pz] = i > 0 ? list[i - 1] : [x - 50, z]; m.position.set(x, y, z); m.rotation.y = Math.atan2(x - px, z - pz); G.scene.add(m); this.rings.push(m);
+      const [px, pz] = i > 0 ? list[i - 1] : [x - 50, z]; m.position.set(x, W.airY(x, z, y), z); m.rotation.y = Math.atan2(x - px, z - pz); G.scene.add(m); this.rings.push(m);
     });
   },
   clearRings() { for (const m of this.rings) G.scene.remove(m); this.rings = []; },

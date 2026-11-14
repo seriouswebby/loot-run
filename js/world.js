@@ -1095,6 +1095,7 @@ W.build = function (scene, seed) {
   placeProps();
   buildTrees();
   buildCounty();
+  buildTerrain();
   for (const k in GB) GB[k].build(S);
   P.build(S);
   buildMinimap();

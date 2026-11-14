@@ -120,13 +120,25 @@ class Actor {
     this.down = false; this.hp = Math.ceil(this.maxHp * 0.5);
     if (this.stars) this.stars.visible = false;
   }
+  /* the ground moved under us by dg: in the air we keep our height; on the ground we follow it, unless it drops
+     away faster than we can follow, and then we're airborne (off a crest, a ramp or a ledge) */
+  groundStep(dg, h, len) {
+    if (this.y > 0.001 || this.yv > 0) { this.y -= dg; if (this.top != null) this.top -= dg; return; }
+    if (dg < -Math.max(0.12, len * 0.6)) { this.y = -dg; this.yv = Math.max(0, this.gvy || 0); this.top = this.y; return; }
+    this.gvy = dg / h;
+  }
   physics(dt) {
     if (this.ragdoll) return; // the physics engine owns the body while it's limp
     if (this.vault) return; // vaulting/mantling moves the player directly
     let mx = this.vx, mz = this.vz;
     if (this.down || this.handsUp > 0) { mx = 0; mz = 0; }
     const tx = (mx + this.kx) * dt, tz = (mz + this.kz) * dt, hops = Math.min(10, Math.max(1, Math.ceil(Math.hypot(tx, tz) / 0.25)));
-    for (let i = 0; i < hops; i++) { this.x += tx / hops; this.z += tz / hops; if (hops > 1) W.collideCircle(this, this.r, this.y); }
+    for (let i = 0; i < hops; i++) {
+      const g0 = W.groundAt(this.x, this.z);
+      this.x += tx / hops; this.z += tz / hops; if (hops > 1) W.collideCircle(this, this.r, this.y);
+      const dg = W.groundAt(this.x, this.z) - g0;
+      if (dg) this.groundStep(dg, dt / hops, Math.hypot(tx, tz) / hops);
+    }
     const kd = Math.exp(-(this.y > 0 && !this.jumping ? 0.8 : 7) * dt); this.kx *= kd; this.kz *= kd;
     const roofs = this.kind === 'player';
     const floor = roofs && this.y > 0.5 ? W.floorAt(this.x, this.z, this.y) : 0;
@@ -148,7 +160,7 @@ class Actor {
   animate(dt) {
     const rg = this.rig;
     if (this.dead || this.ragdoll) return;
-    rg.root.position.set(this.x, this.y, this.z);
+    rg.root.position.set(this.x, this.y + W.groundAt(this.x, this.z), this.z);
     rg.root.rotation.y = this.facing;
     if (this.down) {
       rg.body.rotation.x = damp(rg.body.rotation.x, -Math.PI / 2, 12, dt);
@@ -157,7 +169,7 @@ class Actor {
       rg.legL.rotation.x = rg.legR.rotation.x = 0; rg.armL.rotation.x = -2.6; rg.armR.rotation.x = -2.6;
       if (this.stars) {
         const fx = Math.sin(this.facing), fz = Math.cos(this.facing);
-        this.stars.position.set(this.x - fx * 1.8, 0.75, this.z - fz * 1.8);
+        this.stars.position.set(this.x - fx * 1.8, 0.75 + W.groundAt(this.x, this.z), this.z - fz * 1.8);
         this.stars.rotation.y += dt * 4;
       }
       return;
@@ -206,7 +218,7 @@ class Actor {
     rg.body.rotation.set(0, 0, 0); rg.body.position.set(0, 0, 0);
     for (const p of [rg.legL, rg.legR, rg.armL, rg.armR]) p.rotation.set(0, 0, 0);
     for (const d of rg.defaults) { d.o.position.copy(d.p); d.o.rotation.set(0, 0, 0); }
-    rg.root.position.set(this.x, this.y, this.z); rg.root.rotation.set(0, this.facing, 0);
+    rg.root.position.set(this.x, this.y + W.groundAt(this.x, this.z), this.z); rg.root.rotation.set(0, this.facing, 0);
   }
   remove() {
     if (this.ragdoll) Phys.unragdoll(this);
@@ -440,7 +452,7 @@ const Bullets = {
     if (!m) { m = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({ color: 0xffe08a })); G.scene.add(m); }
     m.visible = true; m.material.color.set(o.team === 'cop' ? 0xff9f6b : 0xffe08a);
     const y = (owner && owner.y > 0.5 ? owner.y : 0) + 1.35;
-    m.position.set(x, y, z); m.rotation.set(0, ang, 0);
+    m.position.set(x, y + W.groundAt(x, z), z); m.rotation.set(0, ang, 0);
     const sp = o.speed || 90;
     this.list.push({ m, x, z, y, vx: Math.sin(ang) * sp, vz: Math.cos(ang) * sp, life: (o.range || 40) / sp, dmg, owner, team: o.team, knock: o.knock || 2 });
   },
@@ -481,7 +493,7 @@ const Bullets = {
       }
       if (!done && W.segBlocked(b.x, b.z, nx, nz, b.y - 1.35)) { FX.burst(nx, 1.3, nz, 4, ['#cfcfcf', '#ffd166'], 3, 0.1, 0.3); done = true; }
       b.x = nx; b.z = nz; b.life -= dt;
-      b.m.position.set(nx, b.y, nz);
+      b.m.position.set(nx, b.y + W.groundAt(nx, nz), nz);
       if (done || b.life <= 0) this.kill(i);
     }
   },
@@ -502,14 +514,14 @@ const Pickups = {
       g.add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.2), lam('#e63946')));
       g.add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.6), lam('#e63946')));
     }
-    g.position.set(x, 0.5, z); G.scene.add(g);
+    g.position.set(x, 0.5 + W.groundAt(x, z), z); G.scene.add(g);
     this.list.push({ kind, x, z, amount, g, t: 0 });
   },
   update(dt) {
     const P = G.player, B = G.body(), px = B.x, pz = B.z, low = (!P.inHeli || P.inHeli.y < 3) && P.y < 2;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const p = this.list[i]; p.t += dt;
-      p.g.rotation.y += dt * 2.5; p.g.position.y = 0.5 + Math.sin(p.t * 4) * 0.12;
+      p.g.rotation.y += dt * 2.5; p.g.position.y = 0.5 + Math.sin(p.t * 4) * 0.12 + W.groundAt(p.x, p.z);
       if (!P.down && low && dist(px, pz, p.x, p.z) < (P.inCar || P.inHeli ? 2.6 : 1.3)) { G.collect(p); G.scene.remove(p.g); this.list.splice(i, 1); continue; }
       if (p.t > 60) { G.scene.remove(p.g); this.list.splice(i, 1); }
     }

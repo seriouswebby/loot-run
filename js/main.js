@@ -342,7 +342,7 @@ const GPS = {
     }
     const wp = G.waypoint;
     this.beam.visible = !!wp && dist(B.x, B.z, wp.x, wp.z) > 12;
-    if (wp) { this.beam.position.set(wp.x, 35, wp.z); this.beam.material.opacity = 0.25 + Math.sin(G.time * 3) * 0.08; }
+    if (wp) { this.beam.position.set(wp.x, 35 + W.groundAt(wp.x, wp.z), wp.z); this.beam.material.opacity = 0.25 + Math.sin(G.time * 3) * 0.08; }
     this.arrow.material.color.set(this.toWaypoint ? 0xff4fd8 : 0xffd23f);
     const a = this.arrow, p = this.path, car = G.player.inCar;
     if (!p || p.length < 2 || G.player.inHeli || dist(B.x, B.z, obj.x, obj.z) < 7) { a.visible = false; return; }
@@ -360,7 +360,7 @@ const GPS = {
     if (!found) { a.visible = false; return; }
     // the route is behind you: put the arrow in front of the car, pointing back the way to go
     if (car) { const fx = Math.sin(car.h), fz = Math.cos(car.h); if ((px - B.x) * fx + (pz - B.z) * fz < 6) { const qx = B.x + fx * 12, qz = B.z + fz * 12; ang = Math.atan2(px - qx, pz - qz); px = qx; pz = qz; } }
-    a.visible = true; a.position.set(px, 0.13, pz);
+    a.visible = true; a.position.set(px, 0.13 + W.groundAt(px, pz), pz);
     a.rotation.set(0, ang, 0); a.scale.setScalar(car ? 1.8 : 0.9);
     a.material.opacity = 0.7 + Math.sin(G.time * 5) * 0.2;
   },
@@ -369,7 +369,7 @@ const GPS = {
 /* ---------------- camera ---------------- */
 const CAM = { fx: 0, fz: 0, lx: 0, lz: 0, zoomIso: 26, zoomTop: 60, curIso: 26, curTop: 60, yaw: Math.PI, pitch: 0.3, chaseD: 8, carYaw: 0, carLook: 0, carPitch: 0.32, lookT: 0, wasInCar: false, sens: 0.0026 };
 function updateCamera(dt) {
-  const P = G.player, t = G.body(), veh = P.inCar || P.inHeli, fy = P.inHeli ? P.inHeli.y : P.inCar ? 0 : P.y;
+  const P = G.player, t = G.body(), veh = P.inCar || P.inHeli, fy = P.inHeli ? W.airY(t.x, t.z, P.inHeli.y) : (P.inCar ? P.inCar.y : P.y) + W.groundAt(t.x, t.z);
   const vx = veh ? veh.vx : P.vx, vz = veh ? veh.vz : P.vz, spd = Math.hypot(vx, vz);
   CAM.lx = damp(CAM.lx, vx * (veh ? 0.6 : 0.25), 2.5, dt); CAM.lz = damp(CAM.lz, vz * (veh ? 0.6 : 0.25), 2.5, dt);
   CAM.fx = damp(CAM.fx, t.x + CAM.lx, 10, dt); CAM.fz = damp(CAM.fz, t.z + CAM.lz, 10, dt);
@@ -411,12 +411,12 @@ function updateCamera(dt) {
     let cx = px - fx3 * cp * back, cz = pz - fz3 * cp * back, cy = py + spch * back;
     const hit = py > 25 ? 1 : W.segHitT(px, pz, cx, cz, 2);
     if (hit < 1) { const k = Math.max(0.12, hit - 0.06); cx = px + (cx - px) * k; cz = pz + (cz - pz) * k; cy = py + (cy - py) * k; }
-    persp.position.set(cx + sx, Math.max(0.45, cy), cz + sz);
+    persp.position.set(cx + sx, Math.max(0.45 + W.groundAt(cx, cz), cy), cz + sz); // never below the hillside behind you
     persp.lookAt(px + fx3 * cp * 10, py - spch * 10, pz + fz3 * cp * 10);
     G.camFwd = { x: fx3, z: fz3 };
   }
   Weather.camDist = cam === ortho ? 200 : G.camMode === 'top' ? CAM.curTop : (P.inHeli ? 17 : P.inCar ? 10 : CAM.chaseD);
-  sun.position.set(fx + 45, 90, fz + 30); sun.target.position.set(fx, 0, fz); sun.target.updateMatrixWorld();
+  sun.position.set(fx + 45, 90 + fy, fz + 30); sun.target.position.set(fx, fy, fz); sun.target.updateMatrixWorld();
   G.cam = cam;
   return cam;
 }
@@ -466,9 +466,9 @@ function initMarkers() {
 function updateMarkers() {
   const obj = Story.target(), P = G.player, t = G.body(), pulse = 1 + Math.sin(G.time * 4) * 0.08;
   Markers.obj.visible = !!obj;
-  if (obj) { Markers.obj.position.set(obj.x, 0, obj.z); Markers.obj.userData.ring.scale.setScalar(pulse); }
+  if (obj) { Markers.obj.position.set(obj.x, W.groundAt(obj.x, obj.z), obj.z); Markers.obj.userData.ring.scale.setScalar(pulse); }
   W.robs.forEach((r, i) => { const m = Markers.rob[i]; m.visible = r.cd <= 0 && dist(r.x, r.z, t.x, t.z) < 90; });
-  Markers.player.position.set(t.x, P.inHeli ? P.inHeli.y + 5 : P.inCar ? 3.3 : P.y + 2.75 + Math.sin(G.time * 5) * 0.1, t.z);
+  Markers.player.position.set(t.x, P.inHeli ? W.airY(t.x, t.z, P.inHeli.y) + 5 : (P.inCar ? 3.3 + P.inCar.y : P.y + 2.75 + Math.sin(G.time * 5) * 0.1) + W.groundAt(t.x, t.z), t.z);
   Markers.player.visible = G.state !== 'title' && !P.down && G.camMode !== 'chase';
   W.water.position.y = -0.15 + Math.sin(G.time * 0.8) * 0.04;
 }
@@ -807,7 +807,7 @@ function step(dt) {
 function poseRider(P, bike, dt) {
   const rg = P.rig, fx = Math.sin(bike.h), fz = Math.cos(bike.h), seat = bike.type === 'bmx' ? 0.35 : bike.T.pedal ? 0.45 : 0.4;
   rg.root.visible = true;
-  rg.root.position.set(bike.x - fx * 0.2, seat + (bike.y || 0), bike.z - fz * 0.2);
+  rg.root.position.set(bike.x - fx * 0.2, seat + (bike.y || 0) + W.groundAt(bike.x, bike.z), bike.z - fz * 0.2);
   rg.root.rotation.set(0, bike.h, 0);
   rg.body.rotation.set(0.3, 0, bike.mesh.rotation.z); rg.body.position.set(0, 0, 0);
   const pedal = bike.T.pedal ? (G.time * Math.abs(bike.v) * 1.2) : 0;
@@ -878,6 +878,7 @@ const aimV = new THREE.Vector2(), aimP = new THREE.Vector3();
 function updateAim(cam) {
   if (G.camMode === 'chase') aimV.set(0, 0); else aimV.set((Input.mx / innerWidth) * 2 - 1, -(Input.my / innerHeight) * 2 + 1);
   raycaster.setFromCamera(aimV, cam);
+  aimPlane.constant = -(1.2 + W.groundAt(G.player.x, G.player.z)); // aim at chest height on the slope you're standing on
   if (raycaster.ray.intersectPlane(aimPlane, aimP)) { G.aimX = aimP.x; G.aimZ = aimP.z; }
   // aiming at a police chopper locks guns and rockets on to it
   G.heliAim = null;
@@ -919,7 +920,7 @@ function frame(now) {
     G.scene.add(G.canopy);
   }
   G.canopy.visible = !!P.chute && !P.inCar && !P.inHeli;
-  if (G.canopy.visible) { G.canopy.position.set(P.x, P.y, P.z); G.canopy.rotation.y = P.facing; }
+  if (G.canopy.visible) { G.canopy.position.set(P.x, P.y + W.groundAt(P.x, P.z), P.z); G.canopy.rotation.y = P.facing; }
   if (G.state !== 'title') { P.animate(dt); for (const n of G.npcs) n.animate(dt); if (P.inCar && P.inCar.T.bike) poseRider(P, P.inCar, dt); }
   FX.update(G.state === 'play' ? dt : 0);
   Puffs.update(G.state === 'play' ? dt : 0, cam, renderer.domElement.height);
@@ -929,7 +930,7 @@ function frame(now) {
   if (G.state !== 'title') { UI.update(dt); drawMinimap(); }
   Floaters.update(G.state === 'play' ? dt : 0, cam, innerWidth, innerHeight);
   const B = G.body();
-  Weather.update(dt, CAM.fx, P.inHeli ? Math.max(0, P.inHeli.y - 12) : Math.max(0, P.y - 4), CAM.fz);
+  Weather.update(dt, CAM.fx, (P.inHeli ? Math.max(0, P.inHeli.y - 12) : Math.max(0, P.y - 4)) + W.groundAt(CAM.fx, CAM.fz), CAM.fz);
   // nothing past the fog can be seen, so don't draw it: with the county out there this culls most of the world
   if (G.scene.fog) { const far = Math.min(2000, G.scene.fog.far + 25); if (Math.abs(persp.far - far) > 5) { persp.far = far; persp.updateProjectionMatrix(); } }
   const sir = G.cars.filter((c) => c.siren && !c.wreck && !c.dead).sort((a, b) => dist(a.x, a.z, B.x, B.z) - dist(b.x, b.z, B.x, B.z)).slice(0, 2);

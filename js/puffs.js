@@ -43,7 +43,7 @@ const Puffs = {
     if (i >= this.N) { // full: recycle the oldest-looking puff
       let best = 0, bl = 1e9; for (let k = 0; k < this.N; k += 7) if (this.life[k] < bl) { bl = this.life[k]; best = k; } i = best;
     } else this.n++;
-    this.pos[i * 3] = x; this.pos[i * 3 + 1] = y; this.pos[i * 3 + 2] = z;
+    this.pos[i * 3] = x; this.pos[i * 3 + 1] = y + (W.groundAt ? W.groundAt(x, z) : 0); this.pos[i * 3 + 2] = z;
     this.vel[i * 3] = vx; this.vel[i * 3 + 1] = vy; this.vel[i * 3 + 2] = vz;
     this.c.set(color); this.col[i * 3] = this.c.r; this.col[i * 3 + 1] = this.c.g; this.col[i * 3 + 2] = this.c.b;
     this.life[i] = this.max[i] = life; this.s0[i] = size; this.grow[i] = grow; this.a0[i] = alpha; this.rise[i] = rise || 0;

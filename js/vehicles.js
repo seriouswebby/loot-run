@@ -147,7 +147,7 @@ class Car {
     const built = buildCarMesh(type, this.color);
     this.mesh = built.g; this.mats = built.mats; this.bar = built.bar; this.rider = built.rider || null;
     this.dentable = built.dentable || []; this.glassMats = built.glassMats || []; this.bumpers = built.bumpers || []; this.pull = chance(0.5) ? 1 : -1;
-    this.mesh.position.set(x, 0, z); this.mesh.rotation.y = h;
+    this.mesh.position.set(x, W.groundAt(x, z), z); this.mesh.rotation.order = 'YXZ'; this.mesh.rotation.y = h;
     G.scene.add(this.mesh);
     G.cars.push(this);
   }
@@ -167,6 +167,7 @@ class Car {
     if (!T.pedal && cond < 0.6) mul *= 0.7 + 0.5 * cond;
     if (this.burning > 0) mul *= 0.6;
     const maxV = Math.min(88, T.maxV * mul * (boost ? 1.55 : 1)), accel = T.accel * (boost ? 2.6 : 1) * (mul > 1 ? 1.25 : 1);
+    if (this.y <= 0.001) { const sl = W.slopeAlong(this.x, this.z, Math.sin(this.h), Math.cos(this.h)); if (sl) this.v -= sl * 9 * dt; }
     if (thr > 0) {
       if (this.v < 0) this.v = Math.min(0, this.v + 32 * dt); else if (this.v < maxV) this.v = Math.min(maxV, this.v + accel * thr * dt);
     } else if (thr < 0) {
@@ -186,10 +187,20 @@ class Car {
     // move in short hops so fast cars and bikes can't skip over thin barriers
     const sp = Math.hypot(this.vx + this.kx, this.vz + this.kz), n = Math.min(12, Math.max(1, Math.ceil(sp * dt / 0.25))), h = dt / n;
     for (let i = 0; i < n; i++) {
+      const g0 = W.groundAt(this.x, this.z);
       this.x += (this.vx + this.kx) * h; this.z += (this.vz + this.kz) * h;
       this.collideStatic();
+      const dg = W.groundAt(this.x, this.z) - g0;
+      if (dg) this.groundStep(dg, h, sp * h);
     }
     const k = Math.exp(-3 * dt); this.kx *= k; this.kz *= k;
+  }
+  /* the ground moved under the car by dg (see Actor.groundStep): airborne cars keep their height,
+     grounded ones follow it unless it drops away faster than they can, which launches them */
+  groundStep(dg, h, len) {
+    if (this.y > 0.001 || this.yv > 0) { this.y -= dg; return; }
+    if (dg < -Math.max(0.1, len * 0.3)) { this.y = -dg; this.yv = Math.max(0, this.gvy || 0); this.airT = 0; return; }
+    this.gvy = dg / h;
   }
   circles() {
     const fx = Math.sin(this.h), fz = Math.cos(this.h), o = this.off;
@@ -340,10 +351,14 @@ class Car {
       this.yv -= 22 * dt; this.y += this.yv * dt;
       if (this.y <= 0) { this.y = 0; this.yv = 0; if (this.driver === 'player') Sfx.land(this.x, this.z); }
     }
-    this.mesh.position.set(this.x, this.y, this.z); this.mesh.rotation.y = this.h;
-    this.mesh.rotation.x = this.y > 0.05 ? damp(this.mesh.rotation.x, -0.25, 8, dt) : damp(this.mesh.rotation.x, 0, 10, dt);
-    if (this.T.bike) this.mesh.rotation.z = damp(this.mesh.rotation.z, this.fallen ? 1.45 : this.parked && !this.driver ? 0.18 : clamp(this.steerV * Math.min(Math.abs(this.v) / 8, 1) * 0.45, -0.5, 0.5), this.fallen ? 10 : 8, dt);
-    else this.mesh.rotation.z = damp(this.mesh.rotation.z, clamp(-this.steerV * this.v * 0.004, -0.08, 0.08), 6, dt);
+    const gnd = W.groundAt(this.x, this.z), fx = Math.sin(this.h), fz = Math.cos(this.h);
+    this.mesh.position.set(this.x, this.y + gnd, this.z); this.mesh.rotation.y = this.h;
+    // pitch and roll with the slope underneath; in the air the nose lifts a little
+    const pitchG = -Math.atan(W.slopeAlong(this.x, this.z, fx, fz)), rollG = -Math.atan(W.slopeAlong(this.x, this.z, -fz, fx));
+    this.mesh.rotation.x = this.y > 0.05 ? damp(this.mesh.rotation.x, -0.25, 8, dt) : damp(this.mesh.rotation.x, pitchG, 10, dt);
+    if (this.T.bike) this.lean = damp(this.lean || 0, this.fallen ? 1.45 : this.parked && !this.driver ? 0.18 : clamp(this.steerV * Math.min(Math.abs(this.v) / 8, 1) * 0.45, -0.5, 0.5), this.fallen ? 10 : 8, dt);
+    else this.lean = damp(this.lean || 0, clamp(-this.steerV * this.v * 0.004, -0.08, 0.08), 6, dt);
+    this.mesh.rotation.z = this.lean + (this.y > 0.05 ? 0 : rollG);
     if (this.rider) this.rider.visible = this.driver === 'ai';
   }
   remove() { this.dead = true; G.scene.remove(this.mesh); }
@@ -364,7 +379,7 @@ const Skids = {
     const fx = Math.sin(car.h), fz = Math.cos(car.h), rx = -fz, rz = fx, back = car.T.len * 0.32, side = car.T.w * 0.4;
     for (const s of [-1, 1]) {
       const x = car.x - fx * back + rx * side * s, z = car.z - fz * back + rz * side * s;
-      this.d.position.set(x, 0.065, z); this.d.rotation.set(0, Math.atan2(car.vx, car.vz), 0); this.d.updateMatrix();
+      this.d.position.set(x, 0.065 + W.groundAt(x, z), z); this.d.rotation.set(0, Math.atan2(car.vx, car.vz), 0); this.d.updateMatrix();
       this.mesh.setMatrixAt(this.i, this.d.matrix); this.i = (this.i + 1) % this.N;
       if (Math.random() < 0.45) Puffs.add(x, 0.4, z, rand(-0.6, 0.6) - car.vx * 0.05, rand(0.3, 0.8), rand(-0.6, 0.6) - car.vz * 0.05, 0.7, 3.2, 1.4, pick(['#e8e8e8', '#d4d4d4']), 0.45, 0.4); // tyre smoke
     }
@@ -635,7 +650,7 @@ const Spikes = {
     const g = new THREE.Group();
     const base = new THREE.Mesh(new THREE.BoxGeometry(len, 0.08, 0.7), lam('#2b2b2b')); g.add(base);
     for (let k = -len / 2 + 0.3; k < len / 2; k += 0.45) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.25, 4), lam('#d9d9d9')); s.position.set(k, 0.15, 0); g.add(s); }
-    g.position.set(x, 0.06, z); g.rotation.y = ang; G.scene.add(g);
+    g.position.set(x, 0.06 + W.groundAt(x, z), z); g.rotation.y = ang; G.scene.add(g);
     this.list.push({ x, z, ang, len, life, g, byPlayer });
   },
   update(dt) {
