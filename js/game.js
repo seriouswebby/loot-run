@@ -451,7 +451,8 @@ G.bail = function (car, impact, vx, vz) {
   G.exitCar(true);
   car.v = 0; car.vx *= 0.2; car.vz *= 0.2;
   G.toast('Thrown off the ' + car.T.name.toLowerCase() + '!', 'warn');
-  if (car.T.pedal) { G.remount = { bike: car, t: 1.3, h: car.h }; car.leftT = 120; }
+  // the bike stays where it fell: walk back and press F to pick it up (no teleporting it back under you)
+  if (car.T.pedal) car.leftT = 120;
   launch(P); P.vx = P.vz = 0; P.kx = vel.x; P.kz = vel.z; P.yv = lift;
   if (G.hurtPlayer(Math.min(45, impact * 1.4), P.x - dx, P.z - dz, 0, null)) return; // knocked out: that ragdolls too
   if (Phys.ready && Phys.ragdoll(P, vel, spin)) { P.kx = P.kz = 0; P.tumble = { t: 0 }; Sfx.whoosh(P.x, P.z); return; }
@@ -691,9 +692,24 @@ const MISSIONS = [
     steps: [{ t: 'rob', target: 'jewel', text: 'Rob Glimmer & Co. (security is optional)' }, { t: 'loseHeat', text: 'Escape: highway, alleys or Forest Park' }, { t: 'goto', at: 'hideout', text: 'Return to Kade Auto' }],
   },
   {
+    id: 'snitch', title: 'The Snitch', reward: 2200,
+    intro: [[V, "Somebody talked about the jewelry job. A guy called Marty, and he's driving to the cops right now in a silver sedan."],
+      [V, "Grab any car, catch him, and run him off the road. Don't let him get away."]],
+    steps: [{ t: 'steal', text: 'Get a car' }, { t: 'chase', kind: 'sedan', color: '#c8ccd0', text: "Wreck Marty's silver sedan" }],
+    outro: [[V, "Marty won't be talking to anyone for a while. Nice driving."]],
+  },
+  {
     id: 'truck', title: 'Armored Ego', reward: 800,
     intro: [[V, 'An armored cash truck is parked just north of Bayhaven Federal. The guards are on lunch.'], [V, 'Take it, shake the cops, and sell it to Rusty. Armored trucks fetch top dollar.']],
     steps: [{ t: 'spawnTruck' }, { t: 'steal', missionCar: true, text: 'Steal the armored truck north of the bank' }, { t: 'loseHeat', text: 'Lose the cops' }, { t: 'sell', missionCar: true, text: "Sell the truck at Rusty's Chop Shop" }],
+  },
+  {
+    id: 'flight', title: 'Flight School', reward: 2500,
+    intro: [[V, 'Next job needs a pilot. The flight school at City Airport, west of town, never locks its prop planes.'],
+      [V, 'Take one up, fly the circuit through the markers, and put it back down on the runway in one piece.']],
+    steps: [{ t: 'goto', at: 'airport', r: 30, text: 'Get to City Airport (west, off Airport Road)' }, { t: 'board', kinds: ['prop'], text: 'Climb into a prop plane on the apron' },
+      { t: 'rings', set: 'circuit', text: 'Fly through the markers' }, { t: 'land', at: 'runway', text: 'Land on the runway and stop' }],
+    outro: [[V, "Smooth landing. Now that you can fly, I've got bigger plans for you."]],
   },
   {
     id: 'bank', title: 'The Federal Job', reward: 3000,
@@ -705,6 +721,23 @@ const MISSIONS = [
       { t: 'loseHeat', text: 'Lose the cops' }, { t: 'goto', at: 'hideout', text: 'Return to Kade Auto' }],
   },
   {
+    id: 'skycash', title: 'Cash in Transit', reward: 6000,
+    intro: [[V, 'SkyCash at the airport changes a fortune in foreign money every night.'],
+      [V, "Cut their alarm, loop both cameras, and empty the desk. Then take the private jet and lose the cops in the air."]],
+    steps: [{ t: 'cutAlarm', target: 'fxdesk', text: "Cut SkyCash's alarm box (at the airport terminal)" }, { t: 'loopCams', target: 'fxdesk', text: 'Loop or shoot out both SkyCash cameras' },
+      { t: 'rob', target: 'fxdesk', text: 'Empty the SkyCash desk (hold E)' }, { t: 'board', kinds: ['bizjet'], text: 'Steal the private jet on the apron' },
+      { t: 'loseHeat', text: 'Lose the cops' }, { t: 'land', text: 'Land somewhere and stop' }],
+    outro: [[V, 'A getaway by private jet. Bayhaven has never seen anything like you.']],
+  },
+  {
+    id: 'topgun', title: 'Top Gun', reward: 7500,
+    intro: [[V, 'Air Base Seven keeps two fighter jets fuelled. A buyer up north wants one, no questions asked.'],
+      [V, "Steal a jet, fly the markers over Pine Ridge before they scramble everything, and land it on the runway. Expect company."]],
+    steps: [{ t: 'board', kinds: ['fighter'], text: 'Steal a fighter jet at Air Base 7 (airport, west side)' }, { t: 'setHeat', n: 3 },
+      { t: 'rings', set: 'ridge', time: 120, text: 'Fly through the markers over Pine Ridge' }, { t: 'land', at: 'runway', text: 'Land the jet on the airport runway' }],
+    outro: [[V, "The buyer's thrilled. And the air base is going to need better locks."]],
+  },
+  {
     id: 'boat', title: 'Last Boat Out', reward: 10000,
     intro: [[V, "The feds traced the bank job back to my garage. We're done in Bayhaven."], [V, 'A boat is waiting at Pier 9, south across the Ring Highway. Every cop in the city is out. Just get there.']],
     steps: [{ t: 'setHeat', n: 4 }, { t: 'goto', at: 'pier', r: 5, text: 'Reach the boat at Pier 9' }],
@@ -712,8 +745,13 @@ const MISSIONS = [
   },
 ];
 
+/* marker rings for the flying jobs: [x, z, altitude] */
+const RINGS = {
+  circuit: [[-560, 300, 30], [-330, 200, 45], [-280, -60, 55], [-560, -250, 60], [-950, -150, 50], [-1150, 150, 35]],
+  ridge: [[-650, -900, 65], [-300, -1130, 75], [50, -1130, 75], [330, -950, 60], [100, -620, 50], [-350, -420, 45]],
+};
 const Story = {
-  active: null,
+  active: null, rings: [],
   get done() { return G.S.storyDone; },
   available() { return G.S.storyDone < MISSIONS.length && !this.active; },
   next() { return MISSIONS[G.S.storyDone]; },
@@ -742,6 +780,8 @@ const Story = {
       this.advance(); return;
     }
     if (s.t === 'rob' && W.places[s.target]) W.places[s.target].cd = 0;
+    if (s.t === 'rings') this.showRings(RINGS[s.set], 0);
+    if (s.t === 'chase') this.spawnRunner(s);
     if (this.check(s)) { this.advance(); return; }
     if (!G.autotest && a.i > 0) Sfx.sting('step');
   },
@@ -756,9 +796,32 @@ const Story = {
       case 'loseHeat': return Heat.level === 0;
       case 'cutAlarm': { const al = W.places[s.target].sec.alarm; return al.cutT > 0; }
       case 'loopCams': return W.places[s.target].sec.cams.every((c) => c.loopT > 0 || c.deadT > 0);
+      case 'board': return !!P.inHeli && s.kinds.includes(P.inHeli.kind);
+      case 'rings': return a.count >= RINGS[s.set].length;
+      case 'land': { const h = P.inHeli; if (!h || !G.heliLanded(h)) return false; if (s.at !== 'runway') return true; const r = W.AIRPORT.runway; return h.x > r.minX - 10 && h.x < r.maxX + 10 && h.z > r.minZ - 10 && h.z < r.maxZ + 10; }
+      case 'chase': { const c = a.target; return !!c && (c.wreck || c.dead || c.hp <= 0 || c.driver !== 'ai'); }
       default: return false;
     }
   },
+  /* the chase target: a car that drives away from you as fast as it dares */
+  spawnRunner(s) {
+    const a = this.active, t = G.body();
+    let cands = W.nodes.filter((n) => { const d = dist(n.x, n.z, t.x, t.z); return d > 80 && d < 150 && n.adj.length && !n.hwy; });
+    if (!cands.length) cands = W.nodes.filter((n) => n.adj.length);
+    const n = pick(cands), nb = W.nodes[pick(n.adj)];
+    const car = new Car(s.kind || 'sedan', n.x, n.z, Math.atan2(nb.x - n.x, nb.z - n.z), { color: s.color, mission: true, persistent: true });
+    car.driver = 'ai'; initTraffic(car, n.id, nb.id); car.ai.flee = true; car.v = 8;
+    a.target = car; a.lostT = 0;
+  },
+  showRings(list, k) {
+    this.clearRings();
+    list.forEach(([x, z, y], i) => {
+      if (i < k || i > k + 1) return;
+      const m = new THREE.Mesh(new THREE.TorusGeometry(10, 0.7, 8, 36), new THREE.MeshBasicMaterial({ color: i === k ? 0xffd23f : 0xfff3b0, transparent: true, opacity: i === k ? 0.9 : 0.35 }));
+      const [px, pz] = i > 0 ? list[i - 1] : [x - 50, z]; m.position.set(x, y, z); m.rotation.y = Math.atan2(x - px, z - pz); G.scene.add(m); this.rings.push(m);
+    });
+  },
+  clearRings() { for (const m of this.rings) G.scene.remove(m); this.rings = []; },
   event(type, payload) {
     const a = this.active; if (!a) return;
     const s = this.step(); if (!s) return;
@@ -770,18 +833,30 @@ const Story = {
     const a = this.active; if (!a) return;
     const s = this.step(); if (!s) return;
     a.t += dt;
+    if (s.t === 'rings') {
+      const list = RINGS[s.set], r = list[a.count], P = G.player, B = G.body(), y = P.inHeli ? P.inHeli.y + 1.5 : P.inCar ? 1 : P.y + 1;
+      if (r && dist(B.x, B.z, r[0], r[1]) < 12 && Math.abs(y - r[2]) < 12) { a.count++; Sfx.tick(); Sfx.whoosh(); if (a.count < list.length) { G.toast('Marker ' + a.count + ' of ' + list.length, 'good'); this.showRings(list, a.count); } else this.clearRings(); }
+      if (s.time && a.t > s.time) { this.fail('Too slow through the markers.'); return; }
+    }
+    if (s.t === 'chase' && a.target && !a.target.dead) {
+      const B = G.body(); a.lostT = dist(a.target.x, a.target.z, B.x, B.z) > 280 ? a.lostT + dt : 0;
+      if (a.lostT > 6) { this.fail('Marty got away.'); return; }
+    }
     if (this.check(s)) this.advance();
   },
   fail(reason, quiet) {
     const a = this.active; if (!a) return;
     if (a.car && !a.car.dead && G.player.inCar !== a.car) a.car.remove();
+    if (a.target && !a.target.dead) a.target.remove();
+    this.clearRings();
     this.active = null;
     G.toast('Job failed: ' + reason + ' Talk to Vera to try again.', 'warn');
     if (!quiet) UI.banner('JOB FAILED', reason, 'ko');
     Sfx.sting('fail');
   },
   complete() {
-    const m = this.active.m;
+    const m = this.active.m; this.clearRings();
+    if (this.active.target && !this.active.target.dead && !this.active.target.wreck) this.active.target.mission = false;
     this.active = null;
     G.S.storyDone++;
     if (G.S.storyDone >= MISSIONS.length) { Heat.clear(); clearPolice(); }
@@ -803,6 +878,10 @@ const Story = {
       case 'sell': return W.places.chop;
       case 'cutAlarm': return W.places[s.target].sec.alarm;
       case 'loopCams': { const c = W.places[s.target].sec.cams.find((k) => k.loopT <= 0 && k.deadT <= 0); return c || null; }
+      case 'board': { const P = G.player; let best = null, bd = 1e9; for (const h of Choppers.list) if (!h.dead && !h.pilot && s.kinds.includes(h.kind)) { const d = dist(h.x, h.z, P.x, P.z); if (d < bd) { bd = d; best = h; } } return best; }
+      case 'rings': { const r = RINGS[s.set][a.count]; return r ? { x: r[0], z: r[1] } : null; }
+      case 'land': { if (s.at !== 'runway') return null; const r = W.AIRPORT.runway; return { x: (r.minX + r.maxX) / 2, z: (r.minZ + r.maxZ) / 2 }; }
+      case 'chase': return a.target && !a.target.dead ? a.target : null;
       default: return null;
     }
   },
@@ -812,6 +891,7 @@ const Story = {
     const s = this.step();
     let text = s ? s.text : '';
     if (s && s.t === 'robKind') text += ' (' + a.count + '/' + s.n + ')';
+    if (s && s.t === 'rings') text += ' (' + a.count + '/' + RINGS[s.set].length + (s.time ? ' · ' + Math.max(0, Math.ceil(s.time - a.t)) + 's' : '') + ')';
     return { title: a.m.title, text };
   },
 };

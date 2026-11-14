@@ -525,13 +525,16 @@ function aiTraffic(car, dt) {
       const B = W.nodes[a.to];
       let opts = B.adj.filter((n) => n !== a.from);
       if (!opts.length) opts = B.adj;
-      a.from = a.to; a.to = pick(opts); navPoints(car);
+      let next = pick(opts);
+      // a fleeing driver mostly takes the turn that leads away from you
+      if (a.flee && Math.random() < 0.8) { const t = G.body(); next = opts.slice().sort((p, q) => dist(W.nodes[q].x, W.nodes[q].z, t.x, t.z) - dist(W.nodes[p].x, W.nodes[p].z, t.x, t.z))[0]; }
+      a.from = a.to; a.to = next; navPoints(car);
     }
   }
   a.checkT -= dt; a.ignoreT -= dt;
   if (a.checkT <= 0) { a.checkT = 0.15; a.blocked = obstacleAhead(car, 6 + Math.max(0, car.v) * 0.6); }
-  let want = a.limit;
-  if (a.blocked) {
+  let want = a.flee ? Math.min(car.T.maxV * 0.85, a.limit * 1.8) : a.limit;
+  if (a.blocked && !a.flee) {
     want = 0; a.blockT += dt;
     if (a.blocked === 'player' && a.blockT > 1.2 && car.honkT <= 0) { car.honkT = 3; Sfx.honk(car.x, car.z); }
     if (a.blocked === 'car' && a.blockT > 3.5) { a.ignoreT = 1.5; a.blockT = 0; }

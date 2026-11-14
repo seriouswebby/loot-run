@@ -196,6 +196,15 @@ function runAutotest() {
         const ch = W.places.chop; P.inCar.x = ch.x; P.inCar.z = ch.z; G.sellCar(); break;
       }
       case 'cutAlarm': G.cutAlarm(W.places[s.target].sec.alarm); break;
+      case 'board': {
+        let h = Choppers.list.find((q) => s.kinds.includes(q.kind) && !q.pilot && !q.dead && G.heliLanded(q));
+        if (!h) h = new Chopper(s.kinds[0], P.x + 8, P.z, 0);
+        if (P.inCar) G.exitCar(true);
+        tp(h.x + 3, h.z); G.enterHeli(h); break;
+      }
+      case 'rings': { const h = P.inHeli; for (const r of RINGS[s.set].slice(a.count)) { h.x = r[0]; h.z = r[1]; h.y = r[2]; h.v = 40; h.thr = 0.6; steps(STEP * 2); } break; }
+      case 'land': { const h = P.inHeli, r = W.AIRPORT.runway; Heat.clear(); h.x = (r.minX + r.maxX) / 2; h.z = (r.minZ + r.maxZ) / 2; h.y = 0; h.vy = 0; h.v = 0; h.thr = 0; h.vx = h.vz = 0; break; }
+      case 'chase': if (a.target) a.target.damage(9999, a.target.x + 1, a.target.z, P); break;
       case 'loopCams': for (const c of W.places[s.target].sec.cams) G.loopCam(c); break;
       default: break;
     }
@@ -476,7 +485,7 @@ function runAutotest() {
     Input.keys.KeyW = true; let inside = false; for (let i = 0; i < 300 && !inside; i++) { step(STEP); inside = W.zoneAt(car.x, car.z) === 'airport'; }
     Input.keys.KeyW = false; G.exitCar(true); car.remove();
     // the currency exchange is a normal hold-E robbery
-    const fx = W.places.fxdesk; tp(fx.x, fx.z - 1.2); const cash0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(fx) + 0.6);
+    const fx = W.places.fxdesk; fx.cd = 0; fx.robbing = false; tp(fx.x, fx.z - 1.2); const cash0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(fx) + 0.6);
     const robbed = G.S.cash > cash0 + 900;
     Heat.clear(); clearPolice();
     // a gunship on the air base pad: steal it, take off, fire the nose gun
@@ -796,14 +805,26 @@ function runAutotest() {
     const bike = run('bicycle'), bmx = run('bmx');
     return (bike > 60 && bmx > 55) || `pedal bike ${bike.toFixed(0)} km/h, BMX ${bmx.toFixed(0)} km/h`;
   });
-  T('pedal bikes and BMXs: fall over, hop back on, vanish if left', () => {
+  T('chase job: the runner flees along the roads and the job ends when it is wrecked', () => {
+    reset(); G.noSpawn = true; const i = MISSIONS.findIndex((m) => m.id === 'snitch'); G.S.storyDone = i; tp(W.places.hideout.x, W.places.hideout.z);
+    Story.begin(); const car = new Car('sports', P.x + 3, P.z, 0); G.enterCar(car); steps(0.5);
+    const r = Story.active && Story.active.target, x0 = r && r.x, z0 = r && r.z; steps(4);
+    const moved = r && dist(r.x, r.z, x0, z0) > 25 && r.driver === 'ai' && Story.target() === r;
+    if (r) r.damage(9999, r.x + 1, r.z, P); steps(0.5);
+    const done = G.S.storyDone === i + 1;
+    if (P.inCar) G.exitCar(true); car.remove(); G.noSpawn = false; Story.active = null;
+    return (moved && done) || `runner moved ${moved} (${r ? dist(r.x, r.z, x0, z0).toFixed(0) : 'none'} m) job done ${done}`;
+  });
+  T('pedal bikes and BMXs: fall over, you pick them back up, they vanish if left', () => {
     const bad = [];
     for (const type of ['bicycle', 'bmx']) {
       reset(); G.noSpawn = true; tp(0, 25); const b = new Car(type, 1.5, 25, 0); G.enterCar(b); G.god = true;
       b.damage(9999, 0, 0, null); steps(0.4);
       const thrown = !P.inCar && b.fallen && !b.wreck && b.burning <= 0;
       steps(5);
-      const back = P.inCar === b && !b.fallen;
+      const stayedDown = !P.inCar && b.fallen; // no automatic remount: you pick it up yourself
+      tp(b.x + 1.2, b.z); G.interact = computeInteract(); const label = G.interact.f && G.interact.f.label; if (G.interact.f) G.interact.f.run();
+      const back = stayedDown && P.inCar === b && !b.fallen && /Pick up/.test(label || '');
       // knocked over with nobody on it: no explosion, and it despawns after its timer
       G.exitCar(); const left = b.leftT;
       explosion(b.x + 1, b.z, 7, 120, null); steps(1);
