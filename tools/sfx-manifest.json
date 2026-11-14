@@ -43,5 +43,8 @@
   "amb_city": { "id": 512142, "loop": true, "start": 5.0, "dur": 12.0, "xfade": 1.0, "kbps": 48 },
   "amb_wind": { "id": 22331, "loop": true, "start": 4.0, "dur": 10.0, "xfade": 1.0, "kbps": 48 },
   "amb_rain": { "id": 507902, "loop": true, "start": 3.0, "dur": 8.0, "xfade": 1.0, "kbps": 48 },
-  "amb_forest": { "id": 34180, "loop": true, "start": 2.0, "dur": 12.0, "xfade": 1.0, "kbps": 48 }
+  "amb_forest": { "id": 34180, "loop": true, "start": 2.0, "dur": 12.0, "xfade": 1.0, "kbps": 48 },
+  "engine_prop": { "id": 403316, "loop": true, "start": 5.5, "dur": 5.0, "xfade": 0.8, "kbps": 64 },
+  "engine_jet": { "id": 437888, "loop": true, "start": 4.0, "dur": 8.0, "xfade": 0.6, "kbps": 64 },
+  "engine_fighter": { "id": 104883, "loop": true, "start": 12.0, "dur": 8.0, "xfade": 0.6, "kbps": 64 }
 }

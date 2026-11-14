@@ -91,9 +91,10 @@ const UI = {
     // weapon + items
     const w = WEAPONS[P.weapon], car = P.inCar, heli = P.inHeli, items = [];
     if (heli) {
-      this.set('weapon', ({ police: 'POLICE CHOPPER', tour: 'TOUR CHOPPER', news: 'NEWS CHOPPER', attack: 'GUNSHIP' })[heli.kind] || 'CHOPPER');
-      this.set('ammo', (heli.armed ? 'GUN ' + heli.ammo + (G.heliAim ? ' · LOCKED · ' : ' · ') : '') + 'HULL ' + Math.round(clamp(heli.hp / heli.maxHp, 0, 1) * 100) + '% · ALT ' + Math.round(heli.y) + ' M');
-      items.push('SPACE climb', '⇧ descend', G.S.parachute ? 'F bail out (chute ×' + G.S.parachute + ')' : 'F land & exit');
+      this.set('weapon', heli.wing ? PLANES[heli.kind].name : ({ police: 'POLICE CHOPPER', tour: 'TOUR CHOPPER', news: 'NEWS CHOPPER', attack: 'GUNSHIP' })[heli.kind] || 'CHOPPER');
+      this.set('ammo', (heli.armed ? 'GUN ' + heli.ammo + (G.heliAim ? ' · LOCKED · ' : ' · ') : '') + (heli.wing ? Math.round(heli.v * 3.6) + ' KM/H · THR ' + Math.round(heli.thr * 100) + '% · ' + (heli.stall ? 'STALL · ' : '') : '') + 'HULL ' + Math.round(clamp(heli.hp / heli.maxHp, 0, 1) * 100) + '% · ALT ' + Math.round(heli.y) + ' M');
+      if (heli.wing) items.push('W/S throttle', 'SPACE pull up', '⇧ dive', G.S.parachute ? 'F bail out (chute ×' + G.S.parachute + ')' : 'F stop & exit');
+      else items.push('SPACE climb', '⇧ descend', G.S.parachute ? 'F bail out (chute ×' + G.S.parachute + ')' : 'F land & exit');
       if (heli.armed) items.unshift('CLICK fire');
     } else if (car) {
       this.set('weapon', car.T.name.toUpperCase());
@@ -173,7 +174,7 @@ function drawMap(ctx, size, cx, cz, span, full) {
   }
   const pl = W.places;
   for (const s of pl.shops) label(s.x, s.z, 'G', '#ff8a3d');
-  for (const hp of pl.helipads) if (inView(hp.x, hp.z)) label(hp.x, hp.z, 'H', '#ffffff');
+  for (const hp of pl.helipads) if (inView(hp.x, hp.z) && !hp.stand) label(hp.x, hp.z, 'H', '#ffffff');
   label(pl.chop.x, pl.chop.z, 'R', '#ff7b29');
   label(pl.hospital.x, pl.hospital.z, '+', '#ff5a5f');
   label(pl.police.x, pl.police.z, 'P', '#6fa8ff');
@@ -367,7 +368,7 @@ function updateCamera(dt) {
       yaw = CAM.carYaw + CAM.carLook; pitch = CAM.carPitch; CAM.yaw = yaw;
     }
     CAM.wasInCar = !!veh;
-    const back = P.inHeli ? 17 : P.inCar ? (P.inCar.T.bike ? 7 : 10) + spd * 0.08 : CAM.chaseD;
+    const back = P.inHeli ? (P.inHeli.wing ? PLANES[P.inHeli.kind].cam : 17) : P.inCar ? (P.inCar.T.bike ? 7 : 10) + spd * 0.08 : CAM.chaseD;
     const fx3 = Math.sin(yaw), fz3 = Math.cos(yaw), cp = Math.cos(pitch), spch = Math.sin(pitch);
     const sh = veh ? 0 : 0.75; // over-the-shoulder offset to the right
     const px = t.x - fz3 * sh, pz = t.z + fx3 * sh, py = P.inHeli ? fy + 3.5 : P.inCar ? 2.3 : fy + 1.8;
@@ -435,12 +436,14 @@ function updateMarkers() {
 }
 
 /* ---------------- interactions ---------------- */
+const AIRCRAFT_LABEL = { police: 'Steal the police helicopter (+2 heat)', attack: 'Steal the gunship (+2 heat)', tour: 'Fly the tour helicopter', news: 'Steal the news helicopter',
+  prop: 'Fly the prop plane', bizjet: 'Steal the private jet', fighter: 'Steal the fighter jet (+2 heat)' };
 function computeInteract() {
   const P = G.player, out = { e: null, f: null };
   if (G.respawning || P.down || P.tumble || P.handsUp > 0) return out;
-  if (P.inHeli) { const h = P.inHeli; out.f = { label: G.heliLanded(h) ? 'Get out' : G.S.parachute > 0 ? 'Bail out with your parachute' : 'Land first (hold Shift)', run: () => G.exitHeli() }; return out; }
+  if (P.inHeli) { const h = P.inHeli; out.f = { label: G.heliLanded(h) ? 'Get out' : G.S.parachute > 0 ? 'Bail out with your parachute' : h.wing ? 'Land and stop first (S brakes)' : 'Land first (hold Shift)', run: () => G.exitHeli() }; return out; }
   if (P.y > 1.5) {
-    for (const h of Choppers.list) if (!h.dead && !h.pilot && h.falling <= 0 && G.heliLanded(h) && Math.abs(h.y - P.y) < 2.5 && dist(h.x, h.z, P.x, P.z) < 5.5) { const hh = h; out.f = { label: hh.police ? 'Steal the police helicopter (+2 heat)' : 'Fly the helicopter', run: () => G.enterHeli(hh) }; }
+    for (const h of Choppers.list) if (!h.dead && !h.pilot && h.falling <= 0 && G.heliLanded(h) && Math.abs(h.y - P.y) < 2.5 && dist(h.x, h.z, P.x, P.z) < 5.5) { const hh = h; out.f = { label: AIRCRAFT_LABEL[hh.kind] || 'Fly the helicopter', run: () => G.enterHeli(hh) }; }
     return out;
   }
   if (P.inCar) {
@@ -466,8 +469,8 @@ function computeInteract() {
     const car = bc; out.f = { label: lbl, run: () => G.enterCar(car) };
   }
   let bh = null, bhd = 5.5;
-  for (const h of Choppers.list) { if (h.dead || h.pilot || h.falling > 0 || !G.heliLanded(h) || h.y > 1.5) continue; const d = dist(h.x, h.z, P.x, P.z); if (d < bhd) { bhd = d; bh = h; } }
-  if (bh && (!bc || bhd < bd + 1.5)) { const h = bh; out.f = { label: h.police ? 'Steal the police helicopter (+2 heat)' : 'Fly the tour helicopter', run: () => G.enterHeli(h) }; }
+  for (const h of Choppers.list) { if (h.dead || h.pilot || h.falling > 0 || !G.heliLanded(h) || h.y > 1.5) continue; const d = dist(h.x, h.z, P.x, P.z) - (h.wing ? 2.5 : 0); if (d < bhd) { bhd = d; bh = h; } }
+  if (bh && (!bc || bhd < bd + 1.5)) { const h = bh; out.f = { label: AIRCRAFT_LABEL[h.kind] || 'Fly the helicopter', run: () => G.enterHeli(h) }; }
   // E options by priority
   const pl = W.places;
   if (Story.available() && dist(P.x, P.z, pl.hideout.x, pl.hideout.z) < 3) { const m = Story.next(); out.e = { id: 'vera', label: 'Talk to Vera: "' + m.title + '"', run: () => Story.start() }; return out; }
@@ -538,7 +541,7 @@ function updatePlayer(dt) {
   G.slip = 0; G.boosting = false; G.throttle = fw;
   if (P.inHeli) {
     const h = P.inHeli;
-    if (h.falling <= 0) flyHeli(h, dt, fw, st, Input.down('Space') ? 1 : 0, key('ShiftLeft', 'ShiftRight') ? 1 : 0);
+    if (h.falling <= 0) (h.wing ? flyPlane : flyHeli)(h, dt, fw, st, Input.down('Space') ? 1 : 0, key('ShiftLeft', 'ShiftRight') ? 1 : 0);
     P.x = h.x; P.z = h.z; P.vx = h.vx; P.vz = h.vz;
     // armed choppers: hold the mouse button to fire the nose gun at the crosshair (or a locked-on chopper)
     if (h.armed && h.falling <= 0 && h.y > 1 && (Input.mdown || G.attackQ) && !G.uiBlock && P.cd <= 0) { G.attackQ = null; heliGunFire(h); }
@@ -884,10 +887,10 @@ function frame(now) {
   if (G.scene.fog) { const far = Math.min(900, G.scene.fog.far + 25); if (Math.abs(persp.far - far) > 5) { persp.far = far; persp.updateProjectionMatrix(); } }
   const sir = G.cars.filter((c) => c.siren && !c.wreck && !c.dead).sort((a, b) => dist(a.x, a.z, B.x, B.z) - dist(b.x, b.z, B.x, B.z)).slice(0, 2);
   let heli = null, hd = 1e9;
-  for (const h of Choppers.list) if (!h.dead && h.rotor > 0.3) { const d = h === P.inHeli ? 0 : dist(h.x, h.z, B.x, B.z); if (d < hd) { hd = d; heli = h; } }
+  for (const h of Choppers.list) if (!h.dead && h.rotor > 0.3 && (!h.wing || h.pilot)) { const d = h === P.inHeli ? 0 : dist(h.x, h.z, B.x, B.z); if (d < hd) { hd = d; heli = h; } }
   const cf = G.camFwd || { x: 0, z: -1 };
   Sfx.update(dt, { playing: G.state === 'play', lx: B.x, lz: B.z, rx: -cf.z, rz: cf.x, sirens: sir, heat: Heat.level, zone: G.playerZone, rain: Weather.p.rain, slip: G.slip || 0,
-    engine: P.inCar && !P.inCar.T.pedal ? { speed: P.inCar.v, throttle: G.throttle || 0, boost: G.boosting, bike: !!P.inCar.T.bike } : null, heli: heli ? { x: heli.x, z: heli.z } : null });
+    engine: P.inCar && !P.inCar.T.pedal ? { speed: P.inCar.v, throttle: G.throttle || 0, boost: G.boosting, bike: !!P.inCar.T.bike } : null, heli: heli ? { x: heli.x, z: heli.z, kind: heli.kind, v: heli.v || 0, thr: heli.thr || 0, mine: heli === P.inHeli } : null });
   renderer.render(G.scene, cam);
   Input.endFrame();
 }
@@ -1058,6 +1061,13 @@ function demoSetup(kind) {
   else if (kind === 'airport') { G.camMode = 'chase'; P.x = -650; P.z = 62; P.facing = CAM.yaw = 0; CAM.pitch = 0.18; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'airbase') { G.camMode = 'chase'; P.x = -960; P.z = 192; P.facing = CAM.yaw = -Math.PI / 2 - 0.3; CAM.pitch = 0.2; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'airportiso') { P.x = -760; P.z = 210; CAM.zoomIso = 230; CAM.curIso = 230; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'planes') { G.camMode = 'chase'; P.x = -680; P.z = 150; P.facing = CAM.yaw = Math.PI * 0.85; CAM.pitch = 0.22; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'fighters') { G.camMode = 'chase'; P.x = -1160; P.z = 178; P.facing = CAM.yaw = Math.PI * 0.95; CAM.pitch = 0.2; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'jetflight') {
+    G.noSpawn = true; G.camMode = 'chase'; const r = W.AIRPORT.runway, h = new Chopper('fighter', r.minX + 40, 300, Math.PI / 2); P.x = h.x; P.z = h.z + 6; G.enterHeli(h);
+    Input.keys.KeyW = true; for (let i = 0; i < 200; i++) step(STEP); Input.keys.Space = true; for (let i = 0; i < 120; i++) step(STEP); Input.keys.Space = false; Input.keys.KeyA = true; for (let i = 0; i < 40; i++) step(STEP); Input.keys.KeyA = false; Input.keys.KeyW = false;
+    CAM.yaw = h.yaw; CAM.pitch = 0.2;
+  }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }

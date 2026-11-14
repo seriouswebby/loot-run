@@ -162,7 +162,8 @@ const Sfx = {
   buildSampleLoops() {
     const L = {};
     for (const [k, dest, verb] of [['siren_wail', null, 0.25], ['siren_yelp', null, 0.25], ['engine_car'], ['engine_bike'], ['screech'], ['rotor', null, 0.2],
-      ['amb_city', this.amb], ['amb_wind', this.amb], ['amb_rain', this.amb], ['amb_forest', this.amb]]) L[k] = this.loopNode(k, dest, verb);
+      ['amb_city', this.amb], ['amb_wind', this.amb], ['amb_rain', this.amb], ['amb_forest', this.amb],
+      ['engine_prop', null, 0.1], ['engine_jet', null, 0.1], ['engine_fighter', null, 0.12]]) L[k] = this.loopNode(k, dest, verb);
     this.sloops = L;
   },
 
@@ -475,8 +476,18 @@ const Sfx = {
     this.screech.f.frequency.setTargetAtTime(2000 + Math.random() * 700, t, 0.04);
     // helicopter rotor
     const H = this.heli;
+    // planes: a recorded engine loop pitched by throttle and airspeed instead of the rotor
+    const planeSnd = s.playing && s.heli && { prop: 'engine_prop', bizjet: 'engine_jet', fighter: 'engine_fighter' }[s.heli.kind];
+    for (const k of ['engine_prop', 'engine_jet', 'engine_fighter']) {
+      const L = SL[k]; if (!L) continue;
+      if (k === planeSnd) {
+        const p = this.place(s.heli.x, s.heli.z, 300), on = s.heli.mine ? 1 : p.g;
+        L.g.gain.setTargetAtTime((0.3 + s.heli.thr * 0.5) * Math.max(on, 0.05), t, 0.15); this.setPan(L.p, s.heli.mine ? 0 : p.pan, t);
+        L.src.playbackRate.setTargetAtTime(0.75 + s.heli.thr * 0.35 + Math.min(0.3, s.heli.v / 400), t, 0.2);
+      } else L.g.gain.setTargetAtTime(0, t, 0.3);
+    }
     const R = SL.rotor;
-    if (s.playing && s.heli) {
+    if (s.playing && s.heli && !planeSnd) {
       const p = this.place(s.heli.x, s.heli.z, 230);
       if (R) { R.g.gain.setTargetAtTime(1.0 * Math.max(p.g, 0.05), t, 0.15); this.setPan(R.p, p.pan, t); R.f.frequency.setTargetAtTime(1200 + p.g * p.g * 14000, t, 0.2); H.g.gain.setTargetAtTime(0, t, 0.1); }
       else H.g.gain.setTargetAtTime(0.42 * Math.max(p.g, 0.05), t, 0.15);

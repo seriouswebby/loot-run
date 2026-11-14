@@ -37,7 +37,7 @@ function runAutotest() {
   T('world built', () => {
     const a = W.alleys[0], ac = W.zoneAt((a.minX + a.maxX) / 2, (a.minZ + a.maxZ) / 2);
     const ok = W.N === 8 && W.blocks.length >= 55 && W.nodes.length > 80 && W.robs.length >= 25 && W.cams.length >= 12 && W.alarms.length >= 11 && W.alleys.length >= 20
-      && W.places.shops.length === 3 && W.places.helipads.length === 6 && W.places.helipads.filter((p) => p.kind === 'attack').length === 2
+      && W.places.shops.length === 3 && W.places.helipads.filter((p) => !p.stand).length === 6 && W.places.helipads.filter((p) => p.kind === 'attack').length === 2 && W.places.helipads.filter((p) => p.stand).length === 5
       && W.zoneAt(W.FOREST_C.x, W.FOREST_C.z) === 'forest' && W.zoneAt(0, -W.HWY) === 'highway' && ac === 'alley' && W.zoneAt(-25, -5) === 'street' && W.zoneAt(60, W.SHORE - 6) === 'beach'
       && W.zoneAt(-650, 160) === 'airport' && !!W.places.fxdesk;
     return ok || `blocks ${W.blocks.length} nodes ${W.nodes.length} robs ${W.robs.length} cams ${W.cams.length} alarms ${W.alarms.length} alleys ${W.alleys.length} shops ${W.places.shops.length} pads ${W.places.helipads.length} alleyZone ${ac}`;
@@ -457,6 +457,27 @@ function runAutotest() {
     const fired = h.ammo < ammo0 && h.y > 3;
     G.exitHeli(true); Heat.clear(); clearPolice(); G.noSpawn = false;
     return (inside && robbed && stole && fired) || `drove in ${inside} robbed ${robbed} (cash +${G.S.cash - cash0}) stole gunship ${stole} fired ${fired} (alt ${h.y.toFixed(1)})`;
+  });
+  T('planes: take off down the runway, climb, bank, stall; fighter cannon fires', () => {
+    const bad = [];
+    for (const kind of ['prop', 'bizjet', 'fighter']) {
+      reset(); G.noSpawn = true; const r = W.AIRPORT.runway, z = (r.minZ + r.maxZ) / 2;
+      const h = new Chopper(kind, r.minX + 40, z, Math.PI / 2); tp(h.x, h.z + 6);
+      if (!G.enterHeli(h)) { bad.push(kind + ': could not board'); continue; }
+      Input.keys.KeyW = true; let rolled = 0;
+      for (let i = 0; i < 600 && h.v < PLANES[kind].vrot + 4; i++) { step(STEP); rolled = h.x - (r.minX + 40); }
+      Input.keys.Space = true; steps(4); Input.keys.Space = false;
+      const climbed = h.y > 15, onRunway = rolled < r.maxX - r.minX - 60;
+      const yaw0 = h.yaw; Input.keys.KeyD = true; steps(1.5); Input.keys.KeyD = false; const banked = Math.abs(angDiff(yaw0, h.yaw)) > 0.4;
+      let fired = true;
+      if (kind === 'fighter') { const a0 = h.ammo; Input.mdown = true; G.aimX = h.x + 60; G.aimZ = h.z; steps(0.4); Input.mdown = false; fired = h.ammo < a0; }
+      Input.keys.KeyW = false; Input.keys.KeyS = true; steps(1.5); Input.keys.KeyS = false;
+      for (let i = 0; i < 1200 && !(h.stall && h.vy < -2); i++) step(STEP); // with the engine idling it glides, slows, then stalls
+      const stalled = h.vy < -2 && h.stall;
+      if (!(climbed && onRunway && banked && fired && stalled && h.hp > 0)) bad.push(`${kind}: climbed ${climbed} (alt ${h.y.toFixed(0)}) took off within the runway ${onRunway} (${rolled.toFixed(0)} m) banked ${banked} fired ${fired} stalls ${stalled} (v ${h.v.toFixed(1)} vy ${h.vy.toFixed(1)} thr ${h.thr.toFixed(2)} y ${h.y.toFixed(1)}) hp ${h.hp}`);
+      Input.keys.KeyW = Input.keys.KeyS = false; G.exitHeli(true); h.remove(); G.noSpawn = false;
+    }
+    return !bad.length || bad.join(' | ');
   });
   T('county: no trees standing on the country roads', () => {
     const bad = [];

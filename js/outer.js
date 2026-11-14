@@ -262,6 +262,10 @@ function buildAirport(OP) {
   }
   addSign(-1150, 16, 145.4, 's', 'AIR BASE 7', '#2f3518', '#e9edc9', 12, 2.2, 'RESTRICTED AREA');
   helipad(-990, 175, 'attack', -Math.PI / 2); helipad(-990, 210, 'attack', -Math.PI / 2);
+  // aircraft stands: parked planes respawn here like choppers do on their pads
+  const stand = (x, z, kind, yaw) => { W.places.helipads.push({ x, z, yaw, kind, stand: true }); for (const s of [-1, 1]) GB.white.rect(x + s * 9 - 0.2, z - 7, x + s * 9 + 0.2, z + 7, 0.05, 1); };
+  stand(-600, 172, 'prop', 0); stand(-640, 172, 'prop', 0); stand(-720, 168, 'bizjet', 0);
+  stand(-1200, 196, 'fighter', 0); stand(-1120, 196, 'fighter', 0);
   addBuilding(-950, 140, 6, 5, 3.2, 'concrete');
   // inner fence between the civil apron and the air base (with a gap on the taxiway)
   const mx = -930; for (let z = 150; z < 236; z += 5) post(mx, z);

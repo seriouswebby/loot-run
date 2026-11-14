@@ -50,12 +50,14 @@ class Chopper {
   constructor(kind, x, z, yaw, o) {
     o = o || {};
     this.kind = kind; this.police = kind === 'police';
-    this.armed = this.police || kind === 'attack' || !!o.armed; this.ammo = kind === 'attack' ? 900 : this.armed ? 500 : 0; // police choppers and gunships carry a nose gun
+    const PL = PLANES[kind]; this.wing = !!PL; this.v = 0; this.thr = 0;
+    this.armed = this.police || kind === 'attack' || !!(PL && PL.armed) || !!o.armed; // police choppers, gunships and fighters carry a gun
+    this.ammo = PL ? PL.ammo || 0 : kind === 'attack' ? 900 : this.armed ? 500 : 0;
     this.x = x; this.z = z; this.y = o.y || 0; this.vx = 0; this.vz = 0; this.vy = 0; this.yaw = yaw || 0;
-    this.maxHp = kind === 'attack' ? 440 : this.police ? 320 : 240; this.hp = this.maxHp; this.top = kind === 'attack' ? 44 : 36;
+    this.maxHp = PL ? PL.hp : kind === 'attack' ? 440 : this.police ? 320 : 240; this.hp = this.maxHp; this.top = kind === 'attack' ? 44 : 36;
     this.rotor = this.y > 0 ? 1 : 0; this.spin = 0; this.pilot = o.pilot || null; this.pad = o.pad || null;
     this.falling = 0; this.dead = false; this.tilt = 0; this.roll = 0; this.leaving = false; this.lastHit = null;
-    this.m = buildHeliMesh(kind); G.scene.add(this.m.root);
+    this.m = PL ? buildPlaneMesh(kind) : buildHeliMesh(kind); G.scene.add(this.m.root);
     if (this.pilot === 'ai') this.makeSpot();
     Choppers.list.push(this);
   }
@@ -72,7 +74,7 @@ class Chopper {
     if (this.hp > 0) return;
     this.falling = 3; this.vy = -1;
     if (this.pilot === 'ai' && src === G.player) { Heat.add(1, 5, 'Police helicopter down'); G.toast('You shot down the police helicopter!', 'good'); G.S.stats.kos++; }
-    if (G.player.inHeli === this) G.toast('Mayday! Your helicopter is going down!', 'warn');
+    if (G.player.inHeli === this) G.toast(this.wing ? 'Mayday! Your plane is going down — bail out!' : 'Mayday! Your helicopter is going down!', 'warn');
   }
   sync(dt) {
     const m = this.m;
@@ -81,6 +83,8 @@ class Chopper {
     m.root.rotation.set(0, this.yaw, 0);
     m.body.rotation.set(this.tilt, 0, -this.roll);
     m.rotor.rotation.y = this.spin; m.tail.rotation.x = this.spin * 1.5;
+    if (m.prop) m.prop.rotation.z = this.spin * 1.4;
+    if (m.glow) m.glow.material.opacity = this.pilot ? 0.25 + this.thr * 0.7 : 0;
     m.disc.material.opacity = this.rotor > 0.6 ? 0.12 * this.rotor : 0;
     if (m.lights) { const ph = Math.floor(G.time * 5) % 2, on = this.pilot === 'ai' || this.rotor > 0.5; m.lights[0].material.color.set(on && ph ? 0xff2020 : 0x441111); m.lights[1].material.color.set(on && !ph ? 0x2050ff : 0x111144); }
     if (this.cone) {
@@ -263,12 +267,109 @@ function heliShoot(h, t) {
   } else { FX.burst(ix, 0.2, iz, 3, ['#9c9488', '#d9d2c3'], 3, 0.1, 0.3); Sfx.impact(ix, iz); }
 }
 
+/* ---------------- fixed-wing aircraft: they share the helicopter code path (P.inHeli) ---------------- */
+const PLANES = {
+  prop: { name: 'PROP PLANE', vmax: 55, accel: 9, vrot: 24, vstall: 19, climb: 10, turn: 0.95, hp: 200, ceil: 120, cam: 21, snd: 'engine_prop' },
+  bizjet: { name: 'PRIVATE JET', vmax: 88, accel: 13, vrot: 40, vstall: 32, climb: 15, turn: 0.75, hp: 260, ceil: 150, cam: 25, snd: 'engine_jet' },
+  fighter: { name: 'FIGHTER JET', vmax: 125, accel: 24, vrot: 44, vstall: 34, climb: 24, turn: 1.25, hp: 380, ceil: 160, cam: 26, snd: 'engine_fighter', armed: true, ammo: 1200 },
+};
+function buildPlaneMesh(kind) {
+  const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
+  const add = (w, h, d, x, y, z, c, ry, rz) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(c)); m.position.set(x, y, z); m.rotation.set(0, ry || 0, rz || 0); m.castShadow = true; body.add(m); return m; };
+  const wheel = (x, z, s) => { add(0.1, 0.9 * s, 0.1, x, 0.75 * s, z, '#555555'); add(0.28, 0.55 * s, 0.55 * s, x, 0.28 * s, z, '#1b1b1e'); };
+  let prop = null, glow = null;
+  if (kind === 'prop') {
+    const main = '#f4f1ea', trim = '#c1121f';
+    add(1.3, 1.4, 6.6, 0, 1.6, 0, main); add(1.24, 0.8, 1.7, 0, 2.15, 1.2, '#22303c');
+    add(11, 0.14, 1.6, 0, 2.4, 0.9, main); add(11.05, 0.16, 0.32, 0, 2.4, 1.6, trim);
+    for (const sx of [-1, 1]) add(0.08, 1.1, 0.08, sx * 1.9, 1.85, 1.0, '#999999', 0, sx * 0.5);
+    add(0.9, 0.9, 2.6, 0, 1.7, -4.0, main); add(0.12, 1.5, 1.2, 0, 2.7, -4.9, trim); add(3.6, 0.1, 0.9, 0, 1.9, -4.9, main);
+    add(0.62, 0.62, 0.4, 0, 1.6, 3.5, '#555555');
+    prop = new THREE.Group(); prop.position.set(0, 1.6, 3.75); body.add(prop);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.3, 0.06), lam('#222222')); prop.add(blade);
+    wheel(-1.1, 0.5, 1); wheel(1.1, 0.5, 1); wheel(0, 2.6, 0.9);
+  } else if (kind === 'bizjet') {
+    const main = '#f7f7f5', trim = '#1d3557';
+    add(1.9, 2.0, 13, 0, 2.1, 0, main); add(1.6, 1.5, 1.6, 0, 2.0, 7.0, main); add(1.0, 0.9, 1.0, 0, 1.9, 8.0, main);
+    add(1.7, 0.55, 1.3, 0, 2.75, 6.1, '#22303c'); add(1.95, 0.25, 11, 0, 2.4, 0, trim);
+    for (const sx of [-1, 1]) {
+      add(6.2, 0.16, 2.2, sx * 3.6, 1.5, 0.2, main, sx * 0.35);
+      add(0.9, 0.9, 2.8, sx * 1.55, 2.8, -4.3, '#d9d9d6'); add(0.7, 0.7, 0.1, sx * 1.55, 2.8, -5.75, '#1b1b1e');
+      for (let i = 0; i < 6; i++) add(0.05, 0.35, 0.45, sx * 0.97, 2.55, 3.2 - i * 1.1, '#22303c');
+    }
+    add(0.18, 2.6, 2.0, 0, 3.9, -5.6, trim); add(4.2, 0.12, 1.2, 0, 5.15, -6.1, main);
+    wheel(-1.4, -0.2, 1.1); wheel(1.4, -0.2, 1.1); wheel(0, 5.6, 1);
+  } else {
+    const main = '#7d868b', dark = '#5b6266';
+    add(1.4, 1.2, 11, 0, 2.0, 0, main); add(0.9, 0.8, 2.6, 0, 1.95, 6.6, main); add(0.45, 0.45, 1.2, 0, 1.9, 8.4, dark);
+    add(0.9, 0.6, 2.4, 0, 2.75, 3.6, '#2e4a5c');
+    for (const sx of [-1, 1]) {
+      add(4.6, 0.12, 3.6, sx * 2.6, 1.85, -0.6, main, sx * 0.55);
+      add(0.12, 2.0, 1.8, sx * 0.9, 3.2, -4.6, dark, 0, sx * 0.3);
+      add(2.4, 0.1, 1.4, sx * 1.6, 2.0, -5.0, main, sx * 0.4);
+      add(0.5, 0.7, 2.2, sx * 0.85, 1.75, 1.6, dark); // intakes
+    }
+    add(0.12, 0.12, 1.4, 0.55, 2.2, 6.0, '#1b1b1e'); // cannon
+    add(1.1, 1.0, 0.6, 0, 2.0, -5.7, '#2b2b2e');
+    glow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 12), new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: 0 }));
+    glow.position.set(0, 2.0, -6.02); glow.rotation.y = Math.PI; body.add(glow);
+    wheel(-1.3, -0.6, 1.1); wheel(1.3, -0.6, 1.1); wheel(0, 4.2, 1);
+  }
+  // planes have no rotor or tail rotor; stand-ins keep the shared helicopter code happy
+  return { root, body, rotor: new THREE.Group(), tail: new THREE.Group(), disc: { material: { opacity: 0 } }, lights: null, prop, glow };
+}
+function flyPlane(h, dt, fw, st, up, down) {
+  const S = PLANES[h.kind], g = roofAt(h.x, h.z, 2);
+  h.rotor = Math.min(1, h.rotor + dt * 0.8);
+  // W/S set the throttle; on the ground with the throttle closed, S is the brake
+  if (fw > 0) h.thr = Math.min(1, h.thr + dt * 0.7); else if (fw < 0) h.thr = Math.max(0, h.thr - dt * 0.9);
+  const onGround = h.y - g < 0.4;
+  h.v += clamp(h.thr * S.vmax - h.v, -S.accel * 0.6 * dt, S.accel * dt * (h.rotor > 0.9 ? 1 : 0.2));
+  if (onGround && fw < 0 && h.thr <= 0.01) h.v = Math.max(0, h.v - 14 * dt);
+  if (!onGround) h.v = clamp(h.v - h.vy * 0.22 * dt, 0, S.vmax * 1.25); // climbing bleeds speed, diving builds it
+  const lift = clamp((h.v - S.vstall) / (S.vrot - S.vstall), 0, 1);
+  if (onGround) {
+    h.vy = 0; h.y = g;
+    if (up && h.v >= S.vrot) { h.vy = S.climb * 0.5; h.y = g + 0.5; }
+    h.yaw -= st * 0.9 * clamp(h.v / 8, 0.12, 1) * clamp(30 / Math.max(1, h.v), 0.2, 1) * dt;
+    h.roll = damp(h.roll, 0, 6, dt);
+    h.stall = false;
+  } else {
+    let vyT = (up - down) * S.climb * lift;
+    h.stall = h.v < S.vstall;
+    if (h.stall) { vyT = -4 - 12 * (1 - h.v / S.vstall); if (!(G.stallT > G.time)) { G.stallT = G.time + 3; G.toast('STALL! Throttle up (W) and dive (Shift).', 'warn'); } }
+    h.vy = damp(h.vy, vyT, 2.2, dt);
+    h.yaw -= st * S.turn * clamp(h.v / S.vrot, 0.4, 1) * dt;
+    h.roll = damp(h.roll, st * 0.7, 3, dt);
+  }
+  h.y += h.vy * dt;
+  if (h.y > S.ceil) { h.y = S.ceil; h.vy = Math.min(0, h.vy); }
+  if (h.y < g) { // touchdown: gentle is fine, a hard or banked landing breaks things
+    const impact = -h.vy; h.y = g; h.vy = 0;
+    if (impact > 6) { h.damage((impact - 6) * 18, null); G.shake(0.5); Sfx.crash(0.8, h.x, h.z); }
+    if (Math.abs(h.roll) > 0.45 && h.v > 15) { h.damage(45, null); Sfx.crash(0.6, h.x, h.z); }
+  }
+  // leaving the map: the plane banks round on its own
+  const lim = W.OUT + 40, out = Math.abs(h.x) > lim || h.z < -lim || h.z > W.SHORE + 320;
+  if (out) { h.yaw = h.yaw + clamp(angDiff(h.yaw, Math.atan2(-h.x, W.VIEW.cz - h.z)), -1.6 * dt, 1.6 * dt); if (!(G.edgeT > G.time)) { G.edgeT = G.time + 4; G.toast('Edge of the map: turning back.'); } }
+  h.vx = Math.sin(h.yaw) * h.v; h.vz = Math.cos(h.yaw) * h.v;
+  h.x += h.vx * dt; h.z += h.vz * dt;
+  // fences, trees and the like when taxiing or skimming the grass
+  if (h.y - g < 3 && h.v > 0.5) {
+    const p = { x: h.x, z: h.z }, hit = W.collideCircle(p, 2.2, h.y);
+    if (hit) { h.x = p.x; h.z = p.z; if (h.v > 8) { h.damage(h.v * 2.5, null); Sfx.crash(Math.min(1, h.v / 40), h.x, h.z); } h.v *= 0.25; }
+  }
+  const vx0 = h.vx, vz0 = h.vz; heliCollide(h);
+  if (Math.abs(h.vx - vx0) + Math.abs(h.vz - vz0) > 1) h.v *= 0.3; // hit a building
+  h.tilt = damp(h.tilt, onGround ? 0 : -Math.atan2(h.vy, Math.max(10, h.v)), 4, dt);
+}
+
 /* ---------------- the nose gun, when you're the one flying an armed chopper ---------------- */
 function heliGunFire(h) {
   const P = G.player;
   if (h.ammo <= 0) { if (!(G.heliAmmoT > G.time)) { G.heliAmmoT = G.time + 2; G.toast('The chopper gun is out of ammo.'); Sfx.error(); } return; }
   h.ammo--; P.cd = 0.09;
-  const fx = Math.sin(h.yaw), fz = Math.cos(h.yaw), gx = h.x + fx * 2.4, gy = h.y + 0.4, gz = h.z + fz * 2.4;
+  const nose = h.wing ? 7 : 2.4, fx = Math.sin(h.yaw), fz = Math.cos(h.yaw), gx = h.x + fx * nose, gy = h.y + (h.wing ? 2 : 0.4), gz = h.z + fz * nose;
   const tgt = G.heliAim && !G.heliAim.falling && !G.heliAim.dead ? G.heliAim : null;
   let ix, iy, iz;
   if (tgt) {
@@ -340,16 +441,16 @@ G.bailOut = function (h) {
   G.toast('You jumped! Press SPACE to open your parachute.', 'warn'); Sfx.whoosh(P.x, P.z);
   return true;
 };
-G.heliLanded = (h) => h.y - roofAt(h.x, h.z, 1.5) < 0.6;
+G.heliLanded = (h) => h.y - roofAt(h.x, h.z, 1.5) < 0.6 && (!h.wing || h.v < 3);
 G.enterHeli = function (h) {
   const P = G.player;
   if (h.dead || h.falling > 0 || h.pilot) return false;
   if (h.police) G.crime('copHeli', h.x, h.z, {});
-  else if (h.kind === 'attack') G.crime('milHeli', h.x, h.z, {});
+  else if (h.kind === 'attack' || h.kind === 'fighter') G.crime('milHeli', h.x, h.z, {});
   else G.crime('carTheft', h.x, h.z, {});
   h.pilot = 'player'; h.pad = null;
   P.inHeli = h; P.rig.root.visible = false; P.vx = P.vz = 0;
-  G.toast('SPACE climb · SHIFT descend · W/S fly · A/D turn · land, then F to get out', 'good');
+  G.toast(h.wing ? 'W/S throttle · A/D steer · build speed on the runway, then SPACE to pull up · SHIFT to dive · land and stop, then F' : 'SPACE climb · SHIFT descend · W/S fly · A/D turn · land, then F to get out', 'good');
   return true;
 };
 G.exitHeli = function (force) {

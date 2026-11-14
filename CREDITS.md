@@ -48,3 +48,6 @@ All sound effects are public-domain (CC0 1.0) recordings from [Freesound](https:
 | `amb_wind` | [wind.ogg](https://freesound.org/s/22331/) | sleepCircle | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `amb_rain` | [Heavy Rain Sound - Inu Etc.mp3](https://freesound.org/s/507902/) | inuetc | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `amb_forest` | [birds 1.wav](https://freesound.org/s/34180/) | Dalibor | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `engine_prop` | [A small propeller plane.wav](https://freesound.org/s/403316/) | straget | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `engine_jet` | [G08-25_4-E Jet Constant Noise.wav](https://freesound.org/s/437888/) | craigsmith | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `engine_fighter` | [Afterburner sound.wav](https://freesound.org/s/104883/) | StoneyJ | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
