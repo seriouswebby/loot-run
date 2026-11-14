@@ -48,6 +48,7 @@ class Chopper {
   constructor(kind, x, z, yaw, o) {
     o = o || {};
     this.kind = kind; this.police = kind === 'police';
+    this.armed = this.police || !!o.armed; this.ammo = this.armed ? 500 : 0; // police choppers carry a nose gun
     this.x = x; this.z = z; this.y = o.y || 0; this.vx = 0; this.vz = 0; this.vy = 0; this.yaw = yaw || 0;
     this.maxHp = this.police ? 320 : 240; this.hp = this.maxHp;
     this.rotor = this.y > 0 ? 1 : 0; this.spin = 0; this.pilot = o.pilot || null; this.pad = o.pad || null;
@@ -258,6 +259,37 @@ function heliShoot(h, t) {
     else if (P.inCar) P.inCar.damage(6, h.x, h.z);
     else G.hurtPlayer(6, h.x, h.z, 1, null);
   } else { FX.burst(ix, 0.2, iz, 3, ['#9c9488', '#d9d2c3'], 3, 0.1, 0.3); Sfx.impact(ix, iz); }
+}
+
+/* ---------------- the nose gun, when you're the one flying an armed chopper ---------------- */
+function heliGunFire(h) {
+  const P = G.player;
+  if (h.ammo <= 0) { if (!(G.heliAmmoT > G.time)) { G.heliAmmoT = G.time + 2; G.toast('The chopper gun is out of ammo.'); Sfx.error(); } return; }
+  h.ammo--; P.cd = 0.09;
+  const fx = Math.sin(h.yaw), fz = Math.cos(h.yaw), gx = h.x + fx * 2.4, gy = h.y + 0.4, gz = h.z + fz * 2.4;
+  const tgt = G.heliAim && !G.heliAim.falling && !G.heliAim.dead ? G.heliAim : null;
+  let ix, iy, iz;
+  if (tgt) {
+    const hit = Math.random() < 0.55;
+    ix = tgt.x + (hit ? 0 : rand(-3, 3)); iy = tgt.y + 1.8 + (hit ? 0 : rand(-2, 2)); iz = tgt.z + (hit ? 0 : rand(-3, 3));
+    if (hit) tgt.damage(9, P);
+  } else {
+    const spread = 0.7 + dist(gx, gz, G.aimX, G.aimZ) * 0.015;
+    ix = G.aimX + rand(-1, 1) * spread; iz = G.aimZ + rand(-1, 1) * spread; iy = W.floorAt(ix, iz, gy) || 0;
+    let hitSomething = false;
+    for (const n of G.npcs) {
+      if (n.dead || Math.abs(n.x - ix) > 1.1 || Math.abs(n.z - iz) > 1.1 || Math.abs((n.y || 0) - iy) > 2) continue;
+      const ko = n.hurt(16, gx, gz, 3, P); hitSomething = true;
+      G.crime(n.kind === 'cop' ? 'assaultCop' : 'assault', ix, iz, { victim: n, ko });
+    }
+    for (const c of G.cars) if (!c.dead && !c.wreck && iy < 2 && dist(c.x, c.z, ix, iz) < c.T.w * 0.5 + 0.7) { c.damage(10, ix, iz, P); hitSomething = true; }
+    for (const o of Choppers.list) if (o !== h && !o.dead && dist(o.x, o.z, ix, iz) < 3 && Math.abs(o.y + 1.5 - iy) < 2.5) { o.damage(9, P); hitSomething = true; }
+    if (!hitSomething) { FX.burst(ix, iy + 0.2, iz, 3, ['#9c9488', '#d9d2c3'], 3, 0.1, 0.3); Sfx.impact(ix, iz); }
+  }
+  Choppers.tracer(gx, gy, gz, ix, iy, iz, 0xffd166);
+  FX.burst(gx, gy, gz, 2, ['#fff3b0', '#ffb703'], 3, 0.12, 0.06, { grav: 0 });
+  Sfx.heliGun(h.x, h.z);
+  G.crime('gunfire', ix, iz, {});
 }
 
 /* ---------------- flying a stolen chopper ---------------- */

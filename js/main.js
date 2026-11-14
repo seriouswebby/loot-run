@@ -92,8 +92,9 @@ const UI = {
     const w = WEAPONS[P.weapon], car = P.inCar, heli = P.inHeli, items = [];
     if (heli) {
       this.set('weapon', heli.police ? 'POLICE CHOPPER' : 'TOUR CHOPPER');
-      this.set('ammo', 'HULL ' + Math.round(clamp(heli.hp / heli.maxHp, 0, 1) * 100) + '% · ALT ' + Math.round(heli.y) + ' M');
+      this.set('ammo', (heli.armed ? 'GUN ' + heli.ammo + (G.heliAim ? ' · LOCKED · ' : ' · ') : '') + 'HULL ' + Math.round(clamp(heli.hp / heli.maxHp, 0, 1) * 100) + '% · ALT ' + Math.round(heli.y) + ' M');
       items.push('SPACE climb', '⇧ descend', G.S.parachute ? 'F bail out (chute ×' + G.S.parachute + ')' : 'F land & exit');
+      if (heli.armed) items.unshift('CLICK fire');
     } else if (car) {
       this.set('weapon', car.T.name.toUpperCase());
       this.set('ammo', Math.round(Math.abs(car.v) * 3.6) + ' KM/H · ' + (car.popped ? 'TIRES SHOT · ' : '') + 'CAR ' + Math.round(clamp(car.hp / car.maxHp, 0, 1) * 100) + '%' + (G.boosting ? ' · NITRO!' : car.y > 0.05 ? ' · AIRBORNE' : Input.down('Space') && car.type !== 'bmx' ? ' · HANDBRAKE' : ''));
@@ -143,7 +144,7 @@ const UI = {
     if (this.bannerT > 0) { this.bannerT -= dt; if (this.bannerT <= 0) $('banner').className = ''; }
     G.flash = Math.max(0, (G.flash || 0) - dt * 1.5);
     this.set('flash', String(G.flash * 0.6), 'opacity');
-    const aiming = G.camMode === 'chase' && G.state === 'play' && !P.inCar && !P.inHeli && !P.down;
+    const aiming = G.camMode === 'chase' && G.state === 'play' && !P.inCar && (!P.inHeli || P.inHeli.armed) && !P.down;
     $('crosshair').hidden = !aiming;
     $('lookHint').hidden = !aiming || Input.locked;
     this.set('lookHint', Input.lockFailed ? 'Hold right-click and drag to look around' : 'Click to look around with the mouse');
@@ -528,6 +529,8 @@ function updatePlayer(dt) {
     const h = P.inHeli;
     if (h.falling <= 0) flyHeli(h, dt, fw, st, Input.down('Space') ? 1 : 0, key('ShiftLeft', 'ShiftRight') ? 1 : 0);
     P.x = h.x; P.z = h.z; P.vx = h.vx; P.vz = h.vz;
+    // armed choppers: hold the mouse button to fire the nose gun at the crosshair (or a locked-on chopper)
+    if (h.armed && h.falling <= 0 && h.y > 1 && (Input.mdown || G.attackQ) && !G.uiBlock && P.cd <= 0) { G.attackQ = null; heliGunFire(h); }
     return;
   }
   if (P.inCar) {
@@ -819,10 +822,11 @@ function updateAim(cam) {
   // aiming at a police chopper locks guns and rockets on to it
   G.heliAim = null;
   const P = G.player, w = WEAPONS[P.weapon];
-  if (!P.inCar && !P.inHeli && w && !w.melee) for (const h of Choppers.list) {
-    if (h.dead || h.falling > 0 || h.pilot === 'player' || h.y < 4) continue;
+  const gunship = P.inHeli && P.inHeli.armed;
+  if ((!P.inCar && !P.inHeli && w && !w.melee) || gunship) for (const h of Choppers.list) {
+    if (h.dead || h.falling > 0 || h.pilot === 'player' || h === P.inHeli || h.y < 4) continue;
     aimP.set(h.x, h.y + 1.8, h.z);
-    if (raycaster.ray.distanceToPoint(aimP) < 4 && dist(h.x, h.z, P.x, P.z) < 80) { G.heliAim = h; break; }
+    if (raycaster.ray.distanceToPoint(aimP) < (gunship ? 6 : 4) && dist(h.x, h.z, P.x, P.z) < (gunship ? 140 : 80)) { G.heliAim = h; break; }
   }
   const lk = $('heliLock');
   if (G.heliAim && G.state === 'play') {
@@ -1017,6 +1021,12 @@ function demoSetup(kind) {
     const car = new Car('sedan', P.x + 1.2, P.z + 6, 0.7, { parked: true, color: '#3a86ff' });
     car.damage(30, car.x + 3, car.z + 1); car.damage(25, car.x - 1, car.z + 4); car.damage(35, car.x + 1, car.z - 4); car.damage(20, car.x - 3, car.z);
     for (let i = 0; i < 30; i++) step(STEP);
+  }
+  else if (kind === 'heligun') {
+    G.noSpawn = true; G.camMode = 'chase'; const h = new Chopper('police', P.x, P.z, 0, { y: 16 }); h.rotor = 1; G.enterHeli(h); h.y = 16;
+    CAM.yaw = 0; CAM.pitch = 0.45; Input.mdown = true;
+    for (let i = 0; i < 40; i++) { G.aimX = h.x + 2; G.aimZ = h.z + 18; step(STEP); }
+    Input.mdown = false;
   }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); G.state = 'map'; $('bigmap').hidden = false; drawBigMap(); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }

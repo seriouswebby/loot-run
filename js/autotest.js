@@ -292,6 +292,23 @@ function runAutotest() {
     const out = G.exitHeli();
     return (alt > 15 && zone === 'air' && moved > 8 && out && !P.inHeli) || `alt ${alt.toFixed(1)} zone ${zone} moved ${moved.toFixed(1)} exited ${out} y ${h.y.toFixed(1)} roof ${roofAt(h.x, h.z, 1.5)}`;
   });
+  T('police chopper nose gun: hold the mouse to fire; tour chopper has none', () => {
+    reset(); G.noSpawn = true; tp(0, 25);
+    const h = new Chopper('police', 0, 25, 0, { y: 18 }); h.rotor = 1; G.enterHeli(h); h.y = 18;
+    const ped = spawnPed(4, 31, W.nearestBlock(4, 31), 1, 1); ped.ai.mode = 'idle'; ped.hp = 30;
+    const ammo0 = h.ammo; Input.mdown = true;
+    for (let i = 0; i < 60; i++) { G.aimX = ped.x; G.aimZ = ped.z; G.heliAim = null; P.cd = Math.max(P.cd, 0); step(STEP); }
+    Input.mdown = false;
+    const fired = ammo0 - h.ammo, downed = ped.down;
+    // lock onto an enemy chopper and shoot it down
+    const enemy = new Chopper('police', 30, 25, 0, { y: 18, pilot: 'ai' }); enemy.hp = 60; Input.mdown = true;
+    for (let i = 0; i < 240 && enemy.falling <= 0 && !enemy.dead; i++) { G.heliAim = enemy; step(STEP); }
+    Input.mdown = false; const shotDown = enemy.falling > 0 || enemy.dead;
+    G.exitHeli(true); h.remove(); if (!enemy.dead) enemy.remove(); ped.remove();
+    const tour = new Chopper('tour', 0, 25, 0, { y: 18 }); tour.rotor = 1; G.enterHeli(tour); tour.y = 18; Input.mdown = true; steps(0.5); Input.mdown = false;
+    const tourQuiet = !tour.armed && tour.ammo === 0; G.exitHeli(true); tour.remove(); G.noSpawn = false;
+    return (fired > 5 && downed && shotDown && tourQuiet) || `rounds fired ${fired} ped down ${downed} enemy shot down ${shotDown} (hp ${enemy.hp}) tour unarmed ${tourQuiet}`;
+  });
   T('rocket launcher shoots down a police helicopter', () => {
     reset(); tp(0, 25); G.god = true; Heat.add(3, 5, 'test'); const h = Choppers.spawnAI(); h.x = P.x + 12; h.z = P.z; h.y = 22;
     G.S.weapons.rpg = true; G.S.ammo.rockets = 3; G.equip('rpg'); G.heliAim = h; P.cd = 0;
