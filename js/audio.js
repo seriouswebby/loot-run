@@ -163,7 +163,7 @@ const Sfx = {
     const L = {};
     for (const [k, dest, verb] of [['siren_wail', null, 0.25], ['siren_yelp', null, 0.25], ['engine_car'], ['engine_bike'], ['screech'], ['rotor', null, 0.2],
       ['amb_city', this.amb], ['amb_wind', this.amb], ['amb_rain', this.amb], ['amb_forest', this.amb],
-      ['engine_prop', null, 0.1], ['engine_jet', null, 0.1], ['engine_fighter', null, 0.12]]) L[k] = this.loopNode(k, dest, verb);
+      ['engine_prop', null, 0.1], ['engine_jet', null, 0.1], ['engine_fighter', null, 0.12], ['train_loop', null, 0.15]]) L[k] = this.loopNode(k, dest, verb);
     this.sloops = L;
   },
 
@@ -485,6 +485,11 @@ const Sfx = {
         L.g.gain.setTargetAtTime((0.3 + s.heli.thr * 0.5) * Math.max(on, 0.05), t, 0.15); this.setPan(L.p, s.heli.mine ? 0 : p.pan, t);
         L.src.playbackRate.setTargetAtTime(0.75 + s.heli.thr * 0.35 + Math.min(0.3, s.heli.v / 400), t, 0.2);
       } else L.g.gain.setTargetAtTime(0, t, 0.3);
+    }
+    if (SL.train_loop) {
+      const tr = s.playing && s.train, p = tr ? this.place(tr.x, tr.z, 260) : null;
+      SL.train_loop.g.gain.setTargetAtTime(tr ? p.g * (0.15 + Math.min(1, tr.v / 22) * 0.75) : 0, t, 0.3);
+      if (tr) { this.setPan(SL.train_loop.p, p.pan, t); SL.train_loop.src.playbackRate.setTargetAtTime(0.7 + Math.min(1, tr.v / 22) * 0.4, t, 0.3); }
     }
     const R = SL.rotor;
     if (s.playing && s.heli && !planeSnd) {

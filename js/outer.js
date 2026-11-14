@@ -34,12 +34,14 @@ W.inCounty = (x, z) => Math.abs(x) > W.BOUND + 0.5 || z < -W.BOUND - 0.5;
     { kind: 'lake', cx: -280, cz: -830, r: 150 },
     { kind: 'river', minX: 868, maxX: 972, minZ: -W.OUT - 60, maxZ: W.SHORE + 40 },
     { kind: 'mountain', minX: -640, maxX: 290, minZ: -1205, maxZ: -1050 },
+    { kind: 'rail', fn: (x, z, pad) => W.railDist(x, z) < 9 + pad },
   ];
 })();
 W.inReserve = function (x, z, pad) {
   pad = pad || 0;
   for (const r of W.RESERVE) {
-    if (r.r) { if (dist(x, z, r.cx, r.cz) < r.r + pad) return r; }
+    if (r.fn) { if (r.fn(x, z, pad)) return r; }
+    else if (r.r) { if (dist(x, z, r.cx, r.cz) < r.r + pad) return r; }
     else if (x > r.minX - pad && x < r.maxX + pad && z > r.minZ - pad && z < r.maxZ + pad) return r;
   }
   return null;
@@ -62,6 +64,7 @@ function buildCounty() {
   buildAirport(OP);
   buildWater(OP);
   buildMountain(OP);
+  buildRail(OP);
   countyFarms(OP, free);
   const trees = countyWoods(free);
   countyTreeMeshes(trees);
@@ -399,4 +402,85 @@ function buildMountain(OP) {
   for (let k = 0; k < 2; k++) W.addCollider(k ? T.maxX : T.minX - 1.2, T.minZ, k ? T.maxX + 1.2 : T.minX, T.maxZ, 9, 'wall');
   W.ridgeMats = mats;
   W.zoneRects = (W.zoneRects || []).concat([{ zone: 'tunnel', ...T }]);
+}
+
+/* ---------------- the county railway ----------------
+   A loop of track round the north county (a rounded rectangle), with level crossings where it meets roads and two
+   stations. js/train.js runs the train on it. */
+W.RAIL = { cx: 30, cz: -760, hx: 690, hz: 260, r: 90 };
+W.railSegs = function () {
+  if (W._rails) return W._rails;
+  const R = W.RAIL, kx = R.hx - R.r, kz = R.hz - R.r, A = Math.PI * R.r / 2;
+  W._rails = [
+    { t: 'line', ax: R.cx - kx, az: R.cz - R.hz, dx: 1, dz: 0, len: 2 * kx }, { t: 'arc', cx: R.cx + kx, cz: R.cz - kz, a0: -Math.PI / 2, len: A },
+    { t: 'line', ax: R.cx + R.hx, az: R.cz - kz, dx: 0, dz: 1, len: 2 * kz }, { t: 'arc', cx: R.cx + kx, cz: R.cz + kz, a0: 0, len: A },
+    { t: 'line', ax: R.cx + kx, az: R.cz + R.hz, dx: -1, dz: 0, len: 2 * kx }, { t: 'arc', cx: R.cx - kx, cz: R.cz + kz, a0: Math.PI / 2, len: A },
+    { t: 'line', ax: R.cx - R.hx, az: R.cz + kz, dx: 0, dz: -1, len: 2 * kz }, { t: 'arc', cx: R.cx - kx, cz: R.cz - kz, a0: Math.PI, len: A },
+  ];
+  W.RAILLEN = W._rails.reduce((t, g) => t + g.len, 0);
+  return W._rails;
+};
+/* a point on the loop at distance s, with its direction of travel */
+W.railPoint = function (s) {
+  const segs = W.railSegs(), L = W.RAILLEN, R = W.RAIL.r; s = ((s % L) + L) % L;
+  for (const g of segs) {
+    if (s <= g.len) {
+      if (g.t === 'line') return { x: g.ax + g.dx * s, z: g.az + g.dz * s, tx: g.dx, tz: g.dz };
+      const a = g.a0 + s / R; return { x: g.cx + Math.cos(a) * R, z: g.cz + Math.sin(a) * R, tx: -Math.sin(a), tz: Math.cos(a) };
+    }
+    s -= g.len;
+  }
+  return W.railPoint(0);
+};
+/* distance from a point to the track (signed-distance of a rounded rectangle) */
+W.railDist = function (x, z) {
+  const R = W.RAIL, qx = Math.abs(x - R.cx) - (R.hx - R.r), qz = Math.abs(z - R.cz) - (R.hz - R.r);
+  return Math.abs(Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - R.r);
+};
+W.railParam = function (x, z) { let best = 0, bd = 1e9; W.railSegs(); for (let s = 0; s < W.RAILLEN; s += 1) { const p = W.railPoint(s), d = dist(p.x, p.z, x, z); if (d < bd) { bd = d; best = s; } } return best; };
+W.STATIONS = [{ name: 'Lakeside Station', x: -350, z: -500, side: [0, 1] }, { name: 'Mill Station', x: 720, z: -760, side: [1, 0] }];
+W.railCrossings = [];
+function buildRail(OP) {
+  W.railSegs();
+  const L = W.RAILLEN, pts = [];
+  for (let s = 0; s <= L; s += 4) pts.push(W.railPoint(s));
+  // ballast bed, sleepers and the two rails
+  for (let i = 1; i < pts.length; i++) GB.dirt.strip(pts[i - 1].x, pts[i - 1].z, pts[i].x, pts[i].z, 2.6, 0.05, 4);
+  for (let s = 0; s < L; s += 1.3) { const p = W.railPoint(s); OP.box(p.x, 0.08, p.z, 2.6, 0.12, 0.3, '#5a4632', Math.atan2(p.tx, p.tz)); }
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2, ang = Math.atan2(b.x - a.x, b.z - a.z), len = dist(a.x, a.z, b.x, b.z) + 0.05;
+    for (const s of [-0.75, 0.75]) OP.box(mx + Math.cos(ang) * s, 0.2, mz - Math.sin(ang) * s, 0.12, 0.16, len, '#8d9297', ang);
+  }
+  // level crossings: where a county road meets the track
+  for (const e of W.countyEdges) for (let i = 1; i < pts.length; i++) {
+    const t = segSegT(pts[i - 1].x, pts[i - 1].z, pts[i].x, pts[i].z, e.ax, e.az, e.bx, e.bz); if (!t) continue;
+    const a = pts[i - 1], b = pts[i], x = a.x + (b.x - a.x) * t[0], z = a.z + (b.z - a.z) * t[0];
+    if (W.railCrossings.some((c) => dist(c.x, c.z, x, z) < 20)) continue;
+    const tx = (b.x - a.x) / 4, tz = (b.z - a.z) / 4, rl = dist(e.ax, e.az, e.bx, e.bz), rx = (e.bx - e.ax) / rl, rz = (e.bz - e.az) / rl;
+    OP.box(x, 0.06, z, 13, 0.1, 4.2, '#6b5a45', Math.atan2(rx, rz) + Math.PI / 2);
+    const cr = { x, z, tx, tz, posts: [] };
+    for (const sd of [-1, 1]) {
+      // a post on each approach, its arm across the lane on that side
+      const px = x - rx * sd * 6 + -rz * sd * 7.2, pz = z - rz * sd * 6 + rx * sd * 7.2;
+      OP.box(px, 1.6, pz, 0.25, 3.2, 0.25, '#e8e8e8'); OP.box(px, 2.9, pz, 1.4, 0.3, 0.12, '#1b1b1e', Math.atan2(rx, rz) + Math.PI / 2);
+      const light = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32), new THREE.MeshBasicMaterial({ color: 0x441111 })); light.position.set(px, 3.15, pz); S.add(light);
+      const arm = new THREE.Group(); arm.position.set(px, 1.2, pz); arm.rotation.y = Math.atan2(rx * sd, rz * sd) + Math.PI / 2; S.add(arm);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.18, 0.18), lam('#f2f2f2')); bar.position.x = 3.2; arm.add(bar);
+      for (let k = 0; k < 3; k++) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.2), lam('#d62828')); st.position.x = 1 + k * 2; arm.add(st); }
+      arm.rotation.z = Math.PI / 2 - 0.05;
+      cr.posts.push({ light, arm });
+    }
+    W.railCrossings.push(cr);
+  }
+  // stations: a platform you can stand on, a shelter and a sign
+  for (const st of W.STATIONS) {
+    const [sx, sz] = st.side, cx = st.x + sx * 6, cz = st.z + sz * 6, along = sx ? [0, 1] : [1, 0], len = 70;
+    addBuilding(cx, cz, along[0] ? len : 5, along[1] ? len : 5, 1.0, 'concrete', { color: '#b9b4a8' });
+    const shx = st.x + sx * 8, shz = st.z + sz * 8;
+    for (const o of [-6, 6]) OP.box(shx + along[0] * o, 2.4, shz + along[1] * o, 0.2, 2.8, 0.2, '#555b61');
+    OP.box(shx, 3.9, shz, along[0] ? 15 : 3, 0.2, along[1] ? 15 : 3, '#2f6b4a');
+    addSign(shx + sx * 1.2, 3.2, shz + sz * 1.2, sx ? 'w' : 'n', st.name.toUpperCase(), '#1d3557', '#ffffff', 7, 1.1);
+    st.s = W.railParam(st.x, st.z);
+    W.places['station' + W.STATIONS.indexOf(st)] = { id: 'station', name: st.name, x: cx, z: cz };
+  }
 }

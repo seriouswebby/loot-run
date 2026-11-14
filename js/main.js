@@ -131,7 +131,7 @@ const UI = {
     $('holdBar').hidden = !hp;
     // security panel
     let sec = null;
-    if (!P.inHeli) for (const r of W.robs) if (r.kind !== 'atm' && dist(r.x, r.z, P.x, P.z) < 26) { sec = r; break; }
+    if (!P.inHeli) for (const r of W.robs) if (r.kind !== 'atm' && !r.onTrain && dist(r.x, r.z, P.x, P.z) < 26) { sec = r; break; }
     if (sec) {
       const s = secStatus(sec);
       this.set('secName', sec.name);
@@ -196,6 +196,7 @@ function drawMap(ctx, size, cx, cz, span, full) {
     if (h.pilot === 'ai') { if (!full) { ctx.beginPath(); ctx.arc(X(h.spotX), Z(h.spotZ), 3.4 * s + 1, 0, TAU); ctx.fillStyle = 'rgba(255,242,176,0.45)'; ctx.fill(); } dot(h.x, h.z, full ? 5 : 4.2, blink ? '#ff4a3d' : '#3d8bff', '#ffffff'); }
     else dot(h.x, h.z, full ? 4 : 3.2, '#ffffff', '#0f1216');
   }
+  for (const c of Train.cars) if (inView(c.x, c.z)) { ctx.save(); ctx.translate(X(c.x), Z(c.z)); ctx.rotate(-c.h); ctx.fillStyle = c.loco ? '#e0a100' : c.cash ? '#c9a227' : '#8b3a2a'; ctx.fillRect(-1.6 * s - 1, -c.hl * s, 3.2 * s + 2, c.len * s); ctx.restore(); }
   for (const rb of Roadblocks.list) if (inView(rb.x, rb.z) && (scanner || dist(rb.x, rb.z, t.x, t.z) < 160)) { label(rb.x, rb.z, '✕', '#ff4a3d'); }
   // objective
   const obj = Story.target();
@@ -462,6 +463,12 @@ function updateMarkers() {
 }
 
 /* ---------------- interactions ---------------- */
+function robPrompt(r) {
+  if (r.cd > 0) return { id: 'rob' + r.id, disabled: r.name + ' is cleaned out (' + Math.ceil(r.cd) + 's)' };
+  if (r.needs && !G.S.tools[r.needs]) return { id: 'rob' + r.id, disabled: 'The vault needs a Thermal Drill (any gun store), or blow it open with C4' };
+  const h = G.robHeat(r);
+  return { id: 'rob' + r.id, label: (r.kind === 'bank' ? 'Drill the vault' : r.kind === 'atm' ? 'Crack the ATM' : r.onTrain ? 'Crack the rail safe' : 'Rob ' + r.name) + (h != null ? ' · +' + h + ' heat' : ''), hold: G.robHoldTime(r), start: () => { if (!r.robbing) G.startRob(r); }, run: () => G.completeRob(r) };
+}
 const AIRCRAFT_LABEL = { police: 'Steal the police helicopter (+2 heat)', attack: 'Steal the gunship (+2 heat)', tour: 'Fly the tour helicopter', news: 'Steal the news helicopter',
   prop: 'Fly the prop plane', bizjet: 'Steal the private jet', fighter: 'Steal the fighter jet (+2 heat)' };
 function computeInteract() {
@@ -470,6 +477,8 @@ function computeInteract() {
   if (P.inHeli) { const h = P.inHeli; out.f = { label: G.heliLanded(h) ? 'Get out' : G.S.parachute > 0 ? 'Bail out with your parachute' : h.wing ? 'Land and stop first (S brakes)' : 'Land first (hold Shift)', run: () => G.exitHeli() }; return out; }
   if (P.y > 1.5) {
     for (const h of Choppers.list) if (!h.dead && !h.pilot && h.falling <= 0 && G.heliLanded(h) && Math.abs(h.y - P.y) < 2.5 && dist(h.x, h.z, P.x, P.z) < 5.5) { const hh = h; out.f = { label: AIRCRAFT_LABEL[hh.kind] || 'Fly the helicopter', run: () => G.enterHeli(hh) }; }
+    const tr = Train.onTrain(P) && W.robs.find((r) => r.onTrain && dist(P.x, P.z, r.x, r.z) < r.r + 0.5);
+    if (tr) out.e = robPrompt(tr);
     return out;
   }
   if (P.inCar) {
@@ -501,13 +510,11 @@ function computeInteract() {
   const pl = W.places;
   if (Story.available() && dist(P.x, P.z, pl.hideout.x, pl.hideout.z) < 3) { const m = Story.next(); out.e = { id: 'vera', label: 'Talk to Vera: "' + m.title + '"', run: () => Story.start() }; return out; }
   for (const s of pl.shops) if (dist(P.x, P.z, s.x, s.z) < 2.4) { out.e = { id: 'shop' + s.id, label: 'Shop at ' + s.name, run: () => UI.openShop(s.name) }; return out; }
+  const tc = Train.near(P.x, P.z, 2.5);
+  if (tc) { out.e = { id: 'train', label: 'Climb onto the train', run: () => Train.climb(tc) }; return out; }
   for (const r of W.robs) {
-    if (dist(P.x, P.z, r.x, r.z) > r.r + 0.5) continue;
-    if (r.cd > 0) { out.e = { id: 'rob' + r.id, disabled: r.name + ' is cleaned out (' + Math.ceil(r.cd) + 's)' }; return out; }
-    if (r.needs && !G.S.tools[r.needs]) { out.e = { id: 'rob' + r.id, disabled: 'The vault needs a Thermal Drill (any gun store), or blow it open with C4' }; return out; }
-    const h = G.robHeat(r);
-    out.e = { id: 'rob' + r.id, label: (r.kind === 'bank' ? 'Drill the vault' : r.kind === 'atm' ? 'Crack the ATM' : 'Rob ' + r.name) + (h != null ? ' · +' + h + ' heat' : ''), hold: G.robHoldTime(r), start: () => { if (!r.robbing) G.startRob(r); }, run: () => G.completeRob(r) };
-    return out;
+    if (r.onTrain || dist(P.x, P.z, r.x, r.z) > r.r + 0.5) continue;
+    out.e = robPrompt(r); return out;
   }
   for (const al of W.alarms) {
     if (al.cutT > 0 || dist(P.x, P.z, al.x, al.z) > 1.9) continue;
@@ -730,7 +737,7 @@ function updateZone(dt) {
   zoneT -= dt; if (zoneT > 0) return; zoneT = 0.2;
   const t = G.body(), prev = G.playerZone, h = G.player.inHeli;
   const py = G.player.y, standing = py > 3 && py - W.floorAt(t.x, t.z, py) < 1;
-  G.playerZone = h && h.y - roofAt(h.x, h.z, 1.5) > 4 ? 'air' : !G.player.inCar && !h && py > 3 ? (standing ? 'rooftop' : 'air') : W.zoneAt(t.x, t.z);
+  G.playerZone = h && h.y - roofAt(h.x, h.z, 1.5) > 4 ? 'air' : !G.player.inCar && !h && py > 3 ? (standing ? (Train.onTrain(G.player) ? 'train' : 'rooftop') : 'air') : W.zoneAt(t.x, t.z);
   G.curAlley = G.playerZone === 'alley' ? W.alleys.find((a) => t.x >= a.minX && t.x <= a.maxX && t.z >= a.minZ && t.z <= a.maxZ) : null;
   if (prev !== G.playerZone) onZoneChange(prev, G.playerZone);
 }
@@ -752,6 +759,7 @@ function step(dt) {
   G.updateTumble(dt);
   updateZone(dt);
   updatePlayer(dt);
+  Train.update(dt);
   processHold(dt);
   for (const n of G.npcs) { if (n.dead) continue; if (n.kind === 'cop') copAI(n, dt); else pedAI(n, dt); }
   Heat.update(dt);
@@ -916,7 +924,8 @@ function frame(now) {
   for (const h of Choppers.list) if (!h.dead && h.rotor > 0.3 && (!h.wing || h.pilot)) { const d = h === P.inHeli ? 0 : dist(h.x, h.z, B.x, B.z); if (d < hd) { hd = d; heli = h; } }
   const cf = G.camFwd || { x: 0, z: -1 };
   Sfx.update(dt, { playing: G.state === 'play', lx: B.x, lz: B.z, rx: -cf.z, rz: cf.x, sirens: sir, heat: Heat.level, zone: G.playerZone, rain: Math.max(Weather.p.rain, Weather.p.hail * 0.8), hail: Weather.p.hail, wind: Weather.p.wind + Weather.gust, slip: G.slip || 0,
-    engine: P.inCar && !P.inCar.T.pedal ? { speed: P.inCar.v, throttle: G.throttle || 0, boost: G.boosting, bike: !!P.inCar.T.bike } : null, heli: heli ? { x: heli.x, z: heli.z, kind: heli.kind, v: heli.v || 0, thr: heli.thr || 0, mine: heli === P.inHeli } : null });
+    engine: P.inCar && !P.inCar.T.pedal ? { speed: P.inCar.v, throttle: G.throttle || 0, boost: G.boosting, bike: !!P.inCar.T.bike } : null, heli: heli ? { x: heli.x, z: heli.z, kind: heli.kind, v: heli.v || 0, thr: heli.thr || 0, mine: heli === P.inHeli } : null,
+    train: Train.cars.length ? (() => { let best = Train.cars[0], bd = 1e9; for (const c of Train.cars) { const d = dist(c.x, c.z, B.x, B.z); if (d < bd) { bd = d; best = c; } } return { x: best.x, z: best.z, v: Train.v }; })() : null });
   renderer.render(G.scene, cam);
   Input.endFrame();
 }
@@ -949,6 +958,7 @@ function newWorld() {
   vera.ai = { mode: 'vera' }; vera.invuln = true; G.npcs.push(vera); G.vera = vera;
   spawnFixedCars();
   Choppers.init();
+  Train.init(); W.trainFloor = (x, z, y) => Train.floorAt(x, z, y);
   Phys.spawnProps();
   initMarkers();
   G.interact = { e: null, f: null };
@@ -1100,6 +1110,9 @@ function demoSetup(kind) {
   else if (kind === 'tunnel') { G.camMode = 'chase'; P.x = -100 + 2; P.z = W.TUNNEL.maxZ + 40; P.facing = CAM.yaw = Math.PI; CAM.pitch = 0.12; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'ridge') { P.x = -100; P.z = W.TUNNEL.maxZ - 30; CAM.zoomIso = 120; CAM.curIso = 120; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'narrow') { const b = W.blocks.find((k) => k.type === 'city' && k.j === 2); G.camMode = 'chase'; P.x = b.cx; P.z = b.cz - 13; P.facing = CAM.yaw = 0; CAM.pitch = 0.15; CAM.chaseD = 5; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'train') { G.noSpawn = true; for (let i = 0; i < 900; i++) step(STEP); const c = Train.cars[0], fx = Math.sin(c.h), fz = Math.cos(c.h); G.camMode = 'chase'; P.x = c.x + fx * 45 + fz * 12; P.z = c.z + fz * 45 - fx * 12; P.facing = CAM.yaw = Math.atan2(c.x - P.x, c.z - P.z); CAM.pitch = 0.15; for (let i = 0; i < 20; i++) step(STEP); }
+  else if (kind === 'trainride') { G.noSpawn = true; for (let i = 0; i < 900; i++) step(STEP); Train.climb(Train.cars[2]); G.camMode = 'chase'; CAM.yaw = Train.cars[2].h; CAM.pitch = 0.3; for (let i = 0; i < 60; i++) step(STEP); }
+  else if (kind === 'station') { const st = W.STATIONS[0]; G.camMode = 'chase'; P.x = st.x - 40; P.z = st.z + 18; P.facing = CAM.yaw = Math.PI / 2 + 0.3; CAM.pitch = 0.15; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }

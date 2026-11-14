@@ -181,7 +181,7 @@ function runAutotest() {
     const a = Story.active;
     switch (s.t) {
       case 'goto': { const p = W.places[s.at]; tp(p.x, p.z); break; }
-      case 'rob': { const r = W.places[s.target]; r.cd = 0; G.S.tools.drill = true; tp(r.x, r.z); hold(G.robHoldTime(r) + 0.3); break; }
+      case 'rob': { const r = W.places[s.target]; r.cd = 0; G.S.tools.drill = true; if (!r.onTrain) tp(r.x, r.z); else { P.x = r.x; P.z = r.z; } hold(G.robHoldTime(r) + 0.3); break; }
       case 'robKind': { const r = W.robs.find((k) => k.kind === s.kind && k.cd <= 0); tp(r.x, r.z); hold(G.robHoldTime(r) + 0.3); break; }
       case 'buy': G.buy(s.item); break;
       case 'steal': {
@@ -205,6 +205,8 @@ function runAutotest() {
       case 'rings': { const h = P.inHeli; for (const r of RINGS[s.set].slice(a.count)) { h.x = r[0]; h.z = r[1]; h.y = r[2]; h.v = 40; h.thr = 0.6; steps(STEP * 2); } break; }
       case 'land': { const h = P.inHeli, r = W.AIRPORT.runway; Heat.clear(); h.x = (r.minX + r.maxX) / 2; h.z = (r.minZ + r.maxZ) / 2; h.y = 0; h.vy = 0; h.v = 0; h.thr = 0; h.vx = h.vz = 0; break; }
       case 'chase': if (a.target) a.target.damage(9999, a.target.x + 1, a.target.z, P); break;
+      case 'boardTrain': { if (P.inCar) G.exitCar(true); if (P.inHeli) G.exitHeli(true); Train.climb(Train.cars[2]); break; }
+      case 'ride': a.rideT = s.time; break;
       case 'loopCams': for (const c of W.places[s.target].sec.cams) G.loopCam(c); break;
       default: break;
     }
@@ -560,6 +562,22 @@ function runAutotest() {
     const tour = new Chopper('tour', -300, -1030, Math.PI, { y: 20 }); tour.rotor = 1; tp(-300, -1030); G.enterHeli(tour); tour.y = 20;
     Input.keys.KeyW = true; steps(4); Input.keys.KeyW = false; if (tour.z < W.RIDGE[0].maxZ - 1 && tour.y < 50) bad.push('flew into the mountain, z ' + tour.z.toFixed(0) + ' y ' + tour.y.toFixed(0));
     G.exitHeli(true); tour.remove(); G.noSpawn = false;
+    return !bad.length || bad.join(' | ');
+  });
+  T('train: runs the loop, carries a rider, smashes a car on the line, closes the crossings', () => {
+    reset(); G.noSpawn = true; const bad = [];
+    for (let i = 0; i < 1200 && !(Train.state === 'run' && Train.v > 15); i++) step(STEP);
+    if (!(Train.state === 'run' && Train.v > 15)) bad.push('never got going (v ' + Train.v.toFixed(1) + ', ' + Train.state + ')');
+    Train.climb(Train.cars[1]); const x0 = P.x, z0 = P.z; steps(4);
+    const rode = !!Train.onTrain(P) && dist(P.x, P.z, x0, z0) > 40 && G.playerZone === 'train';
+    if (!rode) bad.push(`rider: on ${!!Train.onTrain(P)} moved ${dist(P.x, P.z, x0, z0).toFixed(0)} m zone ${G.playerZone}`);
+    P.y = 0; tp(W.places.spawn.x, W.places.spawn.z);
+    const p = W.railPoint(Train.s + 90), car = new Car('sedan', p.x, p.z, 0, { parked: true }), hp0 = car.hp;
+    steps(7); if (!(car.dead || car.wreck || car.hp < hp0 * 0.7) || (!car.dead && W.railDist(car.x, car.z) < 1.5)) bad.push('car on the line: hp ' + hp0 + '->' + car.hp.toFixed(0) + ' off the track ' + W.railDist(car.x, car.z).toFixed(1));
+    if (!car.dead) car.remove();
+    let closed = false; for (let i = 0; i < 4000 && !closed; i++) { step(STEP); closed = W.railCrossings.some((cr) => cr.posts[0].arm.rotation.z < 0.25); }
+    if (W.railCrossings.length < 3 || !closed) bad.push('crossings ' + W.railCrossings.length + ' closed ' + closed);
+    G.noSpawn = false;
     return !bad.length || bad.join(' | ');
   });
   T('county: no trees, buildings or fields on the country roads', () => {

@@ -91,6 +91,7 @@ W.ZONES = {
   forest: { label: 'FOREST PARK', hint: 'Hidden · slow · 4 exits · trees block choppers', sight: 16, evade: 0.5, car: 0.75 },
   rooftop: { label: 'ROOFTOP', hint: 'Cops on the street can\'t reach or see you · choppers can', sight: 8, evade: 0.8, car: 1 },
   outskirts: { label: 'OUTSKIRTS', hint: 'Open ground', sight: 60, evade: 1.1, car: 0.95 },
+  train: { label: 'ON THE TRAIN', hint: "Cops can't follow you up here · choppers can", sight: 70, evade: 0.9, car: 1 },
   tunnel: { label: 'PINE RIDGE TUNNEL', hint: 'Covered · choppers can\'t see you · no way out but the ends', sight: 30, evade: 0.6, car: 1.25 },
   airport: { label: 'AIRPORT', hint: 'Wide open · aircraft to steal · runway = drag strip', sight: 85, evade: 1.25, car: 1.45 },
   country: { label: 'COUNTRY ROAD', hint: 'Open road · fast · cops see you coming', sight: 75, evade: 1.15, car: 1.35 },
@@ -205,7 +206,7 @@ W.segBlocked = function (ax, az, bx, bz, y) {
 };
 /* the roof you'd be standing on at height y (0 = street level) */
 W.floorAt = function (x, z, y) {
-  let f = 0;
+  let f = W.trainFloor ? W.trainFloor(x, z, y) : 0;
   for (const b of W.buildings) {
     if (b.h > y + 0.6 || b.h <= f) continue;
     if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) f = b.h;
@@ -997,6 +998,8 @@ function buildMinimap() {
     g.strokeStyle = '#2c6f93'; g.lineWidth = W.RIVER.w * k; g.lineJoin = 'round'; g.lineCap = 'butt'; g.beginPath();
     W.RIVER.pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z)))); g.stroke(); g.lineCap = 'square';
   }
+  // the railway
+  if (W.RAIL) { g.strokeStyle = '#5a4632'; g.lineWidth = 4 * k; g.beginPath(); for (let s = 0; s <= W.RAILLEN + 4; s += 4) { const p = W.railPoint(s); s ? g.lineTo(X(p.x), Z(p.z)) : g.moveTo(X(p.x), Z(p.z)); } g.stroke(); g.strokeStyle = '#c9c4b8'; g.lineWidth = 1.2 * k; g.setLineDash([3 * k, 3 * k]); g.stroke(); g.setLineDash([]); }
   // Pine Ridge
   if (W.RIDGE) { g.fillStyle = '#6f6a60'; for (const r of W.RIDGE) g.fillRect(X(r.minX - 30), Z(r.minZ - 20), (r.maxX - r.minX + 60) * k, (r.maxZ - r.minZ + 40) * k); g.fillStyle = '#e8e9ea'; g.fillRect(X(-250), Z(-1140), 30 * k, 20 * k); g.fillRect(X(-60), Z(-1140), 40 * k, 20 * k); }
   // the airport: tarmac, runway paint, fence

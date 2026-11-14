@@ -39,10 +39,11 @@ Progress saves in your browser after every story job.
 | `js/voicedata.js` | The spoken lines, embedded as MP3 (generated — see Voices below) |
 | `js/sfxdata.js` | The recorded sounds, embedded as MP3 (generated — see Sound below) |
 | `js/world.js` | City generation, road graph, Ring Highway, zones, collisions, minimap |
-| `js/outer.js` | The county outside the city: country roads, farms, woods, land set aside for the airport, lake and river |
+| `js/outer.js` | The county outside the city: country roads, roundabout, farms, woods, the airport, Mirror Lake, the Bay River and bridges, Pine Ridge and its tunnel, the railway |
 | `js/actors.js` | Characters, pedestrians, cops, weapons, bullets, pickups |
 | `js/vehicles.js` | Car/bike physics, traffic and police AI, roadblocks, explosions |
 | `js/game.js` | Heat, crimes, security, robberies, shop, story missions, spawning |
+| `js/train.js` | The county train: runs the rail loop, stops at stations, carries riders on its roof, hits what's on the line |
 | `js/air.js` | Helicopters (police + flyable), parachutes, rockets, grenades, C4 |
 | `js/weather.js` | Dynamic weather |
 | `js/main.js` | Camera, HUD, minimap, controls, main loop |

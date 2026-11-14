@@ -51,6 +51,8 @@ All sound effects are public-domain (CC0 1.0) recordings from [Freesound](https:
 | `engine_prop` | [A small propeller plane.wav](https://freesound.org/s/403316/) | straget | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `engine_jet` | [G08-25_4-E Jet Constant Noise.wav](https://freesound.org/s/437888/) | craigsmith | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `engine_fighter` | [Afterburner sound.wav](https://freesound.org/s/104883/) | StoneyJ | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `train_loop` | [Moving Train](https://freesound.org/s/274547/) | skradz | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `horn_train1` | [Locomotive Horn (whistle)](https://freesound.org/s/278176/) | kangaroovindaloo | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 
 # Voices
 

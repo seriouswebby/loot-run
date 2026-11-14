@@ -46,5 +46,7 @@
   "amb_forest": { "id": 34180, "loop": true, "start": 2.0, "dur": 12.0, "xfade": 1.0, "kbps": 48 },
   "engine_prop": { "id": 403316, "loop": true, "start": 5.5, "dur": 5.0, "xfade": 0.8, "kbps": 64 },
   "engine_jet": { "id": 437888, "loop": true, "start": 4.0, "dur": 8.0, "xfade": 0.6, "kbps": 64 },
-  "engine_fighter": { "id": 104883, "loop": true, "start": 12.0, "dur": 8.0, "xfade": 0.6, "kbps": 64 }
+  "engine_fighter": { "id": 104883, "loop": true, "start": 12.0, "dur": 8.0, "xfade": 0.6, "kbps": 64 },
+  "train_loop": { "id": 274547, "loop": true, "start": 12.0, "dur": 10.0, "xfade": 1.0, "kbps": 56 },
+  "horn_train1": { "id": 278176, "start": 10.8, "dur": 2.4, "fade": 0.3 }
 }

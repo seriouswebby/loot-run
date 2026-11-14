@@ -738,6 +738,20 @@ const MISSIONS = [
     outro: [[V, "The buyer's thrilled. And the air base is going to need better locks."]],
   },
   {
+    id: 'gravy', title: 'Gravy Train', reward: 5000,
+    intro: [[V, 'The Federal Reserve moves cash out to the county by rail now. A steel safe bolted to the roof of the third car, and nobody guarding it.'],
+      [V, "Catch the train, climb on, and crack the safe while it's moving. Then jump off and lose the cops."]],
+    steps: [{ t: 'boardTrain', text: 'Catch the county train and climb on (E next to it)' }, { t: 'rob', target: 'trainSafe', text: 'Crack the safe on the gold car (hold E)' },
+      { t: 'loseHeat', text: 'Jump off and lose the cops' }],
+    outro: [[V, 'Robbing a moving train. I knew you were crazy, I just did not know how crazy.']],
+  },
+  {
+    id: 'surfer', title: 'Train Surfer', reward: 3500,
+    intro: [[V, "A friend of mine bet me nobody would ride the roof of the county train with the cops shooting at them."], [V, 'Prove me right. Stay up there for a full minute, then get away.']],
+    steps: [{ t: 'boardTrain', text: 'Climb onto the county train (E next to it)' }, { t: 'setHeat', n: 3 }, { t: 'ride', time: 60, text: 'Stay on the train roof' }, { t: 'loseHeat', text: 'Jump off and lose the cops' }],
+    outro: [[V, 'I just won a lot of money. Here is your share.']],
+  },
+  {
     id: 'boat', title: 'Last Boat Out', reward: 10000,
     intro: [[V, "The feds traced the bank job back to my garage. We're done in Bayhaven."], [V, 'A boat is waiting at Pier 9, south across the Ring Highway. Every cop in the city is out. Just get there.']],
     steps: [{ t: 'setHeat', n: 4 }, { t: 'goto', at: 'pier', r: 5, text: 'Reach the boat at Pier 9' }],
@@ -800,6 +814,8 @@ const Story = {
       case 'rings': return a.count >= RINGS[s.set].length;
       case 'land': { const h = P.inHeli; if (!h || !G.heliLanded(h)) return false; if (s.at !== 'runway') return true; const r = W.AIRPORT.runway; return h.x > r.minX - 10 && h.x < r.maxX + 10 && h.z > r.minZ - 10 && h.z < r.maxZ + 10; }
       case 'chase': { const c = a.target; return !!c && (c.wreck || c.dead || c.hp <= 0 || c.driver !== 'ai'); }
+      case 'boardTrain': return !!Train.onTrain(P);
+      case 'ride': return (a.rideT || 0) >= s.time;
       default: return false;
     }
   },
@@ -837,6 +853,10 @@ const Story = {
       const list = RINGS[s.set], r = list[a.count], P = G.player, B = G.body(), y = P.inHeli ? P.inHeli.y + 1.5 : P.inCar ? 1 : P.y + 1;
       if (r && dist(B.x, B.z, r[0], r[1]) < 12 && Math.abs(y - r[2]) < 12) { a.count++; Sfx.tick(); Sfx.whoosh(); if (a.count < list.length) { G.toast('Marker ' + a.count + ' of ' + list.length, 'good'); this.showRings(list, a.count); } else this.clearRings(); }
       if (s.time && a.t > s.time) { this.fail('Too slow through the markers.'); return; }
+    }
+    if (s.t === 'ride') {
+      if (Train.onTrain(G.player)) { a.rideT = (a.rideT || 0) + dt; a.offT = 0; } else a.offT = (a.offT || 0) + dt;
+      if (a.offT > 8) { this.fail('You came off the train.'); return; }
     }
     if (s.t === 'chase' && a.target && !a.target.dead) {
       const B = G.body(); a.lostT = dist(a.target.x, a.target.z, B.x, B.z) > 280 ? a.lostT + dt : 0;
@@ -882,6 +902,7 @@ const Story = {
       case 'rings': { const r = RINGS[s.set][a.count]; return r ? { x: r[0], z: r[1] } : null; }
       case 'land': { if (s.at !== 'runway') return null; const r = W.AIRPORT.runway; return { x: (r.minX + r.maxX) / 2, z: (r.minZ + r.maxZ) / 2 }; }
       case 'chase': return a.target && !a.target.dead ? a.target : null;
+      case 'boardTrain': { const P = G.player; let best = null, bd = 1e9; for (const c of Train.cars) { const d = dist(c.x, c.z, P.x, P.z); if (d < bd) { bd = d; best = c; } } return best; }
       default: return null;
     }
   },
@@ -891,6 +912,7 @@ const Story = {
     const s = this.step();
     let text = s ? s.text : '';
     if (s && s.t === 'robKind') text += ' (' + a.count + '/' + s.n + ')';
+    if (s && s.t === 'ride') text += ' (' + Math.max(0, Math.ceil(s.time - (a.rideT || 0))) + 's to go)';
     if (s && s.t === 'rings') text += ' (' + a.count + '/' + RINGS[s.set].length + (s.time ? ' · ' + Math.max(0, Math.ceil(s.time - a.t)) + 's' : '') + ')';
     return { title: a.m.title, text };
   },
