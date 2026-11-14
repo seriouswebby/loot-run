@@ -1248,6 +1248,16 @@ function runAutotest() {
     const onWalks = folk.filter((n) => !n.dead && Math.min(...M.area.links.map(([a, b]) => segPointDist(n.x, n.z, a.x, a.z, b.x, b.z))) < 3.5).length;
     return (!bumps && road && zone === 'village' && !fields && robbed.length === 3 && folk.length >= 8 && onWalks === folk.length) || `bumps ${bumps} road ${road} zone ${zone} fields ${fields} robbed ${robbed.join(',')} villagers ${folk.length} on the sidewalks ${onWalks}`;
   });
+  T('badlands: cacti and boulders sit on the slopes, clear of roads; a car flattens a cactus', () => {
+    reset(); G.noSpawn = true;
+    const onRoad = W.cacti.filter((c) => W.nearCountyRoad(c.x, c.z, 8)).length + W.rocks.filter((r) => W.nearCountyRoad(r.x, r.z, 8)).length;
+    const floating = W.cacti.filter((c) => { const m = new THREE.Matrix4(); c.im.getMatrixAt(c.i, m); return Math.abs(m.elements[13] - W.groundAt(c.x, c.z)) > 0.2; }).length;
+    const c = W.cacti.find((q) => !W.queryBox(q.x - 30, q.z - 3, q.x - 2, q.z + 3).some((k) => k.destructible && k.destructible.ref !== q) && W.groundAt(q.x - 20, q.z) < W.groundAt(q.x, q.z) + 2);
+    const car = new Car('suv', c.x - 20, c.z, Math.PI / 2); tp(c.x - 20, c.z - 3); G.enterCar(car); car.v = 14; car.vx = 14; Input.keys.KeyW = true; steps(2.5); Input.keys.KeyW = false;
+    const m = new THREE.Matrix4(); c.im.getMatrixAt(c.i, m); const flat = m.elements[0] === 0 && m.elements[5] === 0;
+    G.exitCar(true); car.remove();
+    return (W.cacti.length > 200 && W.rocks.length > 100 && !onRoad && !floating && flat) || `cacti ${W.cacti.length} rocks ${W.rocks.length} on roads ${onRoad} floating ${floating} flattened ${flat}`;
+  });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;
     const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };

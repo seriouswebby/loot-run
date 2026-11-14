@@ -1179,6 +1179,7 @@ W.build = function (scene, seed) {
   buildRamps();
   if (buildTerrainMesh(S)) W.groundPlane.visible = false;
   plantTreesOnHills();
+  buildBadlands();
   batchBuildings();
   for (const k in GB) GB[k].build(S);
   P.build(S);

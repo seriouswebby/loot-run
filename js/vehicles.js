@@ -232,7 +232,7 @@ class Car {
     if (!best) return;
     const smash = best.c.destructible;
     // cars flatten trees, poles and pumps; a bike just stops dead against them (and you don't)
-    if (smash && !this.T.bike && Math.hypot(this.vx, this.vz) > ({ tree: 12, lamp: 6, pump: 5 }[smash.kind] || 99)) {
+    if (smash && !this.T.bike && Math.hypot(this.vx, this.vz) > (SMASH_SPEED[smash.kind] || 99)) {
       this.x = ox; this.z = oz; G.smash(best.c, this);
       return;
     }
@@ -541,6 +541,7 @@ function navPoints(car) {
 /* top-speed factor on city streets for the fastest vehicles */
 const CITY_TAME = { supercar: 0.72, sports: 0.8, motorbike: 0.76 };
 const OFFROAD = { suv: 1.25, pickup: 1.12 }, OFFROAD_ZONES = ['outskirts', 'beach', 'forest'];
+const SMASH_SPEED = { tree: 12, lamp: 6, pump: 5, cactus: 3 }; // how fast a car must be going to flatten each kind of thing
 function initTraffic(car, from, to) {
   car.ai = Object.assign(car.ai || {}, { mode: car.police ? 'patrol' : 'traffic', from, to, blockT: 0, ignoreT: 0, checkT: 0, blocked: null, stuckT: 0, revT: 0 });
   navPoints(car); car.ai.stage = 'run';

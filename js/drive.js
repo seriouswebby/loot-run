@@ -245,7 +245,7 @@ const PhysCar = {
     for (const [cx, cz] of c.circles()) for (const col of W.queryBox(cx - c.r - 1, cz - c.r - 1, cx + c.r + 1, cz + c.r + 1)) {
       const s = col.destructible; if (!s || col.removed) continue;
       const near = col.circle ? dist(cx, cz, col.x, col.z) < c.r + col.r + 0.6 : cx > col.minX - c.r - 0.6 && cx < col.maxX + c.r + 0.6 && cz > col.minZ - c.r - 0.6 && cz < col.maxZ + c.r + 0.6;
-      if (near && sp > ({ tree: 12, lamp: 6, pump: 5 }[s.kind] || 99)) G.smash(col, c);
+      if (near && sp > (SMASH_SPEED[s.kind] || 99)) G.smash(col, c);
     }
   },
   /* a stunt ramp's back wall only stops you coming at it from behind */

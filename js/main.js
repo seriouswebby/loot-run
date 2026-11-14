@@ -1159,6 +1159,7 @@ function demoSetup(kind) {
   else if (kind === 'kerb') { G.camMode = 'chase'; G.noSpawn = true; const RB = W.ROUNDABOUT, car = new Car('sports', RB.x - 30, RB.z + 5.5, Math.PI / 2); P.x = car.x; P.z = car.z; G.enterCar(car); Input.keys.KeyW = true; for (let i = 0; i < 95; i++) step(STEP); Input.keys.KeyW = false; CAM.yaw = car.h - 0.9; CAM.pitch = 0.15; for (let i = 0; i < 2; i++) step(STEP); }
   else if (kind === 'millbrook') { G.camMode = 'chase'; P.x = 650; P.z = -470; P.facing = CAM.yaw = 0; CAM.pitch = 0.08; for (let i = 0; i < 300; i++) step(STEP); P.x = 650; P.z = -470; for (let i = 0; i < 4; i++) step(STEP); }
   else if (kind === 'millbrookiso') { P.x = 650; P.z = -395; CAM.zoomIso = 150; CAM.curIso = 150; for (let i = 0; i < 300; i++) step(STEP); P.x = 650; P.z = -395; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'cacti') { const c = W.cacti[25]; P.x = c.x + 6; P.z = c.z + 6; CAM.zoomIso = 70; CAM.curIso = 70; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'funlandiso') { P.x = 735; P.z = 200; CAM.zoomIso = 260; CAM.curIso = 260; for (let i = 0; i < 300; i++) step(STEP); P.x = 735; P.z = 200; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'airportiso') { P.x = -760; P.z = 210; CAM.zoomIso = 230; CAM.curIso = 230; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'planes') { G.camMode = 'chase'; P.x = -680; P.z = 150; P.facing = CAM.yaw = Math.PI * 0.85; CAM.pitch = 0.22; for (let i = 0; i < 30; i++) step(STEP); }

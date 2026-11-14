@@ -501,6 +501,53 @@ function buildMillbrook(trees) {
   const mesh = FP.build(S); mesh.geometry.computeBoundingSphere(); mesh.frustumCulled = true;
 }
 
+/* ---------------- the badlands: saguaro cacti and red boulders across the mesas ----------------
+   Placed once the hills exist (they sit on the slopes), from their own random stream. Cars flatten cacti. */
+W.cacti = []; W.rocks = [];
+function buildBadlands() {
+  if (!W.biomeAt || !W.HILLS) return;
+  const saved = rnd; rnd = mulberry32(777);
+  for (let k = 0; k < 9000 && (W.cacti.length < 420 || W.rocks.length < 260); k++) {
+    const x = 330 + rnd() * (W.OUT - 345), z = -W.OUT + 12 + rnd() * (W.OUT - 482);
+    if (W.biomeAt(x, z).bad < 0.55 || W.inReserve(x, z, 4) || W.nearCountyRoad(x, z, 10) || W.queryBox(x - 2.5, z - 2.5, x + 2.5, z + 2.5).length) continue;
+    if (W.RAMPS.some((r) => dist(x, z, r.x, r.z) < 40)) continue;
+    if (rnd() < 0.6) { if (W.cacti.length < 420) W.cacti.push({ x, z, s: 0.7 + rnd() * 0.7, r: rnd() * TAU, v: rnd() < 0.5 ? 0 : 1 }); }
+    else if (W.rocks.length < 260) W.rocks.push({ x, z, s: 0.5 + rnd() * 1.4, r: rnd() * TAU });
+  }
+  // two cactus shapes (one arm, two arms), and a lumpy boulder
+  const shape = (arms) => {
+    const b = new PropBatch(), g = '#3e7d3a', dk = '#356b32';
+    b.box(0, 2.1, 0, 0.55, 4.2, 0.55, g); b.box(0, 4.25, 0, 0.42, 0.15, 0.42, dk);
+    b.box(0.55, 1.7, 0, 0.6, 0.38, 0.38, g); b.box(0.75, 2.45, 0, 0.38, 1.5, 0.38, g);
+    if (arms > 1) { b.box(-0.5, 2.4, 0, 0.5, 0.36, 0.36, g); b.box(-0.68, 3.0, 0, 0.36, 1.2, 0.36, g); }
+    const m = b.build(S); S.remove(m); return m;
+  };
+  const d = new THREE.Object3D(), col = new THREE.Color(), bounds = (list) => { let x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9, y1 = 0; for (const t of list) { x0 = Math.min(x0, t.x); z0 = Math.min(z0, t.z); x1 = Math.max(x1, t.x); z1 = Math.max(z1, t.z); y1 = Math.max(y1, W.groundAt(t.x, t.z)); } return new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, y1 / 2, (z0 + z1) / 2), Math.hypot(x1 - x0, z1 - z0, y1) / 2 + 8); };
+  for (const v of [0, 1]) {
+    const list = W.cacti.filter((c) => c.v === v); if (!list.length) continue;
+    const base = shape(v + 1), im = new THREE.InstancedMesh(base.geometry, base.material, list.length);
+    list.forEach((c, i) => {
+      d.position.set(c.x, W.groundAt(c.x, c.z) - 0.05, c.z); d.rotation.set(0, c.r, 0); d.scale.setScalar(c.s); d.updateMatrix(); im.setMatrixAt(i, d.matrix);
+      c.im = im; c.i = i;
+      const cl = W.addCircle(c.x, c.z, 0.35 * c.s, 'cactus'); cl.h = 4.2 * c.s; cl.destructible = { kind: 'cactus', ref: c, x: c.x, z: c.z };
+    });
+    im.geometry = im.geometry.clone(); im.geometry.boundingSphere = bounds(list); im.frustumCulled = true; im.castShadow = true; im.receiveShadow = true; S.add(im);
+  }
+  if (W.rocks.length) {
+    const rg = new THREE.IcosahedronGeometry(1, 0), pa = rg.attributes.position, rr = mulberry32(31);
+    const jit = new Map(); for (let i = 0; i < pa.count; i++) { const key = pa.getX(i).toFixed(3) + pa.getY(i).toFixed(3) + pa.getZ(i).toFixed(3); if (!jit.has(key)) jit.set(key, 0.8 + rr() * 0.4); const k = jit.get(key); pa.setXYZ(i, pa.getX(i) * k, pa.getY(i) * k * 0.7, pa.getZ(i) * k); }
+    rg.computeVertexNormals();
+    const im = new THREE.InstancedMesh(rg, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), W.rocks.length);
+    W.rocks.forEach((r, i) => {
+      d.position.set(r.x, W.groundAt(r.x, r.z) + 0.25 * r.s, r.z); d.rotation.set(0, r.r, 0); d.scale.setScalar(r.s); d.updateMatrix(); im.setMatrixAt(i, d.matrix);
+      im.setColorAt(i, col.set(pick(['#9c5b3c', '#a8673f', '#8a4f35', '#b07a52'])));
+      W.addCircle(r.x, r.z, 0.85 * r.s, 'rock').h = 0.95 * r.s;
+    });
+    im.geometry.boundingSphere = bounds(W.rocks); im.frustumCulled = true; im.castShadow = true; im.receiveShadow = true; S.add(im);
+  }
+  rnd = saved;
+}
+
 /* the park on the minimap: lawn, paths, the coaster's loop, the wheel */
 W.drawDistrictsMap = function (g, X, Z, k) {
   const F = W.FUN; if (!F.rides) return;
@@ -522,4 +569,7 @@ W.drawDistrictsMap = function (g, X, Z, k) {
   g.fillStyle = '#6f6d68'; R(mx + 12, M.minZ, mx + 58, -428);
   g.fillStyle = '#b8c0c8'; g.beginPath(); g.arc(X(712), Z(-372), 5 * k, 0, TAU); g.fill();
   g.fillStyle = '#c9ced3'; for (const x of [583, 594]) { g.beginPath(); g.arc(X(x), Z(-440), 4 * k, 0, TAU); g.fill(); }
+  // cacti and boulders out in the badlands
+  g.fillStyle = '#4c7a3a'; for (const c of W.cacti) g.fillRect(X(c.x) - 1, Z(c.z) - 1, 2, 2);
+  g.fillStyle = '#8a4f35'; for (const r of W.rocks) { g.beginPath(); g.arc(X(r.x), Z(r.z), Math.max(1, r.s * k), 0, TAU); g.fill(); }
 };

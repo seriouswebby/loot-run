@@ -518,6 +518,10 @@ G.smash = function (c, car, ex, ez) {
     top.position.y = t.type === 'pine' ? 1.7 * s : 0.9 * s; g.add(top); g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
     if (!Phys.debrisPiece(g, t.x, 3.0 * s, t.z, rand(0, TAU), { x: dx * sp * 0.45, y: 1.5, z: dz * sp * 0.45 }, { x: dz * 2.5, y: 0, z: -dx * 2.5 }, { x: 0.6 * s, y: 2.8 * s, z: 0.6 * s })) FX.burst(t.x, 1, t.z, 8, ['#6b4a2f'], 4, 0.25, 0.8);
     Sfx.crash(0.75, t.x, t.z);
+  } else if (d.kind === 'cactus') {
+    const c = d.ref; c.im.setMatrixAt(c.i, ZERO_M); c.im.instanceMatrix.needsUpdate = true;
+    FX.burst(c.x, 2 * c.s, c.z, 16, ['#3e7d3a', '#356b32', '#6fa35a', '#e9d8a6'], 5, 0.25, 0.9);
+    Sfx.crash(0.35, c.x, c.z);
   } else if (d.kind === 'lamp') {
     const l = d.ref; W.hideLamp(l);
     FX.burst(l.x, 5, l.z, 10, ['#fff1b8', '#ffd166', '#ffffff'], 6, 0.12, 0.5);
