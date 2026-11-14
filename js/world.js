@@ -718,6 +718,7 @@ function specialBlock(b) {
     P.box(cx - 4, 2, cz - 1.05, 7, 4, 0.2, '#6e7377'); P.box(cx + 6, 1.3, cz - 1.05, 1.6, 2.6, 0.2, '#3b2a20');
     addSign(cx, 5.6, cz - 1.2, 'n', 'KADE AUTO', '#20252b', '#ffb703', 8, 1.6);
     W.places.hideout = { id: 'hideout', name: 'Kade Auto (hideout)', x: cx, z: cz - 6 };
+    W.places.tankDepot = { id: 'tankDepot', name: 'Your tank', x: cx - 9, z: cz - 7, h: Math.PI }; // in the yard, nose to the street
     W.places.spawn = { x: cx + 6, z: cz - 8 };
   } else if (type === 'chop') {
     GB.asphalt.rect(cx - 15.5, cz - 15.5, cx + 15.5, cz + 15.5, 0.035, 12);

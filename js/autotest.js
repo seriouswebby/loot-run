@@ -244,7 +244,7 @@ function runAutotest() {
     G.god = false; for (const k of ['KeyW', 'KeyA', 'KeyD']) Input.keys[k] = false; if (P.ride) Funland.leave(true); if (P.inCar) G.exitCar(true); if (P.inHeli) G.exitHeli(true);
     const ok = G.S.jobsDone.includes(m.id) && G.S.storyDone === story0;
     const why = 'stuck at step ' + (Story.active ? Story.active.i + ' (' + Story.step().t + ')' : 'after ' + last + ' (job failed)') + ' toast: ' + ($('toasts').firstChild || {}).textContent;
-    Story.active = null; G.S.jobsDone = done0; G.S.storyDone = story0;
+    Story.active = null; G.S.jobsDone = done0; G.S.storyDone = story0; if (m.unlock === 'tank') { const ok2 = !!G.S.tank; G.S.tank = false; for (const c of G.cars) if (c.T.tank && !c.dead) c.remove(); if (!ok2) return 'the tank was not unlocked'; }
     return ok || why;
   }));
   T('3rd person: A/D strafe without turning the camera', () => {
@@ -1452,6 +1452,21 @@ function runAutotest() {
     if (!Phys.ready) return 'SKIP';
     const a = pursuit(false), b = pursuit(true); // (tuning runs: arcade 19.2 / 19.3 m, physics 21.7 / 21.2 m)
     return (b.gap < a.gap * 1.4 && b.gap < 40 && b.crashed === 0) || 'arcade ' + a.gap.toFixed(1) + ' m · physics ' + b.gap.toFixed(1) + ' m, crashed ' + b.crashed;
+  });
+  T("the tank: none to steal until Sarge's job; then it waits at Kade Auto, turns on the spot, its gun blows things up, and you can't be dragged out", () => {
+    reset(); G.noSpawn = true; const bad = [], tank0 = G.S.tank;
+    if (G.cars.some((c) => !c.dead && c.T.tank)) bad.push('a tank exists before the job');
+    G.S.tank = true; Tanks.auto = true; Tanks.spawned = false; Tanks.t = 0; tp(W.places.hideout.x + 60, W.places.hideout.z); steps(2.5);
+    const t = G.cars.find((c) => !c.dead && c.T.tank && c.owned); if (!t) bad.push('no tank at Kade Auto'); else {
+      tp(t.x + 2.5, t.z); G.enterCar(t); steps(0.3); const h0 = t.h; Input.keys.KeyD = true; steps(1); Input.keys.KeyD = false; const turned = Math.abs(angDiff(h0, t.h)), moved = dist(t.x, t.z, W.places.tankDepot.x, W.places.tankDepot.z);
+      if (turned < 0.4 || moved > 3) bad.push('turn on the spot: turned ' + turned.toFixed(2) + ' rad, moved ' + moved.toFixed(1) + ' m');
+      const target = new Car('sedan', t.x + Math.sin(t.h + t.turretYaw) * 25, t.z + Math.cos(t.h + t.turretYaw) * 25, 0, { parked: true }); P.cd = 0; G.attackQ = { ang: 0 }; Tanks.fire(t); steps(1);
+      if (!(target.wreck || target.burning > 0 || target.hp < target.maxHp * 0.3)) bad.push('the shell did not wreck the car ahead (hp ' + target.hp + ')');
+      Heat.add(3, 5, 'test'); const cop = spawnCop(t.x + 2.5, t.z, 'chase'); cop.ai.mode = 'chase'; G.god = false; P.hp = 100; steps(4); if (G.respawning || !P.inCar) bad.push('dragged out of the tank');
+      Heat.clear(); clearPolice(); G.exitCar(true); target.remove(); t.remove();
+    }
+    G.S.tank = tank0; Tanks.auto = false;
+    return !bad.length || bad.join(' | ');
   });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;

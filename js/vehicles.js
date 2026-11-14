@@ -16,6 +16,7 @@ const CAR_TYPES = {
   bicycle: { name: 'Pedal bike', len: 1.8, w: 0.62, maxV: 17, accel: 11, hp: 60, value: 120, mass: 0.2, bike: true, pedal: true, colors: ['#e63946', '#2a9d8f', '#f4a261', '#264653', '#8338ec'] },
   bmx: { name: 'BMX', len: 1.6, w: 0.6, maxV: 16.5, accel: 14, hp: 60, value: 90, mass: 0.18, bike: true, pedal: true, colors: ['#ff006e', '#06d6a0', '#ffd60a', '#000000', '#4cc9f0'] },
   police: { name: 'Police cruiser', len: 4.5, w: 2.0, maxV: 31, accel: 18, hp: 240, value: 900, mass: 1.2, colors: ['#f5f5f5'] },
+  tank: { name: 'Tank', len: 7.4, w: 3.6, maxV: 16, accel: 7, hp: 3000, value: 0, mass: 8, colors: ['#4b5320'], tank: true },
   armored: { name: 'Armored truck', len: 5.8, w: 2.4, maxV: 20, accel: 9, hp: 500, value: 2600, mass: 3, colors: ['#4b5a3c'] },
 };
 
@@ -62,6 +63,23 @@ function buildCarMesh(type, color) {
     for (const sx of [-0.15, 0.15]) { rb(0.2, 0.7, 0.22, sx, 1.05, -0.05, pants, -1.2); rb(0.16, 0.62, 0.18, sx * 2.4, 1.45, 0.2, shirt, -1.1); }
     rider.visible = false; g.add(rider);
     return { g, mats, bar: null, rider };
+  }
+  if (T.tank) {
+    // hull, tracks with road wheels, and a turret that turns to where you aim, with a long gun
+    const dark = '#2b2f22', trackC = '#1f1f1c';
+    box(Wd * 0.7, 0.85, L, 0, 0.95, 0, color); box(Wd * 0.86, 0.5, L * 0.78, 0, 1.6, -0.2, color);
+    box(Wd * 0.7, 0.4, 0.9, 0, 1.15, L / 2 - 0.2, dark);
+    for (const sx of [-1, 1]) {
+      box(0.8, 1.0, L * 0.98, sx * (Wd / 2 - 0.4), 0.55, 0, trackC, true);
+      box(0.9, 0.12, L * 0.9, sx * (Wd / 2 - 0.4), 1.12, 0, color, false); // track guard
+      for (let i = 0; i < 6; i++) { const w = new THREE.Mesh(C.wheel, lam('#3a3d33')); w.scale.set(2.2, 1.05, 1.05); w.position.set(sx * (Wd / 2 - 0.4), 0.45, -L / 2 + 0.9 + i * (L - 1.8) / 5); g.add(w); }
+    }
+    const turret = new THREE.Group(); turret.position.set(0, 2.1, -0.5); g.add(turret);
+    const tb = (w, h, d, x, y, z, c) => { const mat = new THREE.MeshLambertMaterial({ color: c }); mats.push(mat); const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; turret.add(m); return m; };
+    tb(2.3, 0.75, 2.9, 0, 0, 0, color); tb(1.9, 0.3, 2.2, 0, 0.5, -0.1, color); tb(0.7, 0.2, 0.7, 0.45, 0.72, -0.4, dark);
+    tb(0.3, 0.3, 3.8, 0, 0.05, 3.2, color); tb(0.42, 0.42, 0.5, 0, 0.05, 5.0, dark); // the gun and its muzzle brake
+    for (const sx of [-1, 1]) tb(0.04, 0.5, 0.5, sx * 1.17, 0.05, 0.2, '#e9ecef'); // white stars (squares) on the sides
+    return { g, mats, bar: null, rider: null, turret, dentable, glassMats, bumpers: [] };
   }
   if (type === 'truck') {
     const cabL = 2.1, boxL = L - cabL - 0.2;
@@ -146,7 +164,7 @@ class Car {
     this.color = o.color || pick(this.T.colors);
     this.lane = pick(HWY_LANES);
     const built = buildCarMesh(type, this.color);
-    this.mesh = built.g; this.mats = built.mats; this.bar = built.bar; this.rider = built.rider || null;
+    this.mesh = built.g; this.mats = built.mats; this.bar = built.bar; this.rider = built.rider || null; this.turret = built.turret || null; this.turretYaw = 0;
     this.dentable = built.dentable || []; this.glassMats = built.glassMats || []; this.bumpers = built.bumpers || []; this.pull = chance(0.5) ? 1 : -1;
     this.mesh.position.set(x, W.groundAt(x, z), z); this.mesh.rotation.order = 'YXZ'; this.mesh.rotation.y = h;
     G.scene.add(this.mesh);
@@ -187,7 +205,8 @@ class Car {
     if (this.v < -maxV * 0.4) this.v = -maxV * 0.4;
     const sf = clamp(Math.abs(this.v) / 6, 0, 1) * (1 - Math.min(Math.abs(this.v), 40) / 40 * 0.4);
     this.steerV = damp(this.steerV, steer + (!T.pedal && cond < 0.5 && Math.abs(this.v) > 3 ? this.pull * (0.5 - cond) * 0.35 : 0), 10, dt);
-    this.h -= this.steerV * (T.bike ? 3.1 : 2.4) * sf * Math.sign(this.v) * dt * (hb ? 1.7 : 1);
+    if (T.tank) this.h -= this.steerV * 0.9 * (this.v < -0.5 ? -1 : 1) * dt; // tracks: it turns on the spot
+    else this.h -= this.steerV * (T.bike ? 3.1 : 2.4) * sf * Math.sign(this.v) * dt * (hb ? 1.7 : 1);
     if (this.popped) this.h += (Math.random() - 0.5) * 0.9 * dt * Math.min(1, Math.abs(this.v) / 10);
     const fx = Math.sin(this.h), fz = Math.cos(this.h), grip = (hb ? 1.8 : 8) * Weather.grip();
     this.vx = damp(this.vx, fx * this.v, grip, dt); this.vz = damp(this.vz, fz * this.v, grip, dt);

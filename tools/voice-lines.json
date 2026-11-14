@@ -1,7 +1,7 @@
 {
   "_note": "Every spoken line in Loot Run. Rendered by tools/build-voice.py with the Kokoro TTS model (Apache-2.0). Vera's mission lines are read straight from js/game.js. Each bark line is rendered once per voice of its role, so a person keeps the same voice whatever they shout.",
   "voices": {
-    "vera": "af_heart", "dixie": "af_aoede", "earl": "am_fenrir", "sal": "bm_fable",
+    "vera": "af_heart", "dixie": "af_aoede", "earl": "am_fenrir", "sal": "bm_fable", "sarge": "am_michael",
     "dispatch": "af_bella",
     "unit": [
       "am_michael",

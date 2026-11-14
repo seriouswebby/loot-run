@@ -499,11 +499,12 @@ const Ordnance = {
   rockets: [], grenades: [], c4: [],
   geo: null,
   init() { this.geo = { rocket: new THREE.BoxGeometry(0.22, 0.22, 0.9), nade: new THREE.SphereGeometry(0.22, 8, 6), c4: new THREE.BoxGeometry(0.5, 0.22, 0.35) }; },
-  fireRocket(owner, ang, target) {
-    const m = new THREE.Mesh(this.geo.rocket, lam('#4b5320')); G.scene.add(m);
-    const sp = 48, x = owner.x + Math.sin(ang) * 1, z = owner.z + Math.cos(ang) * 1;
-    this.rockets.push({ m, x, y: 1.5, z, vx: Math.sin(ang) * sp, vy: 0, vz: Math.cos(ang) * sp, life: 2.2, target });
-    Sfx.whoosh(x, z); Sfx.shot('shotgun', x, z);
+  fireRocket(owner, ang, target, o) {
+    o = o || {};
+    const m = new THREE.Mesh(this.geo.rocket, lam(o.shell ? '#c9a227' : '#4b5320')); G.scene.add(m);
+    const sp = o.sp || 48, x = owner.x + Math.sin(ang) * 1, z = owner.z + Math.cos(ang) * 1;
+    this.rockets.push({ m, x, y: o.y || 1.5, z, vx: Math.sin(ang) * sp, vy: 0, vz: Math.cos(ang) * sp, life: o.life || 2.2, target, r: o.r || 7, dmg: o.dmg || 95, from: o.from || null });
+    Sfx.whoosh(x, z); if (o.shell) { Sfx.explode(x, z); G.shake(0.35); } else Sfx.shot('shotgun', x, z);
   },
   throwGrenade(owner, tx, tz) {
     let dx = tx - owner.x, dz = tz - owner.z, d = Math.hypot(dx, dz) || 1;
@@ -536,7 +537,7 @@ const Ordnance = {
       for (const h of Choppers.list) if (!h.dead && h !== P.inHeli && Math.hypot(h.x - nx, h.y + 1.8 - ny, h.z - nz) < 3.2) { boom = true; hitHeli = h; }
       if (!boom && ny < 3) {
         if (W.segBlocked(r.x, r.z, nx, nz)) boom = true;
-        for (const c of G.cars) if (!c.dead && c !== P.inCar && dist(c.x, c.z, nx, nz) < 1.8) boom = true;
+        for (const c of G.cars) if (!c.dead && c !== P.inCar && c !== r.from && dist(c.x, c.z, nx, nz) < Math.max(1.8, c.T.w * 0.6)) boom = true;
         for (const n of G.npcs) if (!n.dead && !n.down && dist(n.x, n.z, nx, nz) < 0.8) boom = true;
       }
       if (ny < 0.2) boom = true;
@@ -546,7 +547,7 @@ const Ordnance = {
       if (boom || r.life <= 0) {
         G.scene.remove(r.m); this.rockets.splice(i, 1);
         if (hitHeli) { hitHeli.damage(340, P); FX.burst(nx, ny, nz, 30, ['#ff6b1a', '#ffb703', '#fff3b0'], 10, 0.5, 0.8); Sfx.explode(nx, nz); }
-        else explosion(nx, nz, 7, 95, P);
+        else explosion(nx, nz, r.r || 7, r.dmg || 95, P);
       }
     }
     for (let i = this.grenades.length - 1; i >= 0; i--) {

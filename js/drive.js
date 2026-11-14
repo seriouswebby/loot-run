@@ -82,7 +82,7 @@ class PVeh {
     this.inp.set = false;
     if (c.burning > 0 || c.wreck) { thr = 0; steer = 0; hb = true; }
     // steering: full lock when slow, a few degrees at speed (a keyboard aid; AI drivers get a little more); a flat tyre tugs the wheel
-    const lock = this.player ? 0.6 / (1 + Math.abs(vF) / 11) : 0.62 / (1 + Math.abs(vF) / 20);
+    const lock = c.T.tank ? 0 : this.player ? 0.6 / (1 + Math.abs(vF) / 11) : 0.62 / (1 + Math.abs(vF) / 20);
     this.steerA = damp(this.steerA, -steer * lock + (c.popped ? Math.sin(G.time * 13) * 0.05 : 0), 9 / (1 + Math.abs(vF) / 25), dt); // keys ease in gently at speed
     c.steerV = steer;
     // grip: tyres, weather, surface (SUVs and utes keep theirs off-road)
@@ -118,7 +118,7 @@ class PVeh {
       } else Fx = -Math.sign(vLong) * Math.min(Math.abs(vLong) * m * 0.5, m * 4) / 4;
       if (hb && !w.front) Fx = -Math.sign(vLong) * Math.min(cap * 0.85, stopF);
       if (c.burning > 0 || c.wreck) Fx = -Math.sign(vLong) * Math.min(cap, stopF);
-      let Fy = -vLat * (cap / 1.0); // full grip at 1 m/s of sideways slip
+      let Fy = -vLat * (cap / 1.0) * (c.T.tank && steer ? 0.12 : 1); // full grip at 1 m/s of sideways slip (a pivoting tank's tracks skid)
       // the friction circle: what's left of the grip after driving or braking goes to cornering
       const tot = Math.hypot(Fx, Fy); if (tot > cap) { Fx *= cap / tot; Fy *= cap / tot; }
       w.slip = Math.abs(vLat) + (hb && !w.front ? Math.abs(vLong) * 0.3 : 0);
@@ -132,6 +132,11 @@ class PVeh {
     if (contacts >= 3 && !hb && Math.abs(vF) > 3) {
       const wb = 2 * this.wheels[0].lz, rMax = mu0 * Gr * 1.6 / Math.abs(vF), rDes = clamp(vF * Math.tan(this.steerA) / wb, -rMax, rMax);
       const r = av.x * up.x + av.y * up.y + av.z * up.z, I = m * (c.T.len * c.T.len + c.T.w * c.T.w) / 12 * 0.8, tq = clamp((rDes - r) * I * 3, -m * 6, m * 6);
+      b.applyTorque({ x: up.x * tq, y: up.y * tq, z: up.z * tq }, true);
+    }
+    // a tank's tracks pull against each other: it turns on the spot
+    if (c.T.tank && contacts >= 2) {
+      const r = av.x * up.x + av.y * up.y + av.z * up.z, rDes = -steer * 0.9 * (vF < -0.5 ? -1 : 1), I = m * (c.T.len * c.T.len + c.T.w * c.T.w) / 12, tq = clamp((rDes - r) * I * 5, -m * 40, m * 40);
       b.applyTorque({ x: up.x * tq, y: up.y * tq, z: up.z * tq }, true);
     }
     // downforce: the faster you go the harder the air presses the car onto its tyres (about double the grip flat out)
@@ -358,7 +363,7 @@ const PhysCar = {
     if (!this.on) for (const v of [...this.list]) v.destroy(); else if (G.player.inCar) this.attach(G.player.inCar);
     return this.on;
   },
-  grip(car) { return { supercar: 1.4, sports: 1.38, muscle: 1.2, police: 1.3, taxi: 1.22, truck: 1.0, van: 1.05, armored: 1.0, suv: 1.15, pickup: 1.12, hatch: 1.25 }[car.type] || 1.25; },
+  grip(car) { return { tank: 1.7, supercar: 1.4, sports: 1.38, muscle: 1.2, police: 1.3, taxi: 1.22, truck: 1.0, van: 1.05, armored: 1.0, suv: 1.15, pickup: 1.12, hatch: 1.25 }[car.type] || 1.25; },
   attach(car) { if (!this.usable(car)) return false; if (!car.phys) new PVeh(car); return true; },
   detach(car) { car = car || this.car; if (car && car.phys) car.phys.destroy(); },
   preStep(dt) { this.manage(dt); for (const v of [...this.list]) v.preStep(dt); },

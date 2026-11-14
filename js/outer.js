@@ -301,6 +301,8 @@ function buildAirport(OP) {
   }
   addSign(-1150, 16, 145.4, 's', 'AIR BASE 7', '#2f3518', '#e9edc9', 12, 2.2, 'RESTRICTED AREA');
   helipad(-990, 175, 'attack', -Math.PI / 2); helipad(-990, 210, 'attack', -Math.PI / 2);
+  W.places.tankBay = { id: 'tankBay', name: 'Hangar 2', x: -1150, z: 160, h: 0 }; // where Sarge's tank rolls out for his job
+  W.places.sarge = { id: 'sarge', name: 'Sergeant Rook', x: -1118, z: 152, face: Math.PI / 2 };
   // aircraft stands: parked planes respawn here like choppers do on their pads
   const stand = (x, z, kind, yaw) => { W.places.helipads.push({ x, z, yaw, kind, stand: true }); for (const s of [-1, 1]) GB.white.rect(x + s * 9 - 0.2, z - 7, x + s * 9 + 0.2, z + 7, 0.05, 1); };
   stand(-600, 172, 'prop', 0); stand(-640, 172, 'prop', 0); stand(-720, 168, 'bizjet', 0);

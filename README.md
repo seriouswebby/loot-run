@@ -29,6 +29,7 @@ Progress saves in your browser after every story job.
 | M | Map: click to set a waypoint, right-click to teleport, scroll to zoom | | |
 | Esc · N · V | Pause · sound on/off · voices on/off | | |
 | L | | Handling: realistic (physics) or arcade | |
+| Click | | Tank: fire the main gun (the turret follows your aim) | |
 | K | Physics traffic on/off (cars near you as physics bodies; turn off if frames suffer) | | |
 
 Cars drive on realistic handling when the physics engine has loaded (it comes from the internet): a Box3D body on sprung wheels with tyre grip, so they pitch, roll, ride up kerbs and slide. The parked cars, traffic and police near you are physics cars too, so crashes are real collisions. Press L for the arcade handling for your own car, and K to turn the physics traffic off (both are remembered; offline, everything is arcade). Bikes always use the arcade handling.
@@ -53,7 +54,7 @@ Planes and jets: W/S throttle, build speed on the runway, Space to pull up, Shif
 | `js/drive.js` | Realistic handling: your car as a Box3D body on spring-damper wheels with a tyre model |
 | `js/actors.js` | Characters, pedestrians, cops, weapons, bullets, pickups |
 | `js/vehicles.js` | Car/bike physics, traffic and police AI, roadblocks, explosions |
-| `js/game.js` | Heat, crimes, security, robberies, shop, story missions (Vera) and side jobs (Dixie, Earl, Sal), spawning |
+| `js/game.js` | Heat, crimes, security, robberies, shop, story missions (Vera) and side jobs (Dixie, Earl, Sal, Sarge), your tank, spawning |
 | `js/train.js` | The county train: runs the rail loop, stops at stations, carries riders on its roof, hits what's on the line |
 | `js/air.js` | Helicopters (police + flyable), parachutes, rockets, grenades, C4 |
 | `js/weather.js` | Dynamic weather |

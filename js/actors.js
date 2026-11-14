@@ -419,7 +419,7 @@ function copAI(c, dt) {
     Heat.grab(dt);
     if (Heat.level === 1 && a.punchCd <= 0) { a.punchCd = 1.3; c.atkT = c.atkDur = 0.3; Sfx.punch(c.x, c.z); G.hurtPlayer(5, c.x, c.z, 1, c); }
   }
-  if (car && d < 3.2 && Math.abs(car.v) < 2) Heat.grab(dt, !car.T.bike);
+  if (car && d < 3.2 && Math.abs(car.v) < 2 && !car.T.tank) Heat.grab(dt, !car.T.bike); // nobody drags you out of a tank
   if (heli && G.heliLanded(heli) && d < 4) Heat.grab(dt, true);
 }
 function copShoot(c, tx, tz, car) {

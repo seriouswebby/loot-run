@@ -100,6 +100,7 @@ const UI = {
     } else if (car) {
       this.set('weapon', car.T.name.toUpperCase());
       this.set('ammo', Math.round(Math.abs(car.v) * 3.6) + ' KM/H · ' + (car.popped ? 'TIRES SHOT · ' : '') + 'CAR ' + Math.round(clamp(car.hp / car.maxHp, 0, 1) * 100) + '%' + (G.boosting ? ' · NITRO!' : car.y > 0.05 ? ' · AIRBORNE' : Input.down('Space') && car.type !== 'bmx' ? ' · HANDBRAKE' : ''));
+      if (car.T.tank) items.push('Click fire the gun', 'A/D turn on the spot');
       items.push(car.type === 'bmx' ? 'SPACE hop' : 'SPACE handbrake', 'G spikes ×' + S.spikes, 'H medkit ×' + S.medkit);
       if (S.tools.nitro || car.T.nitro) { const n = Math.round(G.nitro * 10); items.push('⇧ NITRO ' + '▮'.repeat(n) + '▯'.repeat(10 - n)); }
     } else {
@@ -181,6 +182,7 @@ function drawMap(ctx, size, cx, cz, span, full) {
   label(pl.police.x, pl.police.z, 'P', '#6fa8ff');
   if (pl.airport) label(pl.airport.x, pl.airport.z - (full ? 24 : 10), '✈', '#ffffff');
   if (full) for (const d of W.districtLabels) if (inView(d.x, d.z)) label(d.x, d.z, d.text, d.col); // district names on the big map
+  if (G.S.tank && pl.tankDepot && inView(pl.tankDepot.x, pl.tankDepot.z)) label(pl.tankDepot.x - 6, pl.tankDepot.z, 'T', '#a7c957'); // your tank's home
   if (pl.funland && inView(pl.funland.x, pl.funland.z)) { // a little big-wheel glyph for Funland
     const fx = X(pl.funland.x), fz = Z(pl.funland.z) - (full ? 14 : 7), r = full ? 7 : 5;
     ctx.strokeStyle = '#0f1216'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(fx, fz, r, 0, TAU); ctx.stroke();
@@ -434,10 +436,10 @@ function updateCamera(dt) {
       yaw = CAM.carYaw + CAM.carLook; pitch = CAM.carPitch; CAM.yaw = yaw;
     }
     CAM.wasInCar = !!veh;
-    const back = P.inHeli ? (P.inHeli.wing ? PLANES[P.inHeli.kind].cam : 17) : P.inCar ? (P.inCar.T.bike ? 7 : 10) + spd * 0.08 : CAM.chaseD;
+    const back = P.inHeli ? (P.inHeli.wing ? PLANES[P.inHeli.kind].cam : 17) : P.inCar ? (P.inCar.T.bike ? 7 : P.inCar.T.tank ? 15 : 10) + spd * 0.08 : CAM.chaseD;
     const fx3 = Math.sin(yaw), fz3 = Math.cos(yaw), cp = Math.cos(pitch), spch = Math.sin(pitch);
     const sh = veh ? 0 : 0.75; // over-the-shoulder offset to the right
-    const px = t.x - fz3 * sh, pz = t.z + fx3 * sh, py = P.inHeli ? fy + 3.5 : P.inCar ? fy + 2.3 : fy + 1.8;
+    const px = t.x - fz3 * sh, pz = t.z + fx3 * sh, py = P.inHeli ? fy + 3.5 : P.inCar ? fy + (P.inCar.T.tank ? 3.8 : 2.3) : fy + 1.8;
     let cx = px - fx3 * cp * back, cz = pz - fz3 * cp * back, cy = py + spch * back;
     const hit = py > 25 ? 1 : W.segHitT(px, pz, cx, cz, 2);
     if (hit < 1) { const k = Math.max(0.12, hit - 0.06); cx = px + (cx - px) * k; cz = pz + (cz - pz) * k; cy = py + (cy - py) * k; }
@@ -807,7 +809,7 @@ function step(dt) {
   updateZone(dt);
   updatePlayer(dt);
   Train.update(dt);
-  Funland.update(dt); Dam.update(dt);
+  Funland.update(dt); Dam.update(dt); Tanks.update(dt);
   processHold(dt);
   for (const n of G.npcs) { if (n.dead) continue; if (n.kind === 'cop') copAI(n, dt); else pedAI(n, dt); }
   Heat.update(dt);
@@ -1165,6 +1167,7 @@ function demoSetup(kind) {
   else if (kind === 'dam') { G.camMode = 'chase'; const D = W.DAM; P.x = D.x + 25; P.z = D.z + 70; P.facing = CAM.yaw = Math.PI - 0.25; CAM.pitch = 0.18; for (let i = 0; i < 40; i++) step(STEP); }
   else if (kind === 'damcrest') { G.camMode = 'chase'; const D = W.DAM; P.x = D.x - 30; P.z = D.z; P.facing = CAM.yaw = Math.PI / 2 + 0.5; CAM.pitch = 0.2; for (let i = 0; i < 40; i++) step(STEP); }
   else if (kind === 'damiso') { const D = W.DAM; P.x = D.x; P.z = D.z - 30; CAM.zoomIso = 260; CAM.curIso = 260; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'tank') { G.camMode = 'chase'; G.noSpawn = true; const p = W.places.tankDepot, t = new Car('tank', p.x, p.z, p.h, { parked: true, persistent: true }); t.owned = true; P.x = p.x + 3; P.z = p.z; G.enterCar(t); CAM.yaw = p.h + 0.6; CAM.pitch = 0.18; for (let i = 0; i < 90; i++) step(STEP); }
   else if (kind === 'funlandiso') { P.x = 735; P.z = 200; CAM.zoomIso = 260; CAM.curIso = 260; for (let i = 0; i < 300; i++) step(STEP); P.x = 735; P.z = 200; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'airportiso') { P.x = -760; P.z = 210; CAM.zoomIso = 230; CAM.curIso = 230; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'planes') { G.camMode = 'chase'; P.x = -680; P.z = 150; P.facing = CAM.yaw = Math.PI * 0.85; CAM.pitch = 0.22; for (let i = 0; i < 30; i++) step(STEP); }

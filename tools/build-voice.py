@@ -20,14 +20,14 @@ FORMATS = {  # sample rate, bitrate per kind of line
 }
 
 
-SPEAKERS = {'V': 'vera', 'DIX': 'dixie', 'EARL': 'earl', 'SAL': 'sal'}  # the constants game.js uses in [WHO, 'line'] pairs
+SPEAKERS = {'V': 'vera', 'DIX': 'dixie', 'EARL': 'earl', 'SAL': 'sal', 'SARGE': 'sarge'}  # the constants game.js uses in [WHO, 'line'] pairs
 
 
 def dialog_lines():
     """every mission line, as (speaker, text), in the order they appear in js/game.js"""
     src = open(os.path.join(ROOT, 'js', 'game.js'), encoding='utf8').read()
     out = []
-    for m in re.finditer(r"\[(V|DIX|EARL|SAL), (\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')\]", src):
+    for m in re.finditer(r"\[(V|DIX|EARL|SAL|SARGE), (\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')\]", src):
         s = m.group(2)[1:-1].replace("\\'", "'").replace('\\"', '"')
         key = (SPEAKERS[m.group(1)], s)
         if key not in out: out.append(key)

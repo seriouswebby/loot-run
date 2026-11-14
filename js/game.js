@@ -679,7 +679,7 @@ G.attack = function (ang) {
 };
 
 /* ---------------- story missions ---------------- */
-const V = 'Vera Kade', DIX = 'Dixie Marlowe', EARL = 'Earl Pruitt', SAL = 'Sal Okafor';
+const V = 'Vera Kade', DIX = 'Dixie Marlowe', EARL = 'Earl Pruitt', SAL = 'Sal Okafor', SARGE = 'Sergeant Rook';
 const MISSIONS = [
   {
     id: 'first', title: 'First Shift', reward: 400,
@@ -797,6 +797,7 @@ const GIVERS = {
   dixie: { name: DIX, first: 'Dixie', letter: 'D', col: '#ff8fb8', place: 'dixie', look: { shirt: '#ff5d8f', pants: '#3a0ca3', skin: '#f1c27d', hair: '#ffd60a' } },
   earl: { name: EARL, first: 'Earl', letter: 'E', col: '#f4a261', place: 'earl', look: { shirt: '#6b705c', pants: '#3a3a3a', skin: '#e0ac69', hair: '#d9d9d9', cap: '#7a2e1d' } },
   sal: { name: SAL, first: 'Sal', letter: 'S', col: '#8ecae6', place: 'sal', look: { shirt: '#f77f00', pants: '#1d3557', skin: '#8d5524', hair: '#111111', cap: '#f1faee' } },
+  sarge: { name: SARGE, first: 'Sarge', letter: 'A', col: '#a7c957', place: 'sarge', look: { shirt: '#4b5320', pants: '#3a4220', skin: '#c68642', hair: '#2b1b10', cap: '#3a4220' } },
 };
 const SIDE_JOBS = [
   { id: 'dx1', giver: 'dixie', title: 'Ticket Money', reward: 900,
@@ -835,6 +836,10 @@ const SIDE_JOBS = [
     intro: [[SAL, "The news chopper sits at the airport most afternoons. Borrow it."], [SAL, "Fly over the dam so I can get my picture, then set it down on the runway like nothing happened."]],
     steps: [{ t: 'board', kinds: ['news'], text: 'Steal the news chopper at the airport' }, { t: 'goto', at: 'dam', r: 45, text: 'Fly over the dam' }, { t: 'land', at: 'runway', text: 'Land on the airport runway' }],
     outro: [[SAL, "Best photo I ever took. Here, you earned this."]] },
+  { id: 'tk1', giver: 'sarge', title: 'Heavy Metal', reward: 2500, unlock: 'tank',
+    intro: [[SARGE, "Rook. Twenty years in this army, and they're sending my old tank to the scrapyard."], [SARGE, "She's out in front of the middle hangar. Take her before the scrappers do, shake off the military police, and park her at Kade Auto."], [SARGE, "Click to fire the main gun. Try not to flatten anything I'd have to explain."]],
+    steps: [{ t: 'spawnTank', text: '' }, { t: 'steal', missionCar: true, text: 'Get in the tank (in front of the middle hangar)' }, { t: 'setHeat', n: 3, text: '' }, { t: 'loseHeat', text: 'The base is on alert: lose the police' }, { t: 'goto', at: 'hideout', r: 12, text: 'Drive the tank home to Kade Auto' }],
+    outro: [[SARGE, "She runs like the day I first drove her. She's yours now."], [SARGE, "She'll wait for you at Kade Auto whenever you want her."]] },
 ];
 
 /* marker rings for the flying jobs: [x, z, altitude] */
@@ -879,6 +884,13 @@ const Story = {
       for (const c of G.cars) if (!c.dead && c !== G.player.inCar && dist(c.x, c.z, p.x, p.z) < 6) c.remove(); // a car parked in its bay
       const car = new Car('armored', p.x, p.z, -Math.PI / 2, { parked: true, mission: true, persistent: true });
       car.locked = true; a.car = car;
+      this.advance(); return;
+    }
+    if (s.t === 'spawnTank') {
+      const p = W.places.tankBay;
+      if (a.car && !a.car.dead) a.car.remove();
+      for (const c of G.cars) if (!c.dead && c !== G.player.inCar && dist(c.x, c.z, p.x, p.z) < 8) c.remove();
+      const car = new Car('tank', p.x, p.z, p.h, { parked: true, mission: true, persistent: true }); car.locked = false; a.car = car;
       this.advance(); return;
     }
     if (s.t === 'rob' && W.places[s.target]) W.places[s.target].cd = 0;
@@ -967,11 +979,12 @@ const Story = {
     Sfx.sting('fail');
   },
   complete() {
-    const m = this.active.m; this.clearRings();
+    const m = this.active.m, jobCar = this.active.car; this.clearRings();
     if (this.active.target && !this.active.target.dead && !this.active.target.wreck) this.active.target.mission = false;
     this.active = null;
     this.sync(); if (!G.S.jobsDone.includes(m.id)) G.S.jobsDone.push(m.id); G.S.storyDone = G.S.jobsDone.filter((id) => MISSIONS.some((q) => q.id === id)).length;
     const main = !m.giver || m.giver === 'vera';
+    if (m.unlock === 'tank') { G.S.tank = true; if (jobCar && !jobCar.dead) { jobCar.owned = true; jobCar.mission = false; } } // the tank is yours
     if (main && G.S.storyDone >= MISSIONS.length) { Heat.clear(); clearPolice(); }
     G.addCash(m.reward, G.player.x, G.player.z);
     G.save();
@@ -1161,3 +1174,36 @@ function spawnFixedCars() {
   for (const s of W.parkingSpots) if (chance(0.6)) { const c = new Car(pick(['sedan', 'sports', 'van', 'pickup', 'hatch', 'suv', 'muscle', 'supercar']), s.x, s.z, s.h, { parked: true, persistent: true }); c.locked = true; }
   for (const s of W.places.policeLot) { const c = new Car('police', s.x, s.z, s.h, { parked: true, persistent: true }); c.locked = true; }
 }
+
+/* ---------------- your tank ----------------
+   Once Sarge's job is done the tank is yours: it waits at Kade Auto whenever you haven't got one out (a wrecked one is
+   replaced a minute later, out of sight). The turret follows your aim; click fires the main gun. */
+const Tanks = {
+  t: 0, lostT: 0,
+  update(dt) {
+    const P = G.player, car = P.inCar;
+    if (car && car.T.tank && car.turret) {
+      // aim: the chase camera's direction, or the mouse in the overhead views
+      const aim = G.camMode === 'chase' ? CAM.yaw : Math.atan2(G.aimX - car.x, G.aimZ - car.z), rel = angDiff(car.h, aim);
+      car.turretYaw += clamp(angDiff(car.turretYaw, rel), -1.4 * dt, 1.4 * dt); car.turret.rotation.y = car.turretYaw;
+      if ((Input.mdown || G.attackQ) && !G.uiBlock && P.cd <= 0 && !car.wreck) { G.attackQ = null; this.fire(car); }
+    }
+    this.t -= dt; if (this.t > 0) return; this.t = 2;
+    if (!G.S.tank || G.autotest && !this.auto) return;
+    const mine = G.cars.find((c) => !c.dead && c.owned && c.T.tank && !c.wreck), p = W.places.tankDepot;
+    if (mine) { this.lostT = 0; return; }
+    this.lostT += 2;
+    if ((this.lostT > 60 || !this.spawned) && !G.canSee(p.x, p.z, 6) && !G.cars.some((c) => !c.dead && dist(c.x, c.z, p.x, p.z) < 6)) {
+      const t = new Car('tank', p.x, p.z, p.h, { parked: true, persistent: true }); t.owned = true; t.locked = false; this.spawned = true; this.lostT = 0;
+    }
+  },
+  fire(car) {
+    const P = G.player, yaw = car.h + car.turretYaw, fx = Math.sin(yaw), fz = Math.cos(yaw);
+    P.cd = 1.5;
+    Ordnance.fireRocket({ x: car.x + fx * 5, z: car.z + fz * 5 }, yaw, null, { shell: true, sp: 90, y: 2.2, life: 2, r: 9, dmg: 240, from: car });
+    FX.burst(car.x + fx * 5.6, 2.3, car.z + fz * 5.6, 12, ['#fff3b0', '#ffb703', '#ff6b1a'], 6, 0.35, 0.35);
+    for (let i = 0; i < 6; i++) Puffs.add(car.x + fx * 5.6, 2.2, car.z + fz * 5.6, fx * rand(2, 5), rand(0.5, 1.5), fz * rand(2, 5), 1.2, 3, 1.6, '#d6d6d6', 0.55, 0.5);
+    car.kx -= fx * 2.5; car.kz -= fz * 2.5; // recoil
+    G.crime('gunfire', car.x, car.z, {});
+  },
+};
