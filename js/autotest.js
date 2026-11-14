@@ -1502,6 +1502,21 @@ function runAutotest() {
     for (const [type, sp] of [['sedan', 8], ['sedan', 15], ['sedan', 25], ['sports', 35]]) { const a = turnTest(type, sp, false), p = turnTest(type, sp, true); if (p.turned < a.turned * 0.65 || p.slipMax > 0.45) bad.push(type + ' at ' + sp + ' m/s: ' + p.turned.toFixed(2) + ' rad vs arcade ' + a.turned.toFixed(2) + ', slide ' + p.slipMax.toFixed(2)); }
     return !bad.length || bad.join(' | ');
   });
+  T('dirt bikes: they wait out in the county; fastest bike on grass and sand, slower than a motorbike on the road; Space hops', () => {
+    reset(); const bad = [], physOn = PhysCar.on; PhysCar.on = false;
+    if (!CAR_TYPES.dirtbike || W.dirtSpots.length < 8) bad.push('dirt spots ' + W.dirtSpots.length);
+    // one shows up near a farm when you're out there
+    G.noSpawn = false; const s = W.dirtSpots[0]; tp(s.x + 90, s.z); P.y = 0; const cam0 = G.cam; G.cam = null; steps(3); G.cam = cam0;
+    if (!G.cars.some((c) => !c.dead && c.T.dirt && dist(c.x, c.z, P.x, P.z) < 175)) bad.push('no dirt bike turned up near ' + Math.round(s.x) + ',' + Math.round(s.z)); G.noSpawn = true;
+    const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };
+    const grass = [W.ROUNDABOUT.x + 60, W.ROUNDABOUT.z - 80], road = [0, -W.HWY];
+    const dG = top('dirtbike', grass[0], grass[1]), mG = top('motorbike', grass[0], grass[1]), dR = top('dirtbike', road[0], road[1]), mR = top('motorbike', road[0], road[1]);
+    if (!(dG > mG && dR < mR)) bad.push(`grass: dirt ${dG.toFixed(1)} vs motorbike ${mG.toFixed(1)} · road: dirt ${dR.toFixed(1)} vs motorbike ${mR.toFixed(1)} (zone ${W.zoneAt(grass[0], grass[1])})`);
+    const b = new Car('dirtbike', 20, 25, 0, { parked: true }); tp(21, 25); G.enterCar(b); steps(0.2); G.hopQ = true; steps(0.15); const hop = b.y > 0.3; G.exitCar(true); b.remove();
+    if (!hop) bad.push("Space didn't hop");
+    PhysCar.on = physOn;
+    return !bad.length || bad.join(' | ');
+  });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;
     const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };

@@ -392,7 +392,7 @@ G.enterCar = function (car) {
     msg = car.police ? 'You jacked a police cruiser!' : 'Carjacked a ' + car.T.name.toLowerCase();
   } else if (car.parked && car.locked && car.T.bike) {
     // bikes have no windows and no alarm: a quiet theft, though anyone watching still calls it in
-    msg = car.T.pedal ? 'Nicked the ' + car.T.name.toLowerCase() + '.' : 'Hotwired the motorbike.'; G.crime('carTheft', car.x, car.z, {});
+    msg = car.T.pedal ? 'Nicked the ' + car.T.name.toLowerCase() + '.' : 'Hotwired the ' + car.T.name.toLowerCase() + '.'; G.crime('carTheft', car.x, car.z, {});
   } else if (car.parked && car.locked) {
     if (G.S.tools.lockpick) { msg = 'Lock picked. Nice and quiet.'; Sfx.click(); }
     else { Sfx.glass(car.x, car.z); car.alarmT = 6; FX.burst(car.x, 1.2, car.z, 10, ['#cfe8ff', '#ffffff'], 3, 0.1, 0.5); G.crime('carTheft', car.x, car.z, {}); msg = 'Smashed the window. Car alarm!'; }
@@ -401,7 +401,7 @@ G.enterCar = function (car) {
   car.locked = false; car.driver = 'player'; car.ai = null; car.parked = false; car.siren = false;
   P.inCar = car; P.rig.root.visible = !!car.T.bike; P.vx = P.vz = 0;
   PhysCar.attach(car); // realistic handling when the physics engine is running (bikes stay arcade)
-  if (car.T.bike && !G.autotest) G.toast(car.T.pedal ? 'Pedal hard! Bikes are quiet but slow.' : 'Motorbike: fastest thing on two wheels. Crash hard and you fly off.');
+  if (car.T.bike && !G.autotest) G.toast(car.T.pedal ? 'Pedal hard! Bikes are quiet but slow.' : car.T.dirt ? 'Dirt bike: made for grass, dirt and sand. SPACE to hop.' : 'Motorbike: fastest thing on two wheels on the road. Crash hard and you fly off.');
   if (msg) G.toast(msg);
   Story.event('steal', car);
   return true;
@@ -1130,10 +1130,16 @@ function updatePopulation(dt) {
     const p = randomSidewalkPoint(t.x, t.z, 30, 125, false, true);
     if (p && carFree(p.x, p.z, 3)) {
       const horiz = Math.abs(p.z - p.b.cz) > Math.abs(p.x - p.b.cx);
-      const type = pick(['bicycle', 'bicycle', 'bmx', 'motorbike']);
+      const type = pick(['bicycle', 'bicycle', 'bmx', 'motorbike', 'dirtbike']);
       const bike = new Car(type, p.x, p.z, (horiz ? Math.PI / 2 : 0) + (chance(0.5) ? Math.PI : 0), { parked: true });
-      bike.locked = type === 'motorbike';
+      bike.locked = !CAR_TYPES[type].pedal;
     }
+  }
+  // out in the county, dirt bikes wait at farms, in Millbrook, below the dam and by the jumps
+  let dirt = 0; for (const c of G.cars) if (c.T.dirt && c.parked && !c.driver && dist(c.x, c.z, t.x, t.z) < 170) dirt++;
+  if (dirt < 3) {
+    const spots = W.dirtSpots.filter((s) => { const d = dist(s.x, s.z, t.x, t.z); return d > 35 && d < 170 && carFree(s.x, s.z, 3) && !G.canSee(s.x, s.z, 2); });
+    if (spots.length) { const s = pick(spots), b = new Car('dirtbike', s.x, s.z, s.h + rand(-0.4, 0.4), { parked: true }); b.locked = true; }
   }
   G.npcs = G.npcs.filter((n) => !n.dead);
   G.cars = G.cars.filter((c) => !c.dead);
@@ -1153,7 +1159,8 @@ function spawnTraffic(t) {
     if (d < 70 || d > 240 || !carFree(x, z, 9) || (G.canSee(x, z, 4) && (k < 10 || d < 190))) continue;
     const r = Math.random();
     const type = r < 0.07 ? 'police' : r < 0.15 ? 'taxi' : r < 0.23 ? 'van' : r < 0.31 ? 'pickup' : r < 0.37 ? 'sports' : r < 0.39 ? 'armored' : r < 0.42 ? 'supercar' : r < 0.52 ? 'hatch' : r < 0.61 ? 'suv' : r < 0.66 ? 'muscle' : r < 0.72 ? 'truck' : r < 0.78 ? 'motorbike' : 'sedan';
-    const car = new Car(type, x, z, Math.atan2(dx, dz), { driver: 'ai' }); car.lane = lane;
+    const kind = W.inCounty(x, z) && (type === 'motorbike' || chance(0.06)) ? 'dirtbike' : type; // locals ride dirt bikes on the county roads
+    const car = new Car(kind, x, z, Math.atan2(dx, dz), { driver: 'ai' }); car.lane = lane;
     initTraffic(car, A.id, B.id);
     car.v = car.ai.limit * 0.8; car.vx = dx * car.v; car.vz = dz * car.v;
     return car;

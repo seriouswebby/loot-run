@@ -87,7 +87,7 @@ class PVeh {
     c.steerV = steer;
     // grip: tyres, weather, surface (SUVs and utes keep theirs off-road)
     const zone = W.zoneAt(c.x, c.z), off = OFFROAD_ZONES.includes(zone);
-    const mu0 = PhysCar.grip(c) * Weather.grip() * (off ? (OFFROAD[c.type] ? 0.95 : 0.78) : 1) * (c.popped ? 0.75 : 1);
+    const mu0 = PhysCar.grip(c) * Weather.grip() * (off ? ((OFFROAD[c.type] || 0) > 1 ? 0.95 : 0.78) : 1) * (c.popped ? 0.75 : 1);
     let contacts = 0;
     const kS = (m * Gr / 4) / 0.17, cS = 2 * 0.5 * Math.sqrt(kS * m / 4); // static sag 0.17 m, damping ratio 0.5
     const ca = Math.cos(this.steerA), sa = Math.sin(this.steerA), L0 = PhysCar.L0;

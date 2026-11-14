@@ -179,6 +179,8 @@ W.STUNTS = [
   { name: 'Mesa Hop', x: 820, z: -690, ang: Math.PI / 2, len: 12, w: 7, h: 4.2 },
 ];
 function buildRamps() {
+  // a dirt bike waits near every county jump (at the start of its run-up)
+  for (const st of W.STUNTS) { const fx = Math.round(Math.sin(st.ang)), fz = Math.round(Math.cos(st.ang)), x = st.x - fx * 75 + fz * 7, z = st.z - fz * 75 - fx * 7; if (W.inCounty(x, z) && !W.inAirport(x, z)) W.dirtSpots.push({ x, z, h: st.ang }); }
   const stripeTex = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 16; const g = c.getContext('2d'); g.fillStyle = '#1b1b1e'; g.fillRect(0, 0, 64, 16); g.fillStyle = '#ffd23f'; for (let x = -16; x < 64; x += 16) { g.beginPath(); g.moveTo(x, 16); g.lineTo(x + 8, 16); g.lineTo(x + 16, 0); g.lineTo(x + 8, 0); g.closePath(); g.fill(); } const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; return t; })();
   W.STUNTS.forEach((st, i) => {
     const fx = Math.sin(st.ang), fz = Math.cos(st.ang), r = { id: i, x: st.x, z: st.z, fx, fz, len: st.len, w: st.w, h: st.h, reach: st.len / 2 + st.w / 2 + 1, name: st.name };

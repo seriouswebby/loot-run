@@ -48,7 +48,7 @@ W.inReserve = function (x, z, pad) {
   }
   return null;
 };
-W.countyEdges = []; W.fields = [];
+W.countyEdges = []; W.fields = []; W.dirtSpots = []; // where dirt bikes wait out in the county
 W.nearCountyRoad = function (x, z, d) {
   for (const e of W.countyEdges) if (segPointDist(x, z, e.ax, e.az, e.bx, e.bz) < d) return true;
   return false;
@@ -173,6 +173,7 @@ function countyFarms(OP, free) {
       OP.box(hx, 8.6, hz + 20, 12.4, 1.2, 14.4, '#5a4636');
       OP.box(hx + 9, 3, hz + 26, 3, 6, 3, '#9aa3a8'); OP.box(hx + 9, 6.4, hz + 26, 3.4, 0.8, 3.4, '#7d868b'); // silo
       W.addCollider(hx + 7.5, hz + 24.5, hx + 10.5, hz + 27.5, 6, 'building');
+      W.dirtSpots.push({ x: hx - 8, z: hz + 6, h: Math.PI / 2 }); // a dirt bike by the farmhouse
     }
     farms++;
   }

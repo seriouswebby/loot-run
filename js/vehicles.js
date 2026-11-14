@@ -13,6 +13,7 @@ const CAR_TYPES = {
   muscle: { name: 'Muscle car', len: 4.6, w: 2.0, maxV: 41, accel: 21, hp: 180, value: 1600, mass: 1.15, nitro: true, colors: ['#d00000', '#03045e', '#ffba08', '#222222', '#2b9348'] },
   truck: { name: 'Box truck', len: 7.2, w: 2.5, maxV: 18, accel: 7, hp: 420, value: 950, mass: 3.6, colors: ['#e9ecef', '#ffd166', '#118ab2', '#ef476f'] },
   motorbike: { name: 'Motorbike', len: 2.2, w: 0.8, maxV: 45, accel: 27, hp: 90, value: 950, mass: 0.4, bike: true, nitro: true, colors: ['#d00000', '#111111', '#3a86ff', '#ffbe0b', '#2b9348'] },
+  dirtbike: { name: 'Dirt bike', len: 2.1, w: 0.8, maxV: 30, accel: 26, hp: 100, value: 850, mass: 0.36, bike: true, dirt: true, colors: ['#ff6d00', '#ffd60a', '#1e88e5', '#43a047', '#e53935', '#f5f5f5'] },
   bicycle: { name: 'Pedal bike', len: 1.8, w: 0.62, maxV: 17, accel: 11, hp: 60, value: 120, mass: 0.2, bike: true, pedal: true, colors: ['#e63946', '#2a9d8f', '#f4a261', '#264653', '#8338ec'] },
   bmx: { name: 'BMX', len: 1.6, w: 0.6, maxV: 16.5, accel: 14, hp: 60, value: 90, mass: 0.18, bike: true, pedal: true, colors: ['#ff006e', '#06d6a0', '#ffd60a', '#000000', '#4cc9f0'] },
   police: { name: 'Police cruiser', len: 4.5, w: 2.0, maxV: 31, accel: 18, hp: 240, value: 900, mass: 1.2, colors: ['#f5f5f5'] },
@@ -43,7 +44,23 @@ function buildCarMesh(type, color) {
     return m;
   };
   if (T.bike) {
-    const motor = type === 'motorbike', bmx = type === 'bmx', r = bmx ? 0.3 : 0.36;
+    const dirt = !!T.dirt, motor = type === 'motorbike' || dirt, bmx = type === 'bmx', r = bmx ? 0.3 : dirt ? 0.42 : 0.36;
+    if (dirt) {
+      for (const az of [L / 2 - r, -L / 2 + r]) { const w = new THREE.Mesh(C.wheel, lam('#1b1b1e')); w.scale.set(0.42, r / 0.38, r / 0.38); w.position.set(0, r, az); w.castShadow = true; g.add(w); }
+      box(0.34, 0.34, 0.75, 0, 0.92, 0.12, color); box(0.42, 0.26, 0.55, 0, 0.98, -0.42, color); // tank and side panels
+      box(0.3, 0.1, 0.9, 0, 1.16, -0.3, '#1b1b1e'); // the long flat seat
+      box(0.24, 0.05, 0.55, 0, 1.12, L / 2 - r + 0.08, color); box(0.24, 0.05, 0.6, 0, 1.08, -L / 2 + 0.32, color); // high fenders
+      for (const sx of [-0.11, 0.11]) box(0.07, 0.8, 0.07, sx, 0.78, L / 2 - r - 0.04, '#c0c4c8'); // long-travel forks
+      box(0.3, 0.32, 0.38, 0, 0.6, 0, '#5c5c5c'); box(0.09, 0.09, 0.75, 0.2, 0.86, -0.5, '#9aa0a6'); // engine, exhaust
+      box(0.82, 0.05, 0.05, 0, 1.3, L / 2 - r - 0.08, '#2b2b2e'); // bars
+      box(0.32, 0.26, 0.04, 0, 1.14, L / 2 - r + 0.12, '#f5f5f5'); box(0.12, 0.16, 0.05, 0, 1.14, L / 2 - r + 0.14, '#1b1b1e'); // number plate
+      const rider = new THREE.Group(), shirt = lam(pick(LOOKS.shirt)), pants = lam(pick(LOOKS.pants));
+      const rb = (w, h, d, x, y, z, m, rx) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.rotation.x = rx || 0; o.castShadow = true; rider.add(o); };
+      rb(0.52, 0.62, 0.3, 0, 1.68, -0.2, shirt, 0.3); rb(0.38, 0.38, 0.4, 0, 2.2, 0, lam(color));
+      for (const sx of [-0.15, 0.15]) { rb(0.2, 0.7, 0.22, sx, 1.2, -0.05, pants, -1.2); rb(0.16, 0.62, 0.18, sx * 2.4, 1.6, 0.25, shirt, -1.1); }
+      rider.visible = false; g.add(rider);
+      return { g, mats, bar: null, rider };
+    }
     for (const az of [L / 2 - r, -L / 2 + r]) { const w = new THREE.Mesh(C.wheel, lam('#1b1b1e')); w.scale.set(motor ? 0.45 : 0.2, r / 0.38, r / 0.38); w.position.set(0, r, az); w.castShadow = true; g.add(w); }
     if (motor) {
       box(0.42, 0.42, 1.1, 0, 0.72, -0.05, color); box(0.46, 0.26, 0.55, 0, 1.0, 0.25, color);
@@ -194,7 +211,7 @@ class Car {
   drive(dt, thr, steer, hb, boost) {
     if (this.phys) { this.phys.input(thr, steer, hb, boost); return; } // realistic handling: the physics body drives
     const T = this.T, { maxV, accel, cond } = this.limits(boost);
-    if (this.y <= 0.001) { const sl = W.slopeAlong(this.x, this.z, Math.sin(this.h), Math.cos(this.h)); if (sl) this.v -= sl * (OFFROAD[this.type] ? 5 : 9) * dt; } // 4x4s pull up hills better
+    if (this.y <= 0.001) { const sl = W.slopeAlong(this.x, this.z, Math.sin(this.h), Math.cos(this.h)); if (sl) this.v -= sl * ((OFFROAD[this.type] || 0) > 1 ? 5 : 9) * dt; } // 4x4s and dirt bikes pull up hills better
     if (thr > 0) {
       if (this.v < 0) this.v = Math.min(0, this.v + 32 * dt); else if (this.v < maxV) this.v = Math.min(maxV, this.v + accel * thr * dt);
     } else if (thr < 0) {
@@ -563,7 +580,7 @@ function navPoints(car) {
 }
 /* top-speed factor on city streets for the fastest vehicles */
 const CITY_TAME = { supercar: 0.72, sports: 0.8, motorbike: 0.76 };
-const OFFROAD = { suv: 1.25, pickup: 1.12 }, OFFROAD_ZONES = ['outskirts', 'beach', 'forest'];
+const OFFROAD = { suv: 1.25, pickup: 1.12, dirtbike: 1.3, motorbike: 0.75 }, OFFROAD_ZONES = ['outskirts', 'beach', 'forest']; // (a road motorbike struggles on grass and sand)
 const SMASH_SPEED = { tree: 12, lamp: 6, pump: 5, cactus: 3 }; // how fast a car must be going to flatten each kind of thing
 function initTraffic(car, from, to) {
   car.ai = Object.assign(car.ai || {}, { mode: car.police ? 'patrol' : 'traffic', from, to, blockT: 0, ignoreT: 0, checkT: 0, blocked: null, stuckT: 0, revT: 0 });

@@ -101,7 +101,7 @@ const UI = {
       this.set('weapon', car.T.name.toUpperCase());
       this.set('ammo', Math.round(Math.abs(car.v) * 3.6) + ' KM/H · ' + (car.popped ? 'TIRES SHOT · ' : '') + 'CAR ' + Math.round(clamp(car.hp / car.maxHp, 0, 1) * 100) + '%' + (G.boosting ? ' · NITRO!' : car.y > 0.05 ? ' · AIRBORNE' : Input.down('Space') && car.type !== 'bmx' ? ' · HANDBRAKE' : ''));
       if (car.T.tank) items.push('Click fire the gun', 'A/D turn on the spot');
-      items.push(car.type === 'bmx' ? 'SPACE hop' : 'SPACE handbrake', 'G spikes ×' + S.spikes, 'H medkit ×' + S.medkit);
+      items.push(car.type === 'bmx' || car.T.dirt ? 'SPACE hop' : 'SPACE handbrake', 'G spikes ×' + S.spikes, 'H medkit ×' + S.medkit);
       if (S.tools.nitro || car.T.nitro) { const n = Math.round(G.nitro * 10); items.push('⇧ NITRO ' + '▮'.repeat(n) + '▯'.repeat(10 - n)); }
     } else {
       this.set('weapon', w.name.toUpperCase());
@@ -652,8 +652,8 @@ function updatePlayer(dt) {
     G.wasBoosting = boost;
     if (car.burning > 0 || car.wreck) car.drive(dt, 0, 0, true, false);
     else {
-      const bmx = car.type === 'bmx';
-      if (bmx && G.hopQ && car.y <= 0.01) { car.yv = 8.5; car.y = 0.02; Sfx.jump(car.x, car.z); }
+      const bmx = car.type === 'bmx' || !!car.T.dirt; // a BMX and a dirt bike hop on Space
+      if (bmx && G.hopQ && car.y <= 0.01) { car.yv = car.T.dirt ? 7.5 : 8.5; car.y = 0.02; Sfx.jump(car.x, car.z); }
       // hop assist: mid-hop, lift just enough to clear a low barrier the front wheel is about to clip
       if (bmx && car.y > 0.25 && car.v > 2) {
         const fx = car.x + Math.sin(car.h) * 1.3, fz = car.z + Math.cos(car.h) * 1.3;
@@ -845,7 +845,7 @@ function step(dt) {
 
 /* sit the player on a bike: lean with it, pedal or grip the bars */
 function poseRider(P, bike, dt) {
-  const rg = P.rig, fx = Math.sin(bike.h), fz = Math.cos(bike.h), seat = bike.type === 'bmx' ? 0.35 : bike.T.pedal ? 0.45 : 0.4;
+  const rg = P.rig, fx = Math.sin(bike.h), fz = Math.cos(bike.h), seat = bike.type === 'bmx' ? 0.35 : bike.T.pedal ? 0.45 : bike.T.dirt ? 0.5 : 0.4;
   rg.root.visible = true;
   rg.root.position.set(bike.x - fx * 0.2, seat + (bike.y || 0) + W.groundAt(bike.x, bike.z), bike.z - fz * 0.2);
   rg.root.rotation.set(0, bike.h, 0);
@@ -908,7 +908,7 @@ function frameInput() {
   if (!P.inCar && !P.inHeli) {
     if (Input.mclick && !G.uiBlock) G.attackQ = { ang: G.camMode === 'chase' ? CAM.yaw : Math.atan2(G.aimX - P.x, G.aimZ - P.z) };
     if (Input.hit('Space')) G.jumpQ = true;
-  } else if (P.inCar && P.inCar.type === 'bmx') {
+  } else if (P.inCar && (P.inCar.type === 'bmx' || P.inCar.T.dirt)) {
     if (Input.hit('Space')) G.hopQ = true;
   }
 }
@@ -1168,6 +1168,7 @@ function demoSetup(kind) {
   else if (kind === 'damcrest') { G.camMode = 'chase'; const D = W.DAM; P.x = D.x - 30; P.z = D.z; P.facing = CAM.yaw = Math.PI / 2 + 0.5; CAM.pitch = 0.2; for (let i = 0; i < 40; i++) step(STEP); }
   else if (kind === 'damiso') { const D = W.DAM; P.x = D.x; P.z = D.z - 30; CAM.zoomIso = 260; CAM.curIso = 260; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'tank') { G.camMode = 'chase'; G.noSpawn = true; const p = W.places.tankDepot, t = new Car('tank', p.x, p.z, p.h, { parked: true, persistent: true }); t.owned = true; P.x = p.x + 3; P.z = p.z; G.enterCar(t); CAM.yaw = p.h + 0.6; CAM.pitch = 0.18; for (let i = 0; i < 90; i++) step(STEP); }
+  else if (kind === 'dirtbike') { G.camMode = 'chase'; G.noSpawn = true; const x = W.ROUNDABOUT.x + 60, z = W.ROUNDABOUT.z - 120, parked = new Car('dirtbike', x + 4, z + 3, 0.6, { parked: true }); void parked; const b = new Car('dirtbike', x, z, Math.PI, { parked: true, color: '#ff6d00' }); P.x = x + 1; P.z = z; G.enterCar(b); Input.keys.KeyW = true; for (let i = 0; i < 40; i++) step(STEP); Input.keys.KeyW = false; CAM.yaw = b.h + 2.3; CAM.pitch = 0.12; for (let i = 0; i < 4; i++) step(STEP); }
   else if (kind === 'funlandiso') { P.x = 735; P.z = 200; CAM.zoomIso = 260; CAM.curIso = 260; for (let i = 0; i < 300; i++) step(STEP); P.x = 735; P.z = 200; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'airportiso') { P.x = -760; P.z = 210; CAM.zoomIso = 230; CAM.curIso = 230; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'planes') { G.camMode = 'chase'; P.x = -680; P.z = 150; P.facing = CAM.yaw = Math.PI * 0.85; CAM.pitch = 0.22; for (let i = 0; i < 30; i++) step(STEP); }
