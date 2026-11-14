@@ -559,8 +559,9 @@ function computeInteract() {
   for (const s of pl.shops) if (dist(P.x, P.z, s.x, s.z) < 2.4) { out.e = { id: 'shop' + s.id, label: 'Shop at ' + s.name, run: () => UI.openShop(s.name) }; return out; }
   const ride = Funland.prompt(P);
   if (ride) { if (ride.f) out.f = ride.f; else out.e = ride.e; return out; }
-  const tc = Train.near(P.x, P.z, 2.5);
-  if (tc) { out.e = { id: 'train', label: 'Climb onto the train', run: () => Train.climb(tc) }; return out; }
+  // a moving train: you can grab on from a little further out (any closer and it knocks you flat)
+  const moving = Train.v > 2, tc = Train.near(P.x, P.z, moving ? 4 : 2.5);
+  if (tc) { out.e = { id: 'train', label: moving ? 'Grab onto the moving train (E or SPACE)' : 'Climb onto the train', run: () => Train.climb(tc) }; return out; }
   for (const r of W.robs) {
     if (r.onTrain || dist(P.x, P.z, r.x, r.z) > r.r + 0.5) continue;
     out.e = robPrompt(r); return out;
@@ -711,6 +712,8 @@ function updatePlayer(dt) {
     else { G.toast('No parachute! Gun stores sell them.'); Sfx.error(); }
   }
   if (P.yv < -6 && fallH > 8 && !P.chute && G.S.parachute > 0 && !(G.chuteHintT > G.time)) { G.chuteHintT = G.time + 4; G.toast('Falling! Press SPACE to open your parachute.', 'warn'); }
+  // jumping next to a train (moving or not) grabs on and climbs up
+  if (G.jumpQ && P.y < 0.5 && !P.vault) { const tc = Train.near(P.x, P.z, Train.v > 2 ? 4 : 2.5); if (tc) { G.jumpQ = false; Train.climb(tc); } }
   if (G.jumpQ) { G.jumpQ = false; tryJump(P, mx, mz, m); }
   // jumping at something low turns into a vault, so you clear it whatever your timing
   if (P.jumping && P.y > 0.2 && fallH < 2.5 && m > 0.01 && !P.vault) {

@@ -1384,6 +1384,14 @@ function runAutotest() {
     G.camMode = mode; G.cam = null; G.frameN++;
     return (seen && d > 120) || 'roadblock ' + seen + ' after ' + t.toFixed(0) + ' s, ' + d.toFixed(0) + ' m ahead';
   });
+  T('a moving train: run alongside, jump (or press E) and you grab on and climb up', () => {
+    reset(); let i = 0; for (; i < 60 * 60 && Train.v < 12; i++) step(STEP);
+    const c = Train.cars[2], fx = Math.sin(c.h), fz = Math.cos(c.h), side = 3.4; tp(c.x + fz * side, c.z - fx * side); P.y = 0;
+    G.interact = computeInteract(); const label = G.interact.e && G.interact.e.label;
+    G.jumpQ = true; steps(0.1); const on = !!Train.onTrain(P); steps(1); const stays = !!Train.onTrain(P) && P.y > 3;
+    if (P.y > 0.5) { P.y = 0; P.yv = 0; tp(c.x + fz * 30, c.z - fx * 30); }
+    return (Train.v >= 12 && /moving train/.test(label || '') && on && stays) || `train speed ${Train.v.toFixed(1)} prompt "${label}" grabbed on ${on} still riding ${stays}`;
+  });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;
     const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };
