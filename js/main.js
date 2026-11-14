@@ -830,7 +830,8 @@ function step(dt) {
   if (P.inCar) { P.x = P.inCar.x; P.z = P.inCar.z; }
   Bullets.update(dt); Pickups.update(dt); Spikes.update(dt); Roadblocks.update(dt); Smoke.update(dt);
   Choppers.update(dt); Ordnance.update(dt);
-  Phys.step(dt);
+  PhysCar.preStep(dt); Phys.step(dt); PhysCar.postStep(dt);
+  if (P.inCar) { P.x = P.inCar.x; P.z = P.inCar.z; }
   updateSecurity(dt); Story.update(dt); updatePopulation(dt);
   crumbT -= dt;
   if (crumbT <= 0) {
@@ -881,6 +882,7 @@ function frameInput() {
     }
   }
   if (Input.hit('KeyN')) { Sfx.setMuted(!Sfx.muted); UI.toast(Sfx.muted ? 'Sound off' : 'Sound on'); }
+  if (Input.hit('KeyL')) { if (!Phys.ready) UI.toast('Realistic handling needs the physics engine (it loads online).'); else UI.toast(PhysCar.toggle() ? 'Handling: realistic (physics)' : 'Handling: arcade'); }
   if (Input.hit('KeyV')) { Voice.muted = !Voice.muted; if (Voice.muted) { Voice.stopDialog(); Voice.radioQ.length = 0; } UI.toast(Voice.muted ? 'Voices off (V to turn them back on)' : 'Voices on'); try { localStorage.setItem('lootrun.voices', Voice.muted ? 'off' : 'on'); } catch (e) { /* storage blocked */ } }
   if (Input.wheel) {
     if (G.camMode === 'iso') CAM.zoomIso = clamp(CAM.zoomIso + Input.wheel * 3, 14, 70);
@@ -1083,7 +1085,7 @@ function boot() {
   G.buildMs = performance.now() - tBuild;
   G.S = freshState();
   bootUI();
-  const physReady = Phys.init();
+  const physReady = Phys.init(); PhysCar.init();
   const q = new URLSearchParams(location.search);
   if (q.has('autotest')) { G.autotest = true; physReady.then(() => runAutotest()); return; }
   if (q.has('bench')) { G.autotest = true; runBench(); return; } // synchronous: headless --dump-dom waits for it in real time
@@ -1153,6 +1155,7 @@ function demoSetup(kind) {
   else if (kind === 'viper') { G.camMode = 'chase'; P.x = 676; P.z = 238; P.facing = CAM.yaw = -2.5; CAM.pitch = -0.12; const c = W.FUN.rides.coaster; for (let i = 0; i < 9000 && !(c.state === 'run' && c.trip > (c.sTop - c.sStop + c.V.len) % c.V.len + 8); i++) step(STEP); P.x = 676; P.z = 238; step(STEP); }
   else if (kind === 'ridecoaster') { G.camMode = 'chase'; G.noSpawn = true; const c = W.FUN.rides.coaster; c.state = 'load'; c.dwell = 3; P.x = 718.5; P.z = 248; Funland.board('viper'); for (let i = 0; i < 9000 && !(c.state === 'run' && c.trip > (c.sTop - c.sStop + c.V.len) % c.V.len + 6); i++) step(STEP); CAM.yaw = P.facing; CAM.pitch = 0.25; for (let i = 0; i < 3; i++) step(STEP); }
   else if (kind === 'ridewheel') { G.camMode = 'chase'; G.noSpawn = true; P.x = 802; P.z = 140; Funland.board('wheel'); for (let i = 0; i < 9000 && P.y < 30; i++) step(STEP); CAM.yaw = -Math.PI / 2 + 0.4; CAM.pitch = 0.3; for (let i = 0; i < 3; i++) step(STEP); }
+  else if (kind === 'kerb') { G.camMode = 'chase'; G.noSpawn = true; const RB = W.ROUNDABOUT, car = new Car('sports', RB.x - 30, RB.z + 5.5, Math.PI / 2); P.x = car.x; P.z = car.z; G.enterCar(car); Input.keys.KeyW = true; for (let i = 0; i < 95; i++) step(STEP); Input.keys.KeyW = false; CAM.yaw = car.h - 0.9; CAM.pitch = 0.15; for (let i = 0; i < 2; i++) step(STEP); }
   else if (kind === 'funlandiso') { P.x = 735; P.z = 200; CAM.zoomIso = 260; CAM.curIso = 260; for (let i = 0; i < 300; i++) step(STEP); P.x = 735; P.z = 200; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'airportiso') { P.x = -760; P.z = 210; CAM.zoomIso = 230; CAM.curIso = 230; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'planes') { G.camMode = 'chase'; P.x = -680; P.z = 150; P.facing = CAM.yaw = Math.PI * 0.85; CAM.pitch = 0.22; for (let i = 0; i < 30; i++) step(STEP); }

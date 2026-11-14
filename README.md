@@ -20,7 +20,7 @@ Progress saves in your browser after every story job.
 | Space | Jump · vault · mantle · open parachute | Handbrake (BMX: hop) | Climb |
 | Shift | Sprint (uses stamina) | Nitro | Descend |
 | E | Interact · hold to rob, cut alarms, loop cameras | Sell at Rusty's | |
-| F | Steal / enter a vehicle | Get out | Get out / bail out |
+| F | Steal / enter a vehicle · ride a Funland ride | Get out | Get out / bail out |
 | Q, 1–6 | Weapons | | |
 | G | Smoke bomb | Spike strip | |
 | T · B | Grenade · C4 | | |
@@ -28,6 +28,9 @@ Progress saves in your browser after every story job.
 | C | Camera: isometric · top-down · 3rd person | | |
 | M | Map: click to set a waypoint, right-click to teleport, scroll to zoom | | |
 | Esc · N · V | Pause · sound on/off · voices on/off | | |
+| L | | Handling: realistic (physics) or arcade | |
+
+Cars drive on realistic handling when the physics engine has loaded (it comes from the internet): a Box3D body on sprung wheels with tyre grip, so they pitch, roll, ride up kerbs and slide. Press L for the arcade handling instead (it's also what you get offline). Bikes always use the arcade handling.
 
 Planes and jets: W/S throttle, build speed on the runway, Space to pull up, Shift to dive, A/D to bank; land and brake (S) to get out. Click fires the gun on police choppers, gunships and fighter jets. Next to the county train, E climbs on; Space jumps off.
 
@@ -45,6 +48,8 @@ Planes and jets: W/S throttle, build speed on the runway, Space to pull up, Shif
 | `js/terrain.js` | Hills: rolling farmland, wooded hills, snowy highlands and badland mesas (everything built stays on flat ground), plus the stunt jumps |
 | `js/districts.js` | Districts out in the county: Funland, a theme park with a big wheel, the Viper coaster, a drop tower, a carousel and a ticket office to rob |
 | `js/puffs.js` | Soft billowing smoke from damaged and burning cars, tyres and explosions |
+| `js/physics.js` | Box3D world: ragdolls, loose props, flying debris, and the static walls around anything physical |
+| `js/drive.js` | Realistic handling: your car as a Box3D body on spring-damper wheels with a tyre model |
 | `js/actors.js` | Characters, pedestrians, cops, weapons, bullets, pickups |
 | `js/vehicles.js` | Car/bike physics, traffic and police AI, roadblocks, explosions |
 | `js/game.js` | Heat, crimes, security, robberies, shop, story missions, spawning |

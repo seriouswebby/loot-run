@@ -109,7 +109,12 @@ W.groundAt = function (x, z) {
     }
   }
   if (W.RAMPS.length) h += W.rampAt(x, z);
-  return h;
+  return h + W.islandAt(x, z);
+};
+/* the roundabout's raised island: a kerb you can bump up and over */
+W.islandAt = function (x, z) {
+  const I = W.ISLAND; if (!I || Math.abs(x - I.x) >= I.r || Math.abs(z - I.z) >= I.r) return 0;
+  const d = Math.hypot(x - I.x, z - I.z); return d < I.r ? I.h * Math.min(1, (I.r - d) / 0.3) : 0;
 };
 /* the smooth "sky floor" aircraft fly relative to when high up */
 W.groundEnv = function (x, z) {

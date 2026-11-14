@@ -124,7 +124,8 @@ function countyRoads() {
     const st = new THREE.Group(); st.position.set(RB.x, 0.35, RB.z); S.add(st);
     const stone = (w, h, d, y, c) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(c)); m.position.y = y; m.castShadow = true; st.add(m); };
     stone(3.2, 1.2, 3.2, 0.6, '#b8b2a4'); stone(2.2, 1.0, 2.2, 1.7, '#cfc9bb'); stone(0.9, 3.2, 0.9, 3.8, '#8f7a52'); stone(2.6, 0.4, 0.5, 5.2, '#8f7a52');
-    W.addCircle(RB.x, RB.z, ri, 'island').h = 1.2;
+    W.ISLAND = { x: RB.x, z: RB.z, r: ri, h: 0.35 }; // a kerbed, raised island (part of the ground: you can mount the kerb)
+    W.addCircle(RB.x, RB.z, 2.3, 'column').h = 6; // the statue
     W.places.roundabout = { id: 'roundabout', name: 'Founders Circle', x: RB.x, z: RB.z };
   }
   // round pads where county roads bend or meet, so corners don't leave notches

@@ -399,6 +399,7 @@ G.enterCar = function (car) {
   }
   car.locked = false; car.driver = 'player'; car.ai = null; car.parked = false; car.siren = false;
   P.inCar = car; P.rig.root.visible = !!car.T.bike; P.vx = P.vz = 0;
+  PhysCar.attach(car); // realistic handling when the physics engine is running (bikes stay arcade)
   if (car.T.bike && !G.autotest) G.toast(car.T.pedal ? 'Pedal hard! Bikes are quiet but slow.' : 'Motorbike: fastest thing on two wheels. Crash hard and you fly off.');
   if (msg) G.toast(msg);
   Story.event('steal', car);
@@ -406,6 +407,7 @@ G.enterCar = function (car) {
 };
 G.exitCar = function (force) {
   const P = G.player, car = P.inCar; if (!car) return;
+  if (PhysCar.car === car) PhysCar.detach();
   const fx = Math.sin(car.h), fz = Math.cos(car.h), off = car.T.w / 2 + 0.75;
   let placed = false;
   for (const s of [-1, 1]) {

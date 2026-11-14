@@ -8,7 +8,7 @@ const PHYS_URL = 'https://cdn.jsdelivr.net/npm/box3d-wasm@0.2.0/dist/box3d.mjs';
 
 const Phys = {
   ready: false, b3: null, world: null,
-  ragdolls: [], props: [], debris: [], statics: new Set(), kin: new Map(), playerKin: null,
+  ragdolls: [], props: [], debris: [], statics: new Map(), kin: new Map(), playerKin: null, evictT: 0,
   bodies: 0, ragdollBodies: 0, group: 1, activeT: 0,
   q: new THREE.Quaternion(), v: new THREE.Vector3(), v2: new THREE.Vector3(),
 
@@ -32,17 +32,40 @@ const Phys = {
   /* static copies of nearby walls and buildings, added lazily around whatever is moving */
   ensureStatics(x, z, r) {
     for (const c of W.queryBox(x - r, z - r, x + r, z + r)) {
-      if (this.statics.has(c) || c.kind === 'bound' || c.removed) continue;
-      this.statics.add(c);
-      const h = Math.max(0.6, c.h || 3);
-      if (c.circle) { const b = this.world.createBody({ type: 'static', position: { x: c.x, y: h / 2, z: c.z } }); b.createBox({ halfExtents: { x: c.r * 0.9, y: h / 2, z: c.r * 0.9 } }); if (c.destructible) c.physBody = b; else b.delete(); }
-      else { const b = this.world.createBody({ type: 'static', position: { x: (c.minX + c.maxX) / 2, y: h / 2, z: (c.minZ + c.maxZ) / 2 } }); b.createBox({ halfExtents: { x: (c.maxX - c.minX) / 2, y: h / 2, z: (c.maxZ - c.minZ) / 2 } }); if (c.destructible) c.physBody = b; else b.delete(); }
+      if (this.statics.has(c) || c.removed || c.oneWay) continue; // ramp back walls are one-way: the physics car handles them
+      const h = c.kind === 'water' ? 3 : Math.max(0.6, c.h || 3); // a river bank or lake shore is a wall to cars (as in the arcade)
+      let b;
+      if (c.circle && c.r > 2) { // a big round thing (the lake, a carousel): a 16-sided prism whose sides touch the circle
+        b = this.world.createBody({ type: 'static', position: { x: c.x, y: h / 2, z: c.z } }); const pts = [], R = c.r / Math.cos(Math.PI / 16);
+        for (let i = 0; i < 16; i++) { const a = (i / 16) * TAU; for (const y of [-h / 2, h / 2]) pts.push({ x: Math.cos(a) * R, y, z: Math.sin(a) * R }); }
+        b.createHull({ points: pts });
+      } else if (c.circle) { b = this.world.createBody({ type: 'static', position: { x: c.x, y: h / 2, z: c.z } }); b.createBox({ halfExtents: { x: c.r * 0.9, y: h / 2, z: c.r * 0.9 } }); }
+      else { b = this.world.createBody({ type: 'static', position: { x: (c.minX + c.maxX) / 2, y: h / 2, z: (c.minZ + c.maxZ) / 2 } }); b.createBox({ halfExtents: { x: (c.maxX - c.minX) / 2, y: h / 2, z: (c.maxZ - c.minZ) / 2 } }); }
+      if (c.destructible) c.physBody = b;
+      this.statics.set(c, b);
     }
     for (const bd of W.buildings) {
       if (this.statics.has(bd) || bd.maxX < x - r || bd.minX > x + r || bd.maxZ < z - r || bd.minZ > z + r) continue;
-      this.statics.add(bd);
       const b = this.world.createBody({ type: 'static', position: { x: (bd.minX + bd.maxX) / 2, y: bd.h / 2, z: (bd.minZ + bd.maxZ) / 2 } });
-      b.createBox({ halfExtents: { x: (bd.maxX - bd.minX) / 2, y: bd.h / 2, z: (bd.maxZ - bd.minZ) / 2 } }); b.delete();
+      b.createBox({ halfExtents: { x: (bd.maxX - bd.minX) / 2, y: bd.h / 2, z: (bd.maxZ - bd.minZ) / 2 } });
+      this.statics.set(bd, b);
+    }
+  },
+  /* walls and buildings far from anything physical leave the physics world again (driving across the map would
+     otherwise fill it with every wall in the county) */
+  evictStatics() {
+    const pts = [];
+    if (PhysCar.car) pts.push(PhysCar.car.x, PhysCar.car.z);
+    for (const a of this.ragdolls) pts.push(a.x, a.z);
+    for (const p of this.props) if (p.body) pts.push(p.x, p.z);
+    for (const d of this.debris) { const pos = d.b.getPosition(); pts.push(pos.x, pos.z); }
+    const R2 = 170 * 170;
+    for (const [c, b] of this.statics) {
+      let near = false;
+      for (let i = 0; i < pts.length && !near; i += 2) { const dx = Math.max(c.minX - pts[i], 0, pts[i] - c.maxX), dz = Math.max(c.minZ - pts[i + 1], 0, pts[i + 1] - c.maxZ); near = dx * dx + dz * dz < R2; }
+      if (near) continue;
+      if (!c.removed) { if (c.physBody === b) c.physBody = null; try { b.destroy(); b.delete(); } catch (e) { /* gone */ } }
+      this.statics.delete(c);
     }
   },
 
@@ -217,13 +240,14 @@ const Phys = {
     for (const p of this.props) if (p.body) near.push(p.x, p.z);
     for (const d of this.debris) { const pos = d.b.getPosition(); near.push(pos.x, pos.z); }
     const isNear = (x, z, r) => { for (let i = 0; i < near.length; i += 2) if (Math.abs(near[i] - x) < r && Math.abs(near[i + 1] - z) < r) return true; return false; };
+    if (PhysCar.car) near.push(PhysCar.car.x, PhysCar.car.z);
     for (const c of G.cars) {
       let k = this.kin.get(c);
-      const want = !c.dead && isNear(c.x, c.z, 14);
+      const want = !c.dead && c !== PhysCar.car && isNear(c.x, c.z, 14);
       if (!want) { if (k) { this.kill(k); this.kin.delete(c); } continue; }
       this.q.setFromAxisAngle(this.v.set(0, 1, 0), c.h);
       const hh = c.T.bike ? 0.5 : 0.75, y = hh + (c.y || 0);
-      if (!k) { k = this.body({ type: 'kinematic', position: { x: c.x, y, z: c.z }, rotation: { x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w } }); k.createBox({ halfExtents: { x: c.T.w / 2, y: hh, z: c.T.len / 2 }, friction: 0.5 }); this.kin.set(c, k); }
+      if (!k) { k = this.body({ type: 'kinematic', position: { x: c.x, y, z: c.z }, rotation: { x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w } }); k.createBox({ halfExtents: { x: c.T.w / 2, y: hh, z: c.T.len / 2 }, friction: 0.5, filter: { categoryBits: 4, maskBits: 0xffff } }); this.kin.set(c, k); }
       else k.setTargetTransform({ position: { x: c.x, y, z: c.z }, rotation: { x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w } }, dt);
     }
     for (const [c, k] of this.kin) if (c.dead) { this.kill(k); this.kin.delete(c); }
@@ -246,6 +270,7 @@ const Phys = {
     if (!this.ready) return;
     this.activeT -= dt;
     if (this.activeT <= 0) { this.activeT = 0.5; this.activateProps(); }
+    this.evictT -= dt; if (this.evictT <= 0) { this.evictT = 1; this.evictStatics(); }
     this.syncKinematics(dt);
     this.world.step(dt, 4);
     this.syncRagdolls(dt); this.syncProps(); this.syncDebris(dt);

@@ -539,14 +539,14 @@ function runAutotest() {
     const L = W.LAKE, lk = drive(L.x + L.r + 40, L.z + 30, -Math.PI / 2, 5); if (dist(lk.x, lk.z, L.x, L.z) < L.r - 1) bad.push('drove into the lake');
     return !bad.length || bad.join(' | ');
   });
-  T('roundabout: GPS and traffic go round the island, cars bounce off it', () => {
+  T('roundabout: GPS and traffic go round the island; you can bump up the kerb onto it, but the statue stops you', () => {
     const R = W.ROUNDABOUT, path = GPS.route(R.x - 80, R.z, R.x + 80, R.z + 10);
     const inner = path.slice(1, -1).filter((p) => dist(p[0], p[1], R.x, R.z) < 12).length;
     const ringOk = W.ringNodes.size === 8 && [...W.ringNodes].every((id) => W.nodes[id].adj.length >= 2);
     reset(); G.noSpawn = true; const car = new Car('sedan', R.x - 45, R.z, Math.PI / 2); tp(R.x - 45, R.z - 3); G.enterCar(car);
-    Input.keys.KeyW = true; let closest = 99; for (let i = 0; i < 240; i++) { step(STEP); closest = Math.min(closest, dist(car.x, car.z, R.x, R.z)); } Input.keys.KeyW = false;
+    Input.keys.KeyW = true; let closest = 99, up = 0; for (let i = 0; i < 300; i++) { step(STEP); closest = Math.min(closest, dist(car.x, car.z, R.x, R.z)); up = Math.max(up, W.groundAt(car.x, car.z)); } Input.keys.KeyW = false;
     G.exitCar(true); car.remove(); G.noSpawn = false;
-    return (inner === 0 && path.length > 2 && ringOk && closest > 9) || `route points inside the island ${inner} (path ${path.length}) ring ok ${ringOk} car got within ${closest.toFixed(1)} m of the centre`;
+    return (inner === 0 && path.length > 2 && ringOk && up > 0.3 && closest > 2.3 && closest < 6) || `route points inside the island ${inner} (path ${path.length}) ring ok ${ringOk} up on the island ${up.toFixed(2)} m · got within ${closest.toFixed(1)} m of the statue's centre`;
   });
   T('Pine Ridge: drive through the tunnel; choppers lose you inside; the ridge is solid', () => {
     const bad = [], T = W.TUNNEL;
@@ -600,7 +600,8 @@ function runAutotest() {
     G.god = false; G.noSpawn = false; P.y = 0; Heat.clear(); clearPolice(); tp(0, 25);
     return (reached && turned > 0.3 && jumped && robbed) || `reached the gold car ${reached} (fell ${fell}) through a bend ${turned.toFixed(2)} rad, jump landed on the train ${jumped}, robbed ${robbed} (cash +${G.S.cash - cash0})`;
   });
-  T('stunt ramps: jump the river and the highway barrier, land, get the bonus; a ramp is solid from behind', () => {
+  T('stunt ramps (arcade handling): jump the river and the highway barrier, land, get the bonus; a ramp is solid from behind', () => {
+    const physOn = PhysCar.on; PhysCar.on = false; // the realistic-handling version is tested on its own below
     const bad = []; G.S.stunts = []; const calls = [], real = G.stunt; G.stunt = (c, air, d, r) => { calls.push((r ? r.name : 'none') + ' ' + air.toFixed(1) + 's ' + d.toFixed(0) + 'm'); real(c, air, d, r); };
     const jump = (name, speed) => {
       const r = W.RAMPS.find((q) => q.name === name); reset(); G.noSpawn = true; for (const c of G.cars.slice()) if (!c.persistent) c.remove();
@@ -623,10 +624,11 @@ function runAutotest() {
     const bx = r.x + r.fx * 30, bz = r.z + r.fz * 30, car = new Car('sedan', bx, bz, Math.atan2(-r.fx, -r.fz)); tp(bx, bz); G.enterCar(car); Input.keys.KeyW = true; steps(3); Input.keys.KeyW = false;
     const along = (car.x - r.x) * r.fx + (car.z - r.z) * r.fz; if (along < r.len / 2 - 0.5) bad.push('drove through the back of a ramp, along ' + along.toFixed(1));
     G.exitCar(true); car.remove(); G.noSpawn = false;
+    PhysCar.on = physOn;
     return !bad.length || bad.join(' | ');
   });
   T('hills: everything built on flat ground stays exactly flat; hills are real but drivable; things are drawn on them; hills block sight', () => {
-    const bad = [], flat = (x, z, what) => { const g = W.groundAt(x, z) - W.rampAt(x, z); if (Math.abs(g) > 0.01) bad.push(what + ' ' + g.toFixed(2) + ' m @' + Math.round(x) + ',' + Math.round(z)); };
+    const bad = [], flat = (x, z, what) => { const g = W.groundAt(x, z) - W.rampAt(x, z) - W.islandAt(x, z); if (Math.abs(g) > 0.01) bad.push(what + ' ' + g.toFixed(2) + ' m @' + Math.round(x) + ',' + Math.round(z)); };
     for (const e of W.countyEdges) { const L = dist(e.ax, e.az, e.bx, e.bz); for (let t = 0; t <= L; t += 4) { const x = e.ax + (e.bx - e.ax) * t / L, z = e.az + (e.bz - e.az) * t / L, nx = -(e.bz - e.az) / L, nz = (e.bx - e.ax) / L; for (const o of [-6, 0, 6]) flat(x + nx * o, z + nz * o, 'road'); } }
     for (let s2 = 0; s2 < W.RAILLEN; s2 += 5) { const p = W.railPoint(s2); flat(p.x, p.z, 'rail'); }
     const A = W.AIRPORT.fence; for (let x = A.minX; x <= A.maxX; x += 20) for (let z = A.minZ; z <= A.maxZ; z += 20) flat(x, z, 'airport');
@@ -1179,6 +1181,59 @@ function runAutotest() {
     }
     Input.keys.KeyW = false; G.exitCar(true); car.remove(); G.camMode = mode; G.cam = cam0; G.frameN++; G.noSpawn = true;
     return (ahead > 0 && near === 0) || `traffic seen ahead ${ahead} · popped in close and in view ${near}`;
+  });
+  /* ---- realistic handling (the Box3D car) ---- */
+  const physDrive = (type, x, z, h) => { reset(); G.noSpawn = true; for (const c of G.cars.slice()) if (!c.persistent) c.remove(); const car = new Car(type, x, z, h); tp(x, z); G.enterCar(car); return car; };
+  const bodyUp = () => { const q = PhysCar.b.getRotation(); return new THREE.Vector3(0, 1, 0).applyQuaternion(new THREE.Quaternion(q.x, q.y, q.z, q.w)).y; };
+  T('realistic handling: your car is a physics body; flat out on the runway it reaches the same top speed, and it stays stable in a long skid-pad circle', () => {
+    if (!Phys.ready) return PhysCar.car === null || 'physics car without physics';
+    const A = W.AIRPORT.runway, z = (A.minZ + A.maxZ) / 2, car = physDrive('sedan', A.minX + 30, z, Math.PI / 2);
+    const attached = PhysCar.car === car;
+    Input.keys.KeyW = true; let top = 0; for (let i = 0; i < 60 * 14; i++) { step(STEP); top = Math.max(top, car.v); }
+    const cap = car.limits(false).maxV;
+    Input.keys.KeyD = true; let nan = false, minUp = 1, maxSp = 0; for (let i = 0; i < 60 * 40; i++) { step(STEP); if (!isFinite(car.x + car.z + car.v)) nan = true; minUp = Math.min(minUp, bodyUp()); maxSp = Math.max(maxSp, Math.hypot(car.vx, car.vz)); }
+    Input.keys.KeyW = Input.keys.KeyD = false; const stillOn = PhysCar.car === car; G.exitCar(true); car.remove();
+    return (attached && top > cap * 0.9 && top < cap * 1.08 && !nan && minUp > 0.5 && stillOn && maxSp < cap * 1.2) || `attached ${attached} top ${top.toFixed(1)} of ${cap.toFixed(1)} · circling: NaN ${nan} least upright ${minUp.toFixed(2)} fastest ${maxSp.toFixed(1)} still physics ${stillOn}`;
+  });
+  T('realistic handling: bump up the roundabout kerb and over the island, and stop dead against a building', () => {
+    if (!Phys.ready) return 'SKIP';
+    const RB = W.ROUNDABOUT; let car = physDrive('sedan', RB.x - 40, RB.z + 5.5, Math.PI / 2); Input.keys.KeyW = true;
+    let up = 0, over = false; for (let i = 0; i < 60 * 6 && !over; i++) { step(STEP); up = Math.max(up, W.groundAt(car.x, car.z)); over = car.x > RB.x + 12; }
+    Input.keys.KeyW = false; const hp1 = car.hp / car.maxHp; G.exitCar(true); car.remove();
+    // a building: you stop at the wall (and the car takes a knock)
+    const b = W.blocks.find((k) => k.type === 'city'), wx = b.cx - 7.5, wz = b.cz - 15.1;
+    car = physDrive('sedan', wx, wz - 40, 0); car.v = 25; car.vz = 25; Input.keys.KeyW = true; steps(3); Input.keys.KeyW = false;
+    const stopped = car.z < wz - car.T.len / 2 + 0.6, hit = car.hp < car.maxHp; G.exitCar(true); car.remove();
+    return (up > 0.3 && over && hp1 > 0.7 && stopped && hit) || `on the island ${up.toFixed(2)} got over ${over} hp ${hp1.toFixed(2)} · wall: stopped ${stopped} (z ${car.z.toFixed(1)} wall ${wz}) dented ${hit}`;
+  });
+  T('realistic handling: a stunt ramp launches you, you land on your wheels and the jump is scored', () => {
+    if (!Phys.ready) return 'SKIP';
+    const r = W.RAMPS.find((q) => q.name === 'River Run'), x = r.x - r.fx * 60, z = r.z - r.fz * 60, car = physDrive('supercar', x, z, Math.atan2(r.fx, r.fz));
+    G.S.stunts = []; car.v = 38; car.vx = r.fx * 38; car.vz = r.fz * 38; Input.keys.KeyW = true;
+    let top = 0, air = 0, landed = false; for (let i = 0; i < 60 * 8 && !landed; i++) { step(STEP); top = Math.max(top, car.y); if (car.y > 0.3) air += STEP; else if (air > 0.5) landed = true; }
+    Input.keys.KeyW = false; steps(1); const up = bodyUp(), scored = G.S.stunts.includes('River Run'); G.exitCar(true); car.remove();
+    // from behind, the ramp's back wall stops you
+    const cj = W.RAMPS.find((q) => q.name === 'Circle Jump'), bx = cj.x + cj.fx * 30, bz = cj.z + cj.fz * 30, c2 = physDrive('sedan', bx, bz, Math.atan2(-cj.fx, -cj.fz));
+    Input.keys.KeyW = true; steps(3); Input.keys.KeyW = false; const along = (c2.x - cj.x) * cj.fx + (c2.z - cj.z) * cj.fz, wall = along > cj.len / 2 - 0.5 && PhysCar.car === c2; G.exitCar(true); c2.remove();
+    return (top > 4 && air > 0.9 && landed && up > 0.8 && scored && wall) || `top ${top.toFixed(1)} m air ${air.toFixed(1)} s landed ${landed} upright ${up.toFixed(2)} scored ${scored} · back wall held ${wall} (along ${along.toFixed(1)})`;
+  });
+  T('realistic handling: left on its roof, the car rights itself; teleporting, getting out and L for arcade all work', () => {
+    if (!Phys.ready) return 'SKIP';
+    const car = physDrive('sedan', 40, W.SHORE - 40, 0);
+    PhysCar.b.setTransform({ x: car.x, y: 1.2, z: car.z }, { x: 0, y: 0, z: 1, w: 0 }); steps(0.5); const flipped = bodyUp() < 0;
+    steps(3); const righted = bodyUp() > 0.85;
+    const tele = G.teleport(-300, -500) && dist(car.x, car.z, -300, -500) < 12; steps(1); const sane = isFinite(car.physY) && Math.abs(car.physY) < 1 && PhysCar.car === car;
+    G.exitCar(true); const off = PhysCar.car === null && !car.dead; G.enterCar(car); const back = PhysCar.car === car;
+    const arcade = !PhysCar.toggle() && PhysCar.car === null; Input.keys.KeyW = true; steps(1); Input.keys.KeyW = false; const drives = car.v > 3; const phys = PhysCar.toggle() && PhysCar.car === car;
+    G.exitCar(true); car.remove();
+    return (flipped && righted && tele && sane && off && back && arcade && drives && phys) || `flipped ${flipped} righted ${righted} teleported ${tele} sane ${sane} out ${off} back in ${back} arcade ${arcade} (drives ${drives}) physics again ${phys}`;
+  });
+  T('realistic handling: crossing the whole map, walls join the physics world ahead of you and leave it behind', () => {
+    if (!Phys.ready) return 'SKIP';
+    const car = physDrive('sedan', -1100, -1100, Math.PI / 2); let peak = 0; const t0 = performance.now();
+    for (let k = 0; k <= 22; k++) { G.teleport(-1100 + k * 100, -1100 + k * 70); steps(1.1); peak = Math.max(peak, Phys.statics.size); }
+    const ms = (performance.now() - t0) / (23 * 66), end = Phys.statics.size; G.exitCar(true); car.remove();
+    return (peak < 4000 && end < peak && ms < 8) || `statics peak ${peak} at the end ${end} · ${ms.toFixed(2)} ms per step`;
   });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;
