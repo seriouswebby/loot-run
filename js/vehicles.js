@@ -555,13 +555,17 @@ function explosion(x, z, r, dmg, src) {
 }
 
 /* ---------------- AI driving ---------------- */
+// how fast a physics car can take a turn of this many radians inside a junction: a right angle at about 11 m/s
+// (what real tyres hold within the crossing), turning right round at about 6
+const turnSpeed = (turn) => turn <= 1.57 ? 11 + 26 * (1 - turn / 1.57) : Math.max(6, 11 - 5 * (turn - 1.57) / 1.57);
 function steerTo(car, tx, tz, want, dt) {
   const desired = Math.atan2(tx - car.x, tz - car.z);
   const d = angDiff(car.h, desired);
+  if (car.ai) car.ai.hdErr = d;
   let steer = clamp(-d * 2.6, -1, 1);
   let thr = 0;
   if (Math.abs(d) > 0.6) want = Math.min(want, 8);
-  if (car.phys && Math.abs(d) > 0.3) want = Math.min(want, 9 + 23 * Math.max(0, 1 - (Math.abs(d) - 0.3) / 0.6)); // tyres, not rails
+  if (car.phys && Math.abs(d) > 0.3) want = Math.min(want, Math.abs(d) > 1.8 ? 6 : 9 + 23 * Math.max(0, 1 - (Math.abs(d) - 0.3) / 0.6)); // tyres, not rails (and turning right round, slowly)
   if (car.phys) thr = clamp((want - car.v) / 3, -1, 1); // a physics car gets smooth pedals
   else if (car.v < want - 0.8) thr = 1; else if (car.v > want + 1.5) thr = -1;
   if (want <= 0.1 && car.v < 0.6) { thr = 0; if (!car.phys) car.v = Math.max(0, car.v); }
@@ -628,12 +632,12 @@ function aiTraffic(car, dt) {
   let want = a.flee ? Math.min(car.T.maxV * 0.85, a.limit * 1.8) : a.limit;
   if (a.peek != null && a.stage !== 'exit' && dT < 26) { // slow for the turn: the sharper, the slower
     const A = W.nodes[a.from], B = W.nodes[a.to], C = W.nodes[a.peek], turn = Math.abs(angDiff(Math.atan2(B.x - A.x, B.z - A.z), Math.atan2(C.x - B.x, C.z - B.z)));
-    want = Math.min(want, 15 - 9 * Math.min(1, turn / 1.57));
+    const long = car.T.len > 5.5; want = Math.min(want, (long ? 12 : 15) - (long ? 8.5 : 9) * Math.min(1, turn / 1.57)); // big trucks take corners slower
   }
   for (const cr of W.railCrossings || []) {
     if (!cr.closed) continue;
     const dx = cr.x - car.x, dz = cr.z - car.z, d = Math.hypot(dx, dz);
-    if (d < 30 && d > 7 && dx * Math.sin(car.h) + dz * Math.cos(car.h) > d * 0.7) { want = 0; break; }
+    if (d < 30 && d > 7 && dx * Math.sin(car.h) + dz * Math.cos(car.h) > d * 0.7) { want = 0; a.crossingT = G.time; break; } // waiting for the train
   }
   if (a.blocked && !a.flee) {
     want = 0; a.blockT += dt;
@@ -647,7 +651,11 @@ function aiTraffic(car, dt) {
 function unstick(car, dt, want) {
   const a = car.ai;
   if (want > 4 && Math.abs(car.v) < 1.2) a.stuckT += dt; else a.stuckT = Math.max(0, a.stuckT - dt);
-  if (a.stuckT > 1.6) { a.stuckT = 0; a.revT = 1.1; a.revSteer = chance(0.5) ? 1 : -1; }
+  if (a.stuckT > (car.phys ? 1.1 : 1.6)) {
+    a.stuckT = 0;
+    if (car.phys) { a.revN = G.time - (a.revAt || -99) < 8 ? Math.min(3, (a.revN || 0) + 1) : 0; a.revAt = G.time; a.revT = 1.3 + 0.5 * a.revN; a.revSteer = a.hdErr ? Math.sign(a.hdErr) : (chance(0.5) ? 1 : -1); } // a physics car can't slide round a corner: back off with the nose swinging toward where it's going, further each time it wedges at the same spot
+    else { a.revT = 1.1; a.revSteer = chance(0.5) ? 1 : -1; }
+  }
 }
 
 function aiPolice(car, dt) {
@@ -681,7 +689,7 @@ function aiPolice(car, dt) {
       return;
     }
     if (de < 30 && !W.segBlocked(car.x, car.z, a.ex, a.ez)) { gx = a.ex; gz = a.ez; want = Math.min(want, 16); }
-    else { const g = graphStep(car, a.ex, a.ez); gx = g.gx; gz = g.gz; if (car.phys && g.turn > 0.3) want = Math.min(want, 12 + 24 * (1 - Math.min(1, g.turn / 1.57))); }
+    else { const g = graphStep(car, a.ex, a.ez); gx = g.gx; gz = g.gz; if (car.phys && g.turn > 0.3) want = Math.min(want, turnSpeed(g.turn)); }
     if (pz !== 'alley' && pz !== 'forest') a.mode = 'pursuit';
   } else {
     const direct = d < 34 && pz !== 'alley' && pz !== 'forest' && !W.segBlocked(car.x, car.z, tx, tz);
@@ -693,28 +701,46 @@ function aiPolice(car, dt) {
         want = 0;
         if (!a.dropped && Math.abs(car.v) < 4) { a.dropped = true; a.mode = 'parked'; Heat.dropCops(car, 2, 'chase'); return; }
       }
-    } else { const g = graphStep(car, tx, tz); gx = g.gx; gz = g.gz; if (car.phys && g.turn > 0.3) want = Math.min(want, 12 + 24 * (1 - Math.min(1, g.turn / 1.57))); } // brake for the turn
+    } else { const g = graphStep(car, tx, tz); gx = g.gx; gz = g.gz; if (car.phys && g.turn > 0.3) want = Math.min(want, turnSpeed(g.turn)); } // brake for the turn
   }
   steerTo(car, gx, gz, want, dt);
   unstick(car, dt, want);
 }
+// the junction a car on the move is heading for: the end of the road it's on that lies ahead (the nearest one may be behind it)
+function nodeAhead(car) {
+  if (Math.abs(car.v) < 3) return W.nearestNode(car.x, car.z);
+  let be = null, bd = 12; for (const e of W.edges) { const A = W.nodes[e.a], B = W.nodes[e.b], d = segPointDist(car.x, car.z, A.x, A.z, B.x, B.z); if (d < bd) { bd = d; be = e; } }
+  if (!be) return W.nearestNode(car.x, car.z);
+  const A = W.nodes[be.a], B = W.nodes[be.b], fwd = ((B.x - A.x) * Math.sin(car.h) + (B.z - A.z) * Math.cos(car.h)) * Math.sign(car.v);
+  return fwd >= 0 ? be.b : be.a;
+}
 function graphStep(car, tx, tz) {
   const a = car.ai;
-  if (a.node == null) a.node = W.nearestNode(car.x, car.z);
-  let n = W.nodes[a.node];
+  if (a.node == null) a.node = car.phys ? nodeAhead(car) : W.nearestNode(car.x, car.z);
+  let n = W.nodes[a.node], uturn = false;
   if (dist(car.x, car.z, n.x, n.z) < 7) {
     let best = n.adj[0], bd = 1e9;
     for (const id of n.adj) { const m = W.nodes[id], dd = dist(m.x, m.z, tx, tz); if (dd < bd) { bd = dd; best = id; } }
     if (dist(n.x, n.z, tx, tz) < bd - 5) return { gx: tx, gz: tz, turn: 0, dn: 0 };
-    a.node = best; n = W.nodes[best];
+    // a physics car turns back only from the middle of the junction, where the side roads leave room for its turning circle
+    const m = W.nodes[best], back = car.phys && Math.abs(angDiff(car.h, Math.atan2(m.x - n.x, m.z - n.z))) > 2.3;
+    const atMiddle = dist(car.x, car.z, n.x, n.z) < 2.5 || (n.x - car.x) * Math.sin(car.h) + (n.z - car.z) * Math.cos(car.h) < 0;
+    if (back && !atMiddle) uturn = true; else { a.node = best; n = m; }
+  }
+  if (uturn) return { gx: n.x, gz: n.z, turn: Math.PI, dn: dist(car.x, car.z, n.x, n.z) };
+  // a physics car follows the road to the junction (aiming a little way along it) instead of cutting across the corner block
+  let gx = n.x, gz = n.z;
+  if (car.phys) {
+    let pv = null, pd = 1e9; for (const id of n.adj) { const m = W.nodes[id], dd = segPointDist(car.x, car.z, m.x, m.z, n.x, n.z); if (dd < pd) { pd = dd; pv = m; } }
+    if (pv) { const sx = n.x - pv.x, sz = n.z - pv.z, L2 = sx * sx + sz * sz, u = clamp(((car.x - pv.x) * sx + (car.z - pv.z) * sz) / L2, 0, 1) + (6 + Math.abs(car.v) * 0.4) / Math.sqrt(L2); if (u < 1) { gx = pv.x + sx * u; gz = pv.z + sz * u; } }
   }
   // the junction ahead: which way from there, and how sharp a turn that is
   const dn = dist(car.x, car.z, n.x, n.z); let turn = 0;
-  if (dn < 12 + Math.abs(car.v) * 0.9) {
+  if (dn < 12 + Math.abs(car.v) * (car.phys ? 1.2 : 0.9)) {
     let nb = null, bd = 1e9; for (const id of n.adj) { const m = W.nodes[id], dd = dist(m.x, m.z, tx, tz); if (dd < bd) { bd = dd; nb = m; } }
     if (nb && dist(n.x, n.z, tx, tz) >= bd - 5) turn = Math.abs(angDiff(Math.atan2(n.x - car.x, n.z - car.z), Math.atan2(nb.x - n.x, nb.z - n.z)));
   }
-  return { gx: n.x, gz: n.z, turn, dn };
+  return { gx, gz, turn, dn };
 }
 
 /* ---------------- roadblocks + spike strips ---------------- */

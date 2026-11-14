@@ -11,9 +11,9 @@
    Like ragdolls and props, each body lives in "height above the local ground": the ground under the car's centre is
    y = 0, and the frame is shifted as that ground rises and falls (keeping the car's height in the world).
 
-   PhysCar manages them: the car you drive, and the parked cars, traffic and police within 55 m of you (up to 16), which
-   go back to the arcade model further off. L switches your own car to the arcade handling; K turns the physics
-   traffic off. Bikes stay on the arcade model (balance, hops, bails). Without Box3D (offline, ?nophys) or with
+   PhysCar manages them: the car you drive, and every parked car, traffic car and police cruiser in play (up to 80;
+   parked ones sleep until something touches them). L switches your own car to the arcade handling; K turns the
+   physics traffic off. Bikes stay on the arcade model (balance, hops, bails). Without Box3D (offline, ?nophys) or with
    ?arcade, every car uses the arcade model. */
 
 class PVeh {
@@ -66,12 +66,21 @@ class PVeh {
     const c = this.car; let b = this.b;
     if (!b) return;
     if (!PhysCar.keep(c)) { PhysCar.detach(c); return; }
+    // asleep (parked and still): nothing to do until something nudges it, moves it or someone gets in
+    if (this.sleeping) {
+      const L = this.last, moved = L && (c.x !== L.x || c.z !== L.z || c.h !== L.h || c.vx !== L.vx || c.vz !== L.vz || c.kx || c.kz || c.yv > 0);
+      if (b.isAwake() || moved || c.driver || c.burning > 0) { this.sleeping = false; this.idleT = 0; b.setAwake(true); } else return;
+    }
     this.smash(); // knock down trees, lamp posts, pumps and cacti you hit at speed (the slowdown goes through sync)
     b = this.b; if (!b) return; // a pump's blast can end a car
     this.sync();
     this.water();
     this.oneWayWalls();
     const pos = b.getPosition(), q = b.getRotation(), lv = b.getLinearVelocity(), av = b.getAngularVelocity(), m = this.m, Gr = PhysCar.G;
+    if (!c.driver && this.contacts >= 3 && Math.hypot(lv.x, lv.y, lv.z) < 0.06 && Math.hypot(av.x, av.y, av.z) < 0.05 && !(c.burning > 0) && !this.onRamp) {
+      this.idleT = (this.idleT || 0) + dt;
+      if (this.idleT > 1) { b.setLinearVelocity({ x: 0, y: 0, z: 0 }); b.setAngularVelocity({ x: 0, y: 0, z: 0 }); b.setAwake(false); this.sleeping = true; this.write(); return; }
+    } else this.idleT = 0;
     const Q = this.Q.set(q.x, q.y, q.z, q.w);
     const up = this.up.set(0, 1, 0).applyQuaternion(Q), fw = this.fw.set(0, 0, 1).applyQuaternion(Q), rt = this.rt.set(1, 0, 0).applyQuaternion(Q);
     // the tyres pull with the car's own acceleration; nitro is extra thrust on top (it isn't limited by grip)
@@ -79,15 +88,16 @@ class PVeh {
     const fh = Math.hypot(fw.x, fw.z) || 1, vF = (lv.x * fw.x + lv.z * fw.z) / fh, sp = Math.hypot(lv.x, lv.z);
     // with nobody at the wheel a car sits with its handbrake on
     let thr = this.inp.thr, steer = this.inp.steer, hb = this.inp.hb || (!c.driver && !this.inp.set);
+    const chasing = c.police && c.ai && (c.ai.mode === 'pursuit' || c.ai.mode === 'perimeter'); // pursuit-tuned: sharper steering, stickier tyres
     this.inp.set = false;
     if (c.burning > 0 || c.wreck) { thr = 0; steer = 0; hb = true; }
     // steering: full lock when slow, a few degrees at speed (a keyboard aid; AI drivers get a little more); a flat tyre tugs the wheel
-    const lock = c.T.tank ? 0 : this.player ? 0.78 / (1 + Math.abs(vF) / 20) : 0.62 / (1 + Math.abs(vF) / 20);
+    const lock = c.T.tank ? 0 : this.player || chasing ? 0.78 / (1 + Math.abs(vF) / 20) : (c.T.len > 5.5 ? 0.8 : 0.62) / (1 + Math.abs(vF) / 20); // (long trucks get full lock for the junctions; cruisers on a chase steer like you)
     this.steerA = damp(this.steerA, -steer * lock + (c.popped ? Math.sin(G.time * 13) * 0.05 : 0), 16 / (1 + Math.abs(vF) / 40), dt); // keys ease in (a little more gently at speed)
     c.steerV = steer;
     // grip: tyres, weather, surface (SUVs and utes keep theirs off-road)
     const zone = W.zoneAt(c.x, c.z), off = OFFROAD_ZONES.includes(zone);
-    const mu0 = PhysCar.grip(c) * Weather.grip() * (off ? ((OFFROAD[c.type] || 0) > 1 ? 0.95 : 0.78) : 1) * (c.popped ? 0.75 : 1);
+    const mu0 = PhysCar.grip(c) * (chasing ? 1.15 : 1) * Weather.grip() * (off ? ((OFFROAD[c.type] || 0) > 1 ? 0.95 : 0.78) : 1) * (c.popped ? 0.75 : 1);
     let contacts = 0;
     const kS = (m * Gr / 4) / 0.17, cS = 2 * 0.5 * Math.sqrt(kS * m / 4); // static sag 0.17 m, damping ratio 0.5
     const ca = Math.cos(this.steerA), sa = Math.sin(this.steerA), L0 = PhysCar.L0;
@@ -168,7 +178,7 @@ class PVeh {
 
   /* after the physics step: re-centre the frame on the ground under the car, launches, landings, impacts, write back */
   postStep(dt) {
-    const c = this.car, b = this.b; if (!b) return;
+    const c = this.car, b = this.b; if (!b || this.sleeping) return;
     const player = this.player;
     let pos = b.getPosition(); const q = b.getRotation();
     if (!isFinite(pos.x + pos.y + pos.z + q.x + q.y + q.z + q.w)) { // never let a NaN loose: put it back where it was
@@ -256,12 +266,15 @@ class PVeh {
     if (c.yv > 0) { const v2 = b.getLinearVelocity(); b.setLinearVelocity({ x: v2.x, y: v2.y + c.yv, z: v2.z }); c.yv = 0; }
   }
   smash() {
+    // only something the car is about to drive into: inside its width, just ahead of its nose (as the arcade's actual contact)
     const c = this.car, sp = Math.hypot(c.vx, c.vz); if (sp < 3) return;
-    const ux = c.vx / sp, uz = c.vz / sp, reach = c.r + 0.25 + sp * STEP;
-    for (const [cx, cz] of c.circles()) for (const col of W.queryBox(cx - reach - 1, cz - reach - 1, cx + reach + 1, cz + reach + 1)) {
+    const hx = Math.sin(c.h), hz = Math.cos(c.h), fwd = c.vx * hx + c.vz * hz; if (fwd < 1) return;
+    const len = c.T.len / 2 + sp * STEP + 0.1, half = c.T.w / 2, reach = len + 1;
+    for (const col of W.queryBox(c.x - reach, c.z - reach, c.x + reach, c.z + reach)) {
       const s = col.destructible; if (!s || col.removed || sp <= (SMASH_SPEED[s.kind] || 99)) continue;
-      const px = col.circle ? col.x : clamp(cx, col.minX, col.maxX), pz = col.circle ? col.z : clamp(cz, col.minZ, col.maxZ), dx = px - cx, dz = pz - cz;
-      if (Math.hypot(dx, dz) - (col.circle ? col.r : 0) < reach && dx * ux + dz * uz > 0) { G.smash(col, c); if (!this.b) return; } // just ahead, in the way
+      const px = col.circle ? col.x : clamp(c.x + hx * len, col.minX, col.maxX), pz = col.circle ? col.z : clamp(c.z + hz * len, col.minZ, col.maxZ), r = col.circle ? col.r : 0;
+      const dx = px - c.x, dz = pz - c.z, along = dx * hx + dz * hz, side = Math.abs(dx * hz - dz * hx);
+      if (along > c.T.len / 2 - 0.5 && along < len + r && side < half + r) { G.smash(col, c); if (!this.b) return; }
     }
   }
   /* push the body out of something by (px, pz), killing the speed going into it (as the arcade's walls do) */
@@ -307,8 +320,8 @@ class PVeh {
 const PhysCar = {
   on: true, world: true, list: new Set(), mT: 0,
   RIDE: 0.83, R: 0.36, L0: 0.52, G: 20,
-  MAX: 16, RON: 55, ROFF: 80, // up to 16 physics cars, within 55 m of you; past 80 m they go back to the arcade model
-  classes: { parked: true, traffic: true, police: true }, // which kinds of car near you become physics bodies
+  MAX: 80, RON: 1e9, ROFF: 1e9, // every car in play (up to 80) is a physics car; K turns the others back to the arcade model
+  classes: { parked: true, traffic: true, police: true }, // which kinds of car become physics bodies
 
   init() {
     let pref = null, world = null; try { pref = localStorage.getItem('lootrun.handling'); world = localStorage.getItem('lootrun.physWorld'); } catch (e) { /* private window */ }
@@ -317,7 +330,7 @@ const PhysCar = {
     this.world = !q.has('arcade') && !q.has('arcadeworld') && world !== 'off';
   },
   usable(car) { return !!(Phys.ready && car && !car.T.bike && !car.dead && !car.wreck && (car.driver === 'player' ? this.on : this.world)); },
-  /* which cars near you become physics bodies (the K key turns the others off, in case they cost too much) */
+  /* which cars become physics bodies (the K key turns the others off, in case they cost too much) */
   eligible(car) {
     if (!car || car.dead || car.T.bike || car.wreck) return false;
     if (car.driver === 'player') return true;
@@ -343,7 +356,7 @@ const PhysCar = {
     }
     return false;
   },
-  /* every quarter second: the nearest eligible cars become physics bodies */
+  /* every quarter second: eligible cars become physics bodies (the nearest first, if there are ever more than MAX) */
   manage(dt) {
     this.mT -= dt; if (this.mT > 0) return; this.mT = 0.25;
     if (!Phys.ready || !this.world) return;
