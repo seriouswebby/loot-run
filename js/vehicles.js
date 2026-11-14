@@ -314,13 +314,20 @@ class Car {
     if (this.burning > 0) {
       this.burning -= dt;
       if (Math.random() < 0.6) FX.spawn(this.x + rand(-0.8, 0.8), 1.3, this.z + rand(-0.8, 0.8), rand(-0.5, 0.5), rand(2, 4), rand(-0.5, 0.5), pick(['#ff6b1a', '#ffb703', '#e63946']), rand(0.3, 0.6), 0.6, { grav: -2 });
+      // flames lick up and a thick black column pours off a burning car
+      if (Math.random() < 0.5) Puffs.add(this.x + rand(-0.6, 0.6), 1.4, this.z + rand(-0.6, 0.6), rand(-0.3, 0.3), rand(1.5, 2.5), rand(-0.3, 0.3), 0.9, 1.4, 0.45, pick(['#ff7a1a', '#ffb703']), 0.85, 2);
+      if (Math.random() < 0.7) Puffs.add(this.x + rand(-0.5, 0.5), 2.0, this.z + rand(-0.5, 0.5), rand(-0.4, 0.4), rand(2, 3), rand(-0.4, 0.4), 1.4, 4.5, 3.2, '#1c1c1c', 0.8, 1.2);
       if (this.burning <= 0) this.explode();
     } else if (!this.wreck && !this.T.pedal && this.hp < this.maxHp * 0.5) {
       this.smokeT -= dt;
       const heavy = this.hp < this.maxHp * 0.25;
-      if (this.smokeT <= 0) { this.smokeT = heavy ? 0.05 : 0.14; const fx = Math.sin(this.h), fz = Math.cos(this.h); FX.spawn(this.x + fx * this.T.len * 0.35, 1.2, this.z + fz * this.T.len * 0.35, rand(-0.3, 0.3), 1.5, rand(-0.3, 0.3), heavy ? '#1f1f1f' : '#8a8a8a', heavy ? 0.8 : 0.5, heavy ? 1.6 : 1.1, { grav: -1, grow: heavy ? 2.4 : 1.5 }); }
+      // smoke billows from under the bonnet: grey steam when it's hurt, thick black smoke when it's about to go
+      if (this.smokeT <= 0) {
+        this.smokeT = heavy ? 0.045 : 0.09; const fx = Math.sin(this.h), fz = Math.cos(this.h), hx = this.x + fx * this.T.len * 0.33, hz = this.z + fz * this.T.len * 0.33;
+        Puffs.add(hx + rand(-0.4, 0.4), 1.1, hz + rand(-0.4, 0.4), rand(-0.4, 0.4) - this.vx * 0.15, rand(1, 2), rand(-0.4, 0.4) - this.vz * 0.15, heavy ? 0.9 : 0.75, heavy ? 3.8 : 3.0, heavy ? 2.6 : 1.9, heavy ? pick(['#2a2a2a', '#3a3a3a']) : pick(['#d8d8d8', '#b4b4b4']), heavy ? 0.75 : 0.65, 1.4);
+      }
     }
-    if (this.wreck) { this.wreckT -= dt; if (Math.random() < 0.1) FX.spawn(this.x, 1.3, this.z, 0, 1.2, 0, '#3a3a3a', 0.6, 1.5, { grav: -1, grow: 2 }); }
+    if (this.wreck) { this.wreckT -= dt; if (Math.random() < 0.25) Puffs.add(this.x + rand(-0.6, 0.6), 1.2, this.z + rand(-0.6, 0.6), rand(-0.3, 0.3), rand(1, 1.8), rand(-0.3, 0.3), 1.2, 4, 3.5, pick(['#2b2b2b', '#454545']), 0.6, 1); }
     // pedal bikes left lying around (or abandoned) vanish after 2 minutes
     if (this.T.pedal && this.leftT > 0 && !this.driver) { this.leftT -= dt; if (this.leftT <= 0) { this.remove(); return; } }
     if (this.alarmT > 0) { this.alarmT -= dt; this.honkT -= dt; if (this.honkT <= 0) { this.honkT = 0.6; Sfx.honk(this.x, this.z); } }
@@ -359,7 +366,7 @@ const Skids = {
       const x = car.x - fx * back + rx * side * s, z = car.z - fz * back + rz * side * s;
       this.d.position.set(x, 0.065, z); this.d.rotation.set(0, Math.atan2(car.vx, car.vz), 0); this.d.updateMatrix();
       this.mesh.setMatrixAt(this.i, this.d.matrix); this.i = (this.i + 1) % this.N;
-      if (Math.random() < 0.35) FX.spawn(x, 0.3, z, rand(-0.4, 0.4), 0.6, rand(-0.4, 0.4), pick(['#d9d9d9', '#bdbdbd']), 0.5, 0.8, { grav: -0.5, grow: 2 });
+      if (Math.random() < 0.45) Puffs.add(x, 0.4, z, rand(-0.6, 0.6) - car.vx * 0.05, rand(0.3, 0.8), rand(-0.6, 0.6) - car.vz * 0.05, 0.7, 3.2, 1.4, pick(['#e8e8e8', '#d4d4d4']), 0.45, 0.4); // tyre smoke
     }
     this.mesh.instanceMatrix.needsUpdate = true;
   },
@@ -454,7 +461,9 @@ function carHitsActors(car) {
 
 function explosion(x, z, r, dmg, src) {
   FX.burst(x, 1.5, z, 40, ['#ff6b1a', '#ffb703', '#e63946', '#fff3b0'], 12, 0.5, 0.9, { grav: 4 });
-  FX.burst(x, 1.5, z, 18, ['#3a3a3a', '#555555'], 5, 1.2, 2, { grav: -1, grow: 2 });
+  // a fireball, then a rolling cloud of dark smoke
+  for (let i = 0; i < 26; i++) { const a = rand(0, TAU), s = rand(1, 5); Puffs.add(x + Math.cos(a) * rand(0, 2), rand(0.8, 2.5), z + Math.sin(a) * rand(0, 2), Math.cos(a) * s, rand(1.5, 4), Math.sin(a) * s, rand(1.4, 2.4), 3.2, rand(0.5, 0.8), pick(['#ff8c1a', '#ffc04d', '#ff5a1f']), 0.9, 1); }
+  for (let i = 0; i < 30; i++) { const a = rand(0, TAU), s = rand(0.5, 4); Puffs.add(x + Math.cos(a) * rand(0, 3), rand(1, 3.5), z + Math.sin(a) * rand(0, 3), Math.cos(a) * s, rand(1, 3.5), Math.sin(a) * s, rand(1.6, 2.6), 4.5, rand(3, 5), pick(['#2a2a2a', '#3d3d3d', '#555555']), 0.7, 1.1); }
   Sfx.explode(x, z); G.shake(clamp(1.2 - dist(x, z, G.player.x, G.player.z) / 60, 0, 1));
   const P = G.player;
   const hitA = (a) => {

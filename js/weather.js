@@ -6,15 +6,15 @@
    wind pushes aircraft around. */
 
 const WEATHER = {
-  clear: { label: 'SUNNY', hint: 'Clear skies · cops see far', sky: '#9fd0ef', fogNear: 300, fogFar: 820, sun: 0.95, hemi: 0.72, clouds: 0.12, cloudCol: '#ffffff', wind: 0.15, sight: 1, grip: 1, w: 0, dur: [240, 480] },
-  clouds: { label: 'PARTLY CLOUDY', hint: 'Normal visibility', sky: '#a9c6da', fogNear: 260, fogFar: 700, sun: 0.72, hemi: 0.75, clouds: 0.55, cloudCol: '#f4f6f8', wind: 0.3, sight: 1, grip: 1, w: 16, dur: [150, 300] },
-  cloudy: { label: 'OVERCAST', hint: 'Grey skies', sky: '#98a5b0', fogNear: 200, fogFar: 560, sun: 0.42, hemi: 0.8, clouds: 1, cloudCol: '#c9ced3', wind: 0.35, sight: 0.95, grip: 1, w: 9, dur: [120, 240] },
-  windy: { label: 'WINDY', hint: 'Strong gusts · aircraft drift', sky: '#a7cbe0', fogNear: 280, fogFar: 760, sun: 0.85, hemi: 0.74, clouds: 0.4, cloudCol: '#ffffff', wind: 1, sight: 1, grip: 0.95, w: 8, dur: [100, 200] },
-  rain: { label: 'RAIN', hint: 'Cops see less · roads slick', sky: '#7d8b97', fogNear: 60, fogFar: 320, sun: 0.25, hemi: 0.7, rain: 0.55, clouds: 1, cloudCol: '#8d969e', wind: 0.45, sight: 0.8, grip: 0.7, w: 7, dur: [100, 200] },
-  storm: { label: 'THUNDERSTORM', hint: 'Choppers grounded · cops see less · roads slick', sky: '#4e5964', fogNear: 25, fogFar: 220, sun: 0.12, hemi: 0.55, rain: 1, clouds: 1, cloudCol: '#5b6168', wind: 0.9, sight: 0.7, grip: 0.6, lightning: true, noHeli: true, w: 3, dur: [80, 150] },
+  clear: { label: 'SUNNY', hint: 'Clear skies · cops see far', sky: '#9fd0ef', fogNear: 480, fogFar: 1350, sun: 0.95, hemi: 0.72, clouds: 0.12, cloudCol: '#ffffff', wind: 0.15, sight: 1, grip: 1, w: 0, dur: [240, 480] },
+  clouds: { label: 'PARTLY CLOUDY', hint: 'Normal visibility', sky: '#a9c6da', fogNear: 420, fogFar: 1150, sun: 0.72, hemi: 0.75, clouds: 0.55, cloudCol: '#f4f6f8', wind: 0.3, sight: 1, grip: 1, w: 16, dur: [150, 300] },
+  cloudy: { label: 'OVERCAST', hint: 'Grey skies', sky: '#98a5b0', fogNear: 320, fogFar: 900, sun: 0.42, hemi: 0.8, clouds: 1, cloudCol: '#c9ced3', wind: 0.35, sight: 0.95, grip: 1, w: 9, dur: [120, 240] },
+  windy: { label: 'WINDY', hint: 'Strong gusts · aircraft drift', sky: '#a7cbe0', fogNear: 440, fogFar: 1250, sun: 0.85, hemi: 0.74, clouds: 0.4, cloudCol: '#ffffff', wind: 1, sight: 1, grip: 0.95, w: 8, dur: [100, 200] },
+  rain: { label: 'RAIN', hint: 'Cops see less · roads slick', sky: '#7d8b97', fogNear: 90, fogFar: 430, sun: 0.25, hemi: 0.7, rain: 0.55, clouds: 1, cloudCol: '#8d969e', wind: 0.45, sight: 0.8, grip: 0.7, w: 7, dur: [100, 200] },
+  storm: { label: 'THUNDERSTORM', hint: 'Choppers grounded · cops see less · roads slick', sky: '#4e5964', fogNear: 35, fogFar: 280, sun: 0.12, hemi: 0.55, rain: 1, clouds: 1, cloudCol: '#5b6168', wind: 0.9, sight: 0.7, grip: 0.6, lightning: true, noHeli: true, w: 3, dur: [80, 150] },
   fog: { label: 'FOG', hint: 'Cops can barely see you', sky: '#b7bfc4', fogNear: -20, fogFar: 75, sun: 0.3, hemi: 0.85, clouds: 0, cloudCol: '#ffffff', wind: 0.05, sight: 0.55, grip: 0.95, w: 3, dur: [80, 160] },
-  snow: { label: 'SNOW', hint: 'Icy roads · cops see less', sky: '#c9d3dc', fogNear: 50, fogFar: 300, sun: 0.5, hemi: 0.9, snow: 1, clouds: 1, cloudCol: '#dfe4e8', wind: 0.35, sight: 0.8, grip: 0.55, w: 4, dur: [120, 240] },
-  hail: { label: 'HAIL', hint: 'Slick roads · get under cover', sky: '#7f8b96', fogNear: 40, fogFar: 260, sun: 0.3, hemi: 0.68, hail: 1, clouds: 1, cloudCol: '#7a828a', wind: 0.6, sight: 0.8, grip: 0.72, w: 2, dur: [50, 100] },
+  snow: { label: 'SNOW', hint: 'Icy roads · cops see less', sky: '#c9d3dc', fogNear: 70, fogFar: 400, sun: 0.5, hemi: 0.9, snow: 1, clouds: 1, cloudCol: '#dfe4e8', wind: 0.35, sight: 0.8, grip: 0.55, w: 4, dur: [120, 240] },
+  hail: { label: 'HAIL', hint: 'Slick roads · get under cover', sky: '#7f8b96', fogNear: 60, fogFar: 340, sun: 0.3, hemi: 0.68, hail: 1, clouds: 1, cloudCol: '#7a828a', wind: 0.6, sight: 0.8, grip: 0.72, w: 2, dur: [50, 100] },
 };
 const WEATHER_KEYS = ['fogNear', 'fogFar', 'sun', 'hemi', 'rain', 'snow', 'hail', 'clouds', 'wind', 'sight', 'grip'];
 // weather that tends to follow weather: rain can build to a storm or turn to hail, overcast can bring rain or snow
@@ -55,7 +55,7 @@ const Weather = {
     this.blanket.rotation.x = -Math.PI / 2; this.blanket.renderOrder = 1; this.blanket.visible = false; scene.add(this.blanket);
     // clouds: flattened puffs drifting high overhead, wrapped round whoever is watching
     const puff = new THREE.IcosahedronGeometry(1, 1);
-    this.cloudN = 260; this.cloudSpan = 2200;
+    this.cloudN = 260; this.cloudSpan = 3000;
     this.cloudMesh = new THREE.InstancedMesh(puff, new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, emissive: 0x555555, depthWrite: false }), this.cloudN);
     this.cloudMesh.frustumCulled = false; scene.add(this.cloudMesh);
     this.clouds = [];

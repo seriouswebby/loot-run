@@ -922,6 +922,7 @@ function frame(now) {
   if (G.canopy.visible) { G.canopy.position.set(P.x, P.y, P.z); G.canopy.rotation.y = P.facing; }
   if (G.state !== 'title') { P.animate(dt); for (const n of G.npcs) n.animate(dt); if (P.inCar && P.inCar.T.bike) poseRider(P, P.inCar, dt); }
   FX.update(G.state === 'play' ? dt : 0);
+  Puffs.update(G.state === 'play' ? dt : 0, cam, renderer.domElement.height);
   updateFades(cam, dt);
   updateMarkers();
   GPS.update(dt);
@@ -930,7 +931,7 @@ function frame(now) {
   const B = G.body();
   Weather.update(dt, CAM.fx, P.inHeli ? Math.max(0, P.inHeli.y - 12) : Math.max(0, P.y - 4), CAM.fz);
   // nothing past the fog can be seen, so don't draw it: with the county out there this culls most of the world
-  if (G.scene.fog) { const far = Math.min(1400, G.scene.fog.far + 25); if (Math.abs(persp.far - far) > 5) { persp.far = far; persp.updateProjectionMatrix(); } }
+  if (G.scene.fog) { const far = Math.min(2000, G.scene.fog.far + 25); if (Math.abs(persp.far - far) > 5) { persp.far = far; persp.updateProjectionMatrix(); } }
   const sir = G.cars.filter((c) => c.siren && !c.wreck && !c.dead).sort((a, b) => dist(a.x, a.z, B.x, B.z) - dist(b.x, b.z, B.x, B.z)).slice(0, 2);
   let heli = null, hd = 1e9;
   for (const h of Choppers.list) if (!h.dead && h.rotor > 0.3 && (!h.wing || h.pilot)) { const d = h === P.inHeli ? 0 : dist(h.x, h.z, B.x, B.z); if (d < hd) { hd = d; heli = h; } }
@@ -954,14 +955,14 @@ function setupScene() {
   sun.shadow.bias = -0.0008;
   scene.add(sun); scene.add(sun.target);
   ortho = new THREE.OrthographicCamera(-20, 20, 20, -20, 1, 800);
-  persp = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 1400);
+  persp = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 2000);
   raycaster = new THREE.Raycaster(); aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.2);
   return scene;
 }
 function newWorld() {
   G.scene = setupScene();
   W.build(G.scene, 7);
-  FX.init(G.scene); Bullets.init(); Floaters.init($('floaters')); Ordnance.init(); Skids.init(); Weather.init(G.scene, G.hemi, sun);
+  FX.init(G.scene); Puffs.init(G.scene); Bullets.init(); Floaters.init($('floaters')); Ordnance.init(); Skids.init(); Weather.init(G.scene, G.hemi, sun);
   const sp = W.places.spawn;
   G.player = new Actor('player', sp.x, sp.z, { shirt: '#f77f00', pants: '#283618', skin: '#e0ac69', hair: '#2b1b10' });
   G.player.r = 0.4; G.player.inCar = null;
@@ -1132,6 +1133,19 @@ function demoSetup(kind) {
     if (kind === 'drivechase2') G.setWaypoint(W.places.chop.x, W.places.chop.z);
     Input.keys.KeyW = true; for (let i = 0; i < 90; i++) step(STEP); Input.keys.KeyW = false; void b; GPS.t = 0; GPS.update(0.016);
   }
+  else if (kind === 'smoke') {
+    G.camMode = 'chase'; G.noSpawn = true; const x = W.rp(3) + 2.5, z = W.rp(4) + 20; P.x = x; P.z = z; P.facing = CAM.yaw = 0; CAM.pitch = 0.25;
+    const a = new Car('sedan', x - 4, z + 12, 0.6, { parked: true }); a.damage(a.maxHp * 0.55, a.x, a.z + 2);
+    const b = new Car('sports', x + 4, z + 14, -0.4, { parked: true }); b.damage(b.maxHp * 0.8, b.x, b.z + 2);
+    const c = new Car('van', x + 1, z + 26, 1.2, { parked: true }); c.burning = 6;
+    for (let i = 0; i < 150; i++) { step(STEP); Puffs.update(STEP, persp, 800); }
+  }
+  else if (kind === 'smoke2') {
+    G.camMode = 'chase'; G.noSpawn = true; const x = W.rp(3) + 2.5, z = W.rp(4) + 20; P.x = x; P.z = z; P.facing = CAM.yaw = 0; CAM.pitch = 0.1;
+    const b = new Car('sports', x + 1, z + 9, Math.PI, { parked: true }); b.damage(b.maxHp * 0.8, b.x, b.z - 2);
+    const a = new Car('sedan', x - 4, z + 9, Math.PI, { parked: true }); a.damage(a.maxHp * 0.6, a.x, a.z - 2);
+    for (let i = 0; i < 150; i++) { step(STEP); Puffs.update(STEP, persp, 800); }
+  }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }
@@ -1154,7 +1168,7 @@ function runBench() {
     const P = G.player; P.x = x; P.z = z; W.collideCircle(P, P.r);
     for (let i = 0; i < 120; i++) step(STEP); // let traffic and people fill in
     const t0 = performance.now(); for (let i = 0; i < 600; i++) step(STEP); const stepMs = (performance.now() - t0) / 600;
-    Weather.update(0.016, CAM.fx, 0, CAM.fz); persp.far = Math.min(1400, G.scene.fog.far + 25); persp.updateProjectionMatrix();
+    Weather.update(0.016, CAM.fx, 0, CAM.fz); persp.far = Math.min(2000, G.scene.fog.far + 25); persp.updateProjectionMatrix();
     const cam = updateCamera(0.016); renderer.info.autoReset = false; renderer.info.reset();
     const t1 = performance.now(); for (let i = 0; i < 5; i++) renderer.render(G.scene, cam); const drawMs = (performance.now() - t1) / 5;
     // where the triangles go: render again with one kind of object hidden at a time
