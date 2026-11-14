@@ -88,18 +88,19 @@ const Phys = {
   ],
   ragdoll(a, vel, spin) {
     if (!this.ready || a.ragdoll || a.dead) return false;
+    if (Train.onTrain && Train.onTrain(a)) return false; // the train has no physics body: knocked down on its roof, you stay on it
     // too many: freeze the oldest — never the player, who has to get back up
     if (this.ragdolls.length >= 8) { const old = this.ragdolls.find((r) => r !== G.player); if (old) this.freeze(old); }
     const rg = a.rig, group = -(++this.group % 30000 + 1);
     rg.root.updateMatrixWorld(true);
     this.ensureStatics(a.x, a.z, 14);
     const sp = Math.hypot(vel.x, vel.y, vel.z), k = sp > 40 ? 40 / sp : 1;
-    const parts = {}, joints = [];
+    const parts = {}, joints = [], gnd = W.groundAt(a.x, a.z);
     for (const def of this.PARTS) {
       const mesh = rg[def.key];
       mesh.getWorldPosition(this.v); mesh.getWorldQuaternion(this.q);
       this.v2.set(0, def.off, 0).applyQuaternion(this.q).add(this.v);
-      const b = this.body({ type: 'dynamic', position: { x: this.v2.x, y: Math.max(this.v2.y, def.half.y), z: this.v2.z }, rotation: { x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w },
+      const b = this.body({ type: 'dynamic', position: { x: this.v2.x, y: Math.max(this.v2.y - gnd, def.half.y), z: this.v2.z }, rotation: { x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w },
         linearVelocity: { x: vel.x * k, y: vel.y * k, z: vel.z * k }, angularDamping: 0.8, linearDamping: 0.05 });
       b.createBox({ halfExtents: def.half, density: def.mass / (8 * def.half.x * def.half.y * def.half.z), friction: 0.8, restitution: 0.05, filter: { categoryBits: 2, maskBits: 0xffff, groupIndex: group } });
       parts[def.key] = { b, mesh, off: def.off }; this.ragdollBodies++;

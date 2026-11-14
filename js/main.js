@@ -291,7 +291,7 @@ G.teleport = function (x, z) {
   P.tumble = null; P.vault = null; P.chute = false; P.jumping = false; P.kx = P.kz = 0;
   if (veh) { veh.x = sx; veh.z = sz; if (P.inCar) { veh.v = 0; veh.vx = veh.vz = 0; } }
   P.x = sx; P.z = sz; P.y = P.inHeli ? P.y : 0; P.yv = 0;
-  CAM.fx = sx; CAM.fz = sz; G.remount = null; GPS.t = 0;
+  CAM.fx = sx; CAM.fz = sz; GPS.t = 0;
   return true;
 };
 function bigMapTeleport(fx, fy) {
@@ -526,14 +526,15 @@ function computeInteract() {
     return out;
   }
   if (P.inCar) {
-    const car = P.inCar, ch = W.places.chop;
-    out.f = { label: 'Get out', run: () => G.exitCar() };
+    const car = P.inCar, ch = W.places.chop, air = PhysCar.car === car ? PhysCar.wasAir && PhysCar.airT > 0.15 : car.y > 0.3 && car.yv !== 0;
+    if (!air) out.f = { label: 'Get out', run: () => G.exitCar() };
     if (dist(car.x, car.z, ch.x, ch.z) < ch.r + 2) {
       out.e = { id: 'sell', label: 'Sell ' + car.T.name.toLowerCase() + ' to Rusty for ' + money(G.carValue(car)), disabled: Heat.level > 0 ? "Rusty won't buy while you have heat" : null, run: () => G.sellCar() };
       if (car.hp < car.maxHp || car.bumpers.some((b) => !b.on) || car.popped) out.r = { label: 'Repair for ' + money(G.repairCost(car)), run: () => G.repairCar() };
     }
     return out;
   }
+  if (P.chute) return out;
   // F: nearest car
   let bc = null, bd = 3.6;
   for (const c of G.cars) {
@@ -606,6 +607,7 @@ function processHold(dt) {
   } else {
     if (!Input.down('KeyE')) G.holdLock = false;
     G.hold.key = null; G.hold.t = 0;
+    for (const r of W.robs) if (r.robbing && dist(P.x, P.z, r.x, r.z) > r.r + 20) { r.robbing = false; delete mem['rob' + r.id]; }
     if (it && it.hold && mem[it.id]) { G.hold.peek = mem[it.id] / it.hold; } else G.hold.peek = 0;
   }
 }
@@ -709,7 +711,7 @@ function updatePlayer(dt) {
   if (P.yv < -6 && fallH > 8 && !P.chute && G.S.parachute > 0 && !(G.chuteHintT > G.time)) { G.chuteHintT = G.time + 4; G.toast('Falling! Press SPACE to open your parachute.', 'warn'); }
   if (G.jumpQ) { G.jumpQ = false; tryJump(P, mx, mz, m); }
   // jumping at something low turns into a vault, so you clear it whatever your timing
-  if (P.jumping && P.y > 0.2 && m > 0.01 && !P.vault) {
+  if (P.jumping && P.y > 0.2 && fallH < 2.5 && m > 0.01 && !P.vault) {
     const ob = findObstacle(P.x, P.z, mx / m, mz / m);
     if (ob && !ob.mantle) { P.jumping = false; P.yv = 0; P.vault = { t: 0, dur: 0.32, fx: P.x, fz: P.z, tx: ob.x, tz: ob.z, h: ob.h, y0: P.y, mantle: false }; }
   }
@@ -749,7 +751,8 @@ function findObstacle(px, pz, dx, dz) {
   return null;
 }
 function tryJump(P, mx, mz, m) {
-  if (P.y > 0.05 || P.vault || P.down || P.handsUp > 0) return;
+  const floor = P.y > 0.5 ? W.floorAt(P.x, P.z, P.y) : 0;
+  if (P.y - floor > 0.05 || P.vault || P.down || P.handsUp > 0) return;
   const dx = m > 0.01 ? mx / m : Math.sin(P.facing), dz = m > 0.01 ? mz / m : Math.cos(P.facing);
   const ob = findObstacle(P.x, P.z, dx, dz);
   if (ob) {
@@ -757,7 +760,7 @@ function tryJump(P, mx, mz, m) {
     P.facing = Math.atan2(dx, dz); Sfx.jump(P.x, P.z);
     return;
   }
-  P.yv = 8; P.y = 0.02; P.jumping = true; Sfx.jump(P.x, P.z);
+  P.yv = 8; P.y = floor + 0.02; P.jumping = true; Sfx.jump(P.x, P.z);
 }
 function stepVault(P, dt) {
   const v = P.vault; v.t += dt;
@@ -795,14 +798,6 @@ function step(dt) {
   const P = G.player;
   if (G.respawning) { G.respawnT -= dt; if (G.respawnT <= 0) G.finishRespawn(); }
   // after a pedal-bike crash: once you've landed, pick the bike up and keep riding
-  if (G.remount) {
-    const r = G.remount, b = r.bike;
-    if (b.dead || P.down || P.handsUp > 0 || G.respawning || P.inCar || P.inHeli) G.remount = null;
-    else if ((r.t -= dt) <= 0 && P.y <= 0.01 && !P.tumble) {
-      b.x = P.x; b.z = P.z; b.h = r.h; b.fallen = false; b.vx = b.vz = 0; b.v = 0; b.mesh.rotation.z = 0;
-      G.remount = null; G.enterCar(b); G.toast('Back on the ' + b.T.name.toLowerCase() + '!');
-    }
-  }
   G.updateTumble(dt);
   updateZone(dt);
   updatePlayer(dt);

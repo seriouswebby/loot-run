@@ -488,7 +488,7 @@ function runAutotest() {
     Input.keys.KeyW = true; let inside = false; for (let i = 0; i < 300 && !inside; i++) { step(STEP); inside = W.zoneAt(car.x, car.z) === 'airport'; }
     Input.keys.KeyW = false; G.exitCar(true); car.remove();
     // the currency exchange is a normal hold-E robbery
-    const fx = W.places.fxdesk; fx.cd = 0; fx.robbing = false; tp(fx.x, fx.z - 1.2); const cash0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(fx) + 0.6);
+    const fx = W.places.fxdesk; fx.cd = 0; tp(fx.x, fx.z - 1.2); const cash0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(fx) + 0.6);
     const robbed = G.S.cash > cash0 + 900;
     Heat.clear(); clearPolice();
     // a gunship on the air base pad: steal it, take off, fire the nose gun
@@ -585,7 +585,7 @@ function runAutotest() {
     reset(); G.noSpawn = true; G.god = true; const R = W.RAIL, kx = R.hx - R.r;
     // put the train at speed just as it enters the north-east bend
     Train.s = 2 * kx + 10; Train.v = Train.CRUISE; Train.state = 'run'; Train.place(0);
-    Train.climb(Train.cars[0]); const safe = W.places.trainSafe; safe.cd = 0; safe.robbing = false;
+    Train.climb(Train.cars[0]); const safe = W.places.trainSafe; safe.cd = 0;
     let fell = false, turned = 0; const h0 = Train.cars[2].h;
     for (let i = 0; i < 900 && dist(P.x, P.z, safe.x, safe.z) > 1.2; i++) {
       const c = Train.riding(P, true) || Train.cars[0]; G.inputOverride = { mx: -Math.sin(c.h), mz: -Math.cos(c.h) };
@@ -1092,7 +1092,7 @@ function runAutotest() {
     const car = new Car('sedan', F.gate + 2, 50, 0); tp(F.gate + 2, 47); G.enterCar(car);
     Input.keys.KeyW = true; let inside = false; for (let i = 0; i < 300 && !inside; i++) { step(STEP); inside = W.inFunland(car.x, car.z) && car.z > F.minZ + 6; }
     Input.keys.KeyW = false; G.exitCar(true); car.remove();
-    const tix = W.places.funtix; tix.cd = 0; tix.robbing = false; tp(tix.x, tix.z); const cash0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(tix) + 0.6);
+    const tix = W.places.funtix; tix.cd = 0; tp(tix.x, tix.z); const cash0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(tix) + 0.6);
     const robbed = G.S.cash > cash0 + 600; Heat.clear(); clearPolice();
     return (!bumps && !fields && !strays && !houses && road && zone === 'funland' && inside && robbed) || `bumps ${bumps} fields ${fields} stray trees ${strays} houses ${houses} road ${road} zone ${zone} drove in ${inside} robbed ${robbed} (cash ${cash0} to ${G.S.cash})`;
   });
@@ -1241,7 +1241,7 @@ function runAutotest() {
     const road = W.countyEdges.some((e) => e.name === 'Main Street'), zone = W.zoneAt(M.x - 9, -400);
     const fields = W.fields.filter((f) => f.x1 > M.minX && f.x0 < M.maxX && f.z1 > M.minZ && f.z0 < M.maxZ).length;
     const robbed = [];
-    for (const id of ['diner', 'mercantile', 'millfuel']) { const r = W.places[id]; r.cd = 0; r.robbing = false; tp(r.x, r.z); const c0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(r) + 0.6); if (G.S.cash > c0 + 150) robbed.push(id); Heat.clear(); clearPolice(); }
+    for (const id of ['diner', 'mercantile', 'millfuel']) { const r = W.places[id]; r.cd = 0; tp(r.x, r.z); const c0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(r) + 0.6); if (G.S.cash > c0 + 150) robbed.push(id); Heat.clear(); clearPolice(); }
     for (const n of G.npcs) if (n.kind === 'ped') n.remove(); G.npcs = G.npcs.filter((n) => !n.dead);
     tp(M.x, -400); for (let i = 0; i < 30; i++) Strollers.populate(P, M.area);
     const folk = G.npcs.filter((n) => n.ai && n.ai.area === M.area); steps(6);
@@ -1276,6 +1276,17 @@ function runAutotest() {
     const car = new Car('sedan', D.x - 20, D.z + 60, Math.PI); tp(D.x - 20, D.z + 56); G.enterCar(car); Input.keys.KeyW = true; steps(5); Input.keys.KeyW = false;
     if (car.z < D.z + D.half - 0.5 || W.groundAt(car.x, car.z) > 2) bad.push(`drove up the dam face: ${car.x.toFixed(0)},${car.z.toFixed(0)} ground ${W.groundAt(car.x, car.z).toFixed(1)}`);
     G.exitCar(true); car.remove();
+    return !bad.length || bad.join(' | ');
+  });
+  T('state hygiene: vault, chute and robbery flags are cleared on the way into vehicles and on respawn; jumps work on roofs', () => {
+    reset(); const bad = [];
+    const car = new Car('sedan', 6, 25, 0); tp(4, 25); P.vault = { t: 0, dur: 0.4, fx: 4, fz: 25, tx: 9, tz: 25, h: 1 }; P.chute = true; G.enterCar(car);
+    if (P.vault || P.chute) bad.push('vault/chute survived getting in'); G.exitCar(true); car.remove();
+    const r = W.places.quick; r.cd = 0; tp(r.x, r.z); G.interact = computeInteract(); hold(0.5); const started = r.robbing; tp(r.x + 60, r.z); steps(0.2);
+    if (!started || r.robbing) bad.push(`walking away kept the robbery going (started ${started})`); Heat.clear(); clearPolice();
+    const b = W.buildings.filter((k) => k.h > 8 && k.maxX - k.minX > 10).sort((p, q) => q.h - p.h)[0]; tp((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2); P.y = b.h; P.yv = 0; steps(0.3);
+    G.jumpQ = true; steps(0.15); const rose = P.y > b.h + 0.3; steps(1.5); if (!rose || Math.abs(P.y - b.h) > 0.05) bad.push(`roof jump: rose ${rose} ended at ${P.y.toFixed(2)} on a ${b.h.toFixed(1)} m roof`);
+    tp(4, 25); P.y = 0;
     return !bad.length || bad.join(' | ');
   });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {

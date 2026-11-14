@@ -455,6 +455,7 @@ G.bailOut = function (h) {
 };
 G.heliLanded = (h) => h.y - roofAt(h.x, h.z, 1.5) < 0.6 && (!h.wing || h.v < 3);
 G.enterHeli = function (h) {
+  { const P = G.player; P.vault = null; P.chute = false; P.jumping = false; P.top = null; }
   const P = G.player;
   if (h.dead || h.falling > 0 || h.pilot) return false;
   if (h.police) G.crime('copHeli', h.x, h.z, {});
@@ -472,7 +473,7 @@ G.exitHeli = function (force) {
     G.toast('Land first (hold Shift), or buy a Parachute to bail out mid-air.'); Sfx.error(); return false;
   }
   // step out beside the chopper: on the street, or onto the roof it landed on
-  const pad = force ? 0 : roofAt(h.x, h.z, 1.5), rx = -Math.cos(h.yaw), rz = Math.sin(h.yaw), fx = Math.sin(h.yaw), fz = Math.cos(h.yaw);
+  const roof = roofAt(h.x, h.z, 1.5), pad = !force || Math.abs(h.y - roof) < 2 ? roof : 0, rx = -Math.cos(h.yaw), rz = Math.sin(h.yaw), fx = Math.sin(h.yaw), fz = Math.cos(h.yaw);
   let spot = null;
   const tries = [[rx * 3.2, rz * 3.2], [-rx * 3.2, -rz * 3.2], [-fx * 3.5, -fz * 3.5], [fx * 3.5, fz * 3.5]];
   for (let k = 0; k < 16; k++) { const a = k / 16 * TAU; for (const r of [2.2, 1.2, 0.4]) tries.push([Math.cos(a) * r, Math.sin(a) * r]); }
@@ -506,7 +507,7 @@ const Ordnance = {
   throwGrenade(owner, tx, tz) {
     let dx = tx - owner.x, dz = tz - owner.z, d = Math.hypot(dx, dz) || 1;
     const D = clamp(d, 3, 20); dx = dx / d * D; dz = dz / d * D;
-    const T = 0.85, g = 20, y0 = 1.6;
+    const T = 0.85, g = 20, y0 = 1.6 + Math.max(0, owner.y || 0);
     const m = new THREE.Mesh(this.geo.nade, lam('#3a4a2a')); m.castShadow = true; G.scene.add(m);
     this.grenades.push({ m, x: owner.x, y: y0, z: owner.z, vx: dx / T, vz: dz / T, vy: (0.5 * g * T * T - y0) / T, fuse: 1.7 });
     Sfx.whoosh(owner.x, owner.z);

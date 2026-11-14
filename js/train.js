@@ -75,7 +75,7 @@ const Train = {
   near(x, z, d) { for (const c of this.cars) if (this.carAt(x, z, d) === c) return c; return null; },
   climb(c) {
     const P = G.player; if (!c) return;
-    P.x = c.x; P.z = c.z; P.y = c.roof; P.yv = 0; P.jumping = false; P.vault = null; P.top = null; P.safeT = G.time + 1;
+    P.x = c.x; P.z = c.z; P.y = c.roof; P.yv = 0; P.jumping = false; P.vault = null; P.chute = false; P.top = null; P.safeT = G.time + 1;
     Sfx.jump(P.x, P.z); G.toast('On the train. Ride it, rob it, or jump off with SPACE.', 'good'); Story.event('boardTrain');
   },
   update(dt) {

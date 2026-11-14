@@ -381,7 +381,7 @@ G.enterCar = function (car) {
   const P = G.player;
   if (car.wreck || car.dead || car.burning > 0) return false;
   if (car.fallen) { car.fallen = false; car.hp = car.maxHp; car.v = 0; car.vx = car.vz = 0; }
-  car.leftT = 0; if (G.remount && G.remount.bike === car) G.remount = null;
+  car.leftT = 0; P.vault = null; P.chute = false; P.jumping = false; P.top = null;
   let msg = null;
   car.wasParked = car.parked || car.wasParked;
   if (car.driver === 'ai') {
@@ -418,7 +418,7 @@ G.exitCar = function (force) {
   if (!placed) { P.x = car.x - fx * (car.T.len / 2 + 0.8); P.z = car.z - fz * (car.T.len / 2 + 0.8); W.collideCircle(P, P.r); }
   car.driver = null; car.parked = true; car.locked = false;
   if (car.T.pedal) car.leftT = 120;
-  P.y = 0; P.yv = 0; P.spin = 0; P.kx = P.kz = 0;
+  P.y = 0; P.yv = 0; P.spin = 0; P.kx = P.kz = 0; P.vault = null; P.chute = false; P.jumping = false; P.top = null;
   P.inCar = null; P.rig.root.visible = true; P.facing = car.h; P.resetPose();
   if (!force) Sfx.click();
 };
@@ -606,7 +606,8 @@ G.resetPlayer = function (x, z) {
   if (P.stars) P.stars.visible = false;
   P.rig.root.visible = true; P.resetPose();
   W.collideCircle(P, P.r);
-  G.stamina = 100; G.winded = false; G.restT = 0; G.remount = null;
+  G.stamina = 100; G.winded = false; G.restT = 0;
+  for (const r of W.robs) r.robbing = false; G.holdMem = {}; G.hold = { key: null, t: 0, dur: 1 };
   G.jumpQ = false; G.hopQ = false; G.slip = 0; G.crumbs = [];
 };
 function clearPolice() {
@@ -966,7 +967,7 @@ G.blastLoot = function (x, z, r) {
 };
 G.throwGrenade = function () {
   const P = G.player;
-  if (P.inCar || P.inHeli || P.down || P.handsUp > 0) return;
+  if (P.inCar || P.inHeli || P.down || P.handsUp > 0 || P.ride || P.tumble || P.vault) return;
   if (G.S.grenade <= 0) { G.toast('No grenades. Gun stores sell them.'); Sfx.error(); return; }
   G.S.grenade--;
   const chase = G.camMode === 'chase';
@@ -977,7 +978,7 @@ G.throwGrenade = function () {
 G.useC4 = function () {
   const P = G.player;
   if (Ordnance.c4.length) { Sfx.tick(); Ordnance.detonate(); return; }
-  if (P.inCar || P.inHeli || P.down) return;
+  if (P.inCar || P.inHeli || P.down || P.ride || P.tumble || P.vault || P.y > 0.5) return;
   if (G.S.c4 <= 0) { G.toast('No C4. Gun stores sell it.'); Sfx.error(); return; }
   G.S.c4--;
   const b = Ordnance.plantC4(P.x + Math.sin(P.facing) * 0.8, P.z + Math.cos(P.facing) * 0.8);
