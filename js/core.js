@@ -89,21 +89,17 @@ const Input = {
 };
 
 /* ---------------- Particles ---------------- */
+/* sparks, debris, glass, blood: little tumbling cubes, all drawn in one call (an instanced mesh); they shrink away */
 const FX = {
-  pool: [], live: [],
+  N: 320, live: [], mesh: null,
   init(scene) {
-    const geo = new THREE.BoxGeometry(1, 1, 1);
-    for (let i = 0; i < 320; i++) {
-      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true }));
-      m.visible = false; m.frustumCulled = false; scene.add(m); this.pool.push(m);
-    }
+    this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), this.N);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.mesh.setColorAt(0, new THREE.Color()); this.mesh.count = 0; this.mesh.frustumCulled = false;
+    scene.add(this.mesh); this.d = new THREE.Object3D();
   },
   spawn(x, y, z, vx, vy, vz, color, size, life, o) {
-    const m = this.pool.pop();
-    if (!m) return;
-    m.visible = true; m.position.set(x, y + (typeof W !== 'undefined' && W.groundAt ? W.groundAt(x, z) : 0), z); m.scale.setScalar(size);
-    m.material.color.set(color); m.material.opacity = 1;
-    m.rotation.set(Math.random() * 3, Math.random() * 3, 0);
+    if (this.live.length >= this.N) return;
+    const m = { position: new THREE.Vector3(x, y + (typeof W !== 'undefined' && W.groundAt ? W.groundAt(x, z) : 0), z), rotation: new THREE.Euler(Math.random() * 3, Math.random() * 3, 0), color: new THREE.Color(color), s: size };
     this.live.push({ m, vx, vy, vz, life, max: life, size, grav: o && o.grav != null ? o.grav : 14, grow: (o && o.grow) || 0, drag: (o && o.drag) || 0.5 });
   },
   burst(x, y, z, n, color, speed, size, life, o) {
@@ -117,19 +113,22 @@ const FX = {
     for (let i = this.live.length - 1; i >= 0; i--) {
       const p = this.live[i];
       p.life -= dt;
-      if (p.life <= 0) { p.m.visible = false; this.pool.push(p.m); this.live.splice(i, 1); continue; }
+      if (p.life <= 0) { this.live.splice(i, 1); continue; }
       const k = Math.exp(-p.drag * dt);
       p.vx *= k; p.vz *= k; p.vy = p.vy * k - p.grav * dt;
       p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.m.position.z += p.vz * dt;
       const fl = 0.05 + (typeof W !== 'undefined' && W.groundAt ? W.groundAt(p.m.position.x, p.m.position.z) : 0);
       if (p.m.position.y < fl) { p.m.position.y = fl; p.vy *= -0.3; p.vx *= 0.6; p.vz *= 0.6; }
       const f = p.life / p.max;
-      p.m.material.opacity = Math.min(1, f * 2);
-      if (p.grow) p.m.scale.setScalar(p.size * (1 + (1 - f) * p.grow));
+      p.m.s = p.size * (p.grow ? 1 + (1 - f) * p.grow : 1) * Math.min(1, f * 2.5);
       p.m.rotation.x += dt * 3;
     }
+    if (!this.mesh) return;
+    const d = this.d;
+    for (let i = 0; i < this.live.length; i++) { const m = this.live[i].m; d.position.copy(m.position); d.rotation.copy(m.rotation); d.scale.setScalar(m.s); d.updateMatrix(); this.mesh.setMatrixAt(i, d.matrix); this.mesh.setColorAt(i, m.color); }
+    this.mesh.count = this.live.length; this.mesh.instanceMatrix.needsUpdate = true; if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   },
-  clear() { for (const p of this.live) { p.m.visible = false; this.pool.push(p.m); } this.live.length = 0; },
+  clear() { this.live.length = 0; if (this.mesh) this.mesh.count = 0; },
 };
 
 /* ---------------- Floating world-space text ---------------- */

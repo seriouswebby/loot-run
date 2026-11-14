@@ -378,6 +378,22 @@ const GPS = {
   },
 };
 
+/* ---------------- what the camera can see ----------------
+   People and cars only appear and disappear where you can't see them: off-screen, behind buildings or hills,
+   or out in the fog. So nothing pops in or vanishes in front of you. */
+const VIS = { fr: new THREE.Frustum(), m: new THREE.Matrix4(), s: new THREE.Sphere(new THREE.Vector3(), 3), n: -1 };
+G.canSee = function (x, z, r, y) {
+  const cam = G.cam; if (!cam) return false;
+  if (VIS.n !== G.frameN) { VIS.n = G.frameN; cam.updateMatrixWorld(); VIS.m.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); VIS.fr.setFromProjectionMatrix(VIS.m); }
+  VIS.s.center.set(x, W.groundAt(x, z) + (y || 1), z); VIS.s.radius = (r || 2) + 3; // a margin, so nothing appears right at the screen edge either
+  if (!VIS.fr.intersectsSphere(VIS.s)) return false;
+  if (cam.isOrthographicCamera) return true;
+  const cp = cam.position, d = Math.hypot(x - cp.x, z - cp.z);
+  if (G.scene.fog && d > G.scene.fog.far) return false;
+  if (cp.y - W.groundAt(cp.x, cp.z) > 30) return true; // from high up you see over the rooftops
+  return !W.segBlocked(cp.x, cp.z, x, z, 3);
+};
+
 /* ---------------- camera ---------------- */
 const CAM = { fx: 0, fz: 0, lx: 0, lz: 0, zoomIso: 26, zoomTop: 60, curIso: 26, curTop: 60, yaw: Math.PI, pitch: 0.3, chaseD: 8, carYaw: 0, carLook: 0, carPitch: 0.32, lookT: 0, wasInCar: false, sens: 0.0026 };
 function updateCamera(dt) {
@@ -428,7 +444,8 @@ function updateCamera(dt) {
     G.camFwd = { x: fx3, z: fz3 };
   }
   Weather.camDist = cam === ortho ? 200 : G.camMode === 'top' ? CAM.curTop : (P.inHeli ? 17 : P.inCar ? 10 : CAM.chaseD);
-  sun.position.set(fx + 45, 90 + fy, fz + 30); sun.target.position.set(fx, fy, fz); sun.target.updateMatrixWorld();
+  const ahead = cam === persp && G.camMode === 'chase' ? 75 : 0, sfx = fx + G.camFwd.x * ahead, sfz = fz + G.camFwd.z * ahead;
+  sun.position.set(sfx + 45, 90 + fy, sfz + 30); sun.target.position.set(sfx, fy, sfz); sun.target.updateMatrixWorld();
   G.cam = cam;
   return cam;
 }
@@ -451,8 +468,10 @@ function updateFades(cam, dt) {
     const hit = near && G.state !== 'title' && (segBox3(t.x, ty, t.z, cp.x, cp.y, cp.z, b) || segBox3(t.x, ty, t.z + 1.5, cp.x, cp.y, cp.z + 1.5, b));
     const target = hit ? 0.2 : 1;
     if (b.fade === target) continue;
+    W.soloBuilding(b, true); // out of its merged batch while it's see-through
     b.fade = Math.abs(b.fade - target) < 0.02 ? target : damp(b.fade, target, 12, dt);
     for (const m of b.mats) { m.opacity = b.fade; m.transparent = b.fade < 0.999; m.depthWrite = b.fade > 0.6; }
+    if (b.fade === 1) W.soloBuilding(b, false);
   }
 }
 
@@ -918,6 +937,7 @@ function updateAim(cam) {
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - lastT) / 1000 || 0); lastT = now;
+  G.frameN = (G.frameN || 0) + 1;
   frameInput();
   if (G.state === 'play') {
     acc += dt; let n = 0;
@@ -949,7 +969,7 @@ function frame(now) {
   const B = G.body();
   Weather.update(dt, CAM.fx, (P.inHeli ? Math.max(0, P.inHeli.y - 12) : Math.max(0, P.y - 4)) + W.groundAt(CAM.fx, CAM.fz), CAM.fz);
   // nothing past the fog can be seen, so don't draw it: with the county out there this culls most of the world
-  if (G.scene.fog) { const far = Math.min(2000, G.scene.fog.far + 25); if (Math.abs(persp.far - far) > 5) { persp.far = far; persp.updateProjectionMatrix(); } }
+  if (G.scene.fog) { const far = Math.min(2600, G.scene.fog.far + 25); if (Math.abs(persp.far - far) > 5) { persp.far = far; persp.updateProjectionMatrix(); } }
   const sir = G.cars.filter((c) => c.siren && !c.wreck && !c.dead).sort((a, b) => dist(a.x, a.z, B.x, B.z) - dist(b.x, b.z, B.x, B.z)).slice(0, 2);
   let heli = null, hd = 1e9;
   for (const h of Choppers.list) if (!h.dead && h.rotor > 0.3 && (!h.wing || h.pilot)) { const d = h === P.inHeli ? 0 : dist(h.x, h.z, B.x, B.z); if (d < hd) { hd = d; heli = h; } }
@@ -968,8 +988,9 @@ function setupScene() {
   scene.fog = new THREE.Fog(0xa9cfe3, 230, 420);
   G.hemi = new THREE.HemisphereLight(0xd6e8ff, 0x7a6a50, 0.72); scene.add(G.hemi);
   sun = new THREE.DirectionalLight(0xfff0d0, 0.85);
-  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  const sc = sun.shadow.camera; sc.left = -75; sc.right = 75; sc.top = 75; sc.bottom = -75; sc.near = 10; sc.far = 260;
+  const sm = Math.min(4096, renderer.capabilities.maxTextureSize || 2048);
+  sun.castShadow = true; sun.shadow.mapSize.set(sm, sm);
+  const sc = sun.shadow.camera, SB = sm >= 4096 ? 125 : 95; sc.left = -SB; sc.right = SB; sc.top = SB; sc.bottom = -SB; sc.near = 10; sc.far = 300;
   sun.shadow.bias = -0.0008;
   scene.add(sun); scene.add(sun.target);
   ortho = new THREE.OrthographicCamera(-20, 20, 20, -20, 1, 800);
@@ -1202,16 +1223,27 @@ function runBench() {
     const P = G.player; P.x = x; P.z = z; W.collideCircle(P, P.r);
     for (let i = 0; i < 120; i++) step(STEP); // let traffic and people fill in
     const t0 = performance.now(); for (let i = 0; i < 600; i++) step(STEP); const stepMs = (performance.now() - t0) / 600;
-    Weather.update(0.016, CAM.fx, 0, CAM.fz); persp.far = Math.min(2000, G.scene.fog.far + 25); persp.updateProjectionMatrix();
+    Weather.update(0.016, CAM.fx, 0, CAM.fz); persp.far = Math.min(2600, G.scene.fog.far + 25); persp.updateProjectionMatrix();
     const cam = updateCamera(0.016); renderer.info.autoReset = false; renderer.info.reset();
     const t1 = performance.now(); for (let i = 0; i < 5; i++) renderer.render(G.scene, cam); const drawMs = (performance.now() - t1) / 5;
     // where the triangles go: render again with one kind of object hidden at a time
-    const kinds = { instanced: (o) => o.isInstancedMesh, merged: (o) => o.isMesh && !o.isInstancedMesh && o.frustumCulled === false, buildings: (o) => o.isMesh && Array.isArray(o.material) };
+    const kinds = { instanced: (o) => o.isInstancedMesh, merged: (o) => o.isMesh && !o.isInstancedMesh && o.frustumCulled === false, buildings: (o) => o.isMesh && (o.userData.buildings || Array.isArray(o.material)) };
     const split = [];
     for (const k in kinds) {
       const hid = []; G.scene.traverse((o) => { if (o.visible && kinds[k](o)) { o.visible = false; hid.push(o); } });
       renderer.info.reset(); renderer.render(G.scene, cam); split.push(k + ' ' + Math.round((renderer.info.render.triangles) / 1000) + 'k/' + renderer.info.render.calls);
       for (const o of hid) o.visible = true;
+    }
+    // and with the shadows, the cars or the people left out
+    const objs = { cars: () => G.cars.filter((c) => !c.dead && c.mesh.visible).map((c) => c.mesh), people: () => G.npcs.filter((n) => !n.dead && n.rig.root.visible).map((n) => n.rig.root) };
+    for (const k in objs) { const hid = objs[k](); for (const o of hid) o.visible = false; renderer.info.reset(); renderer.render(G.scene, cam); split.push(k + ' ' + Math.round(renderer.info.render.triangles / 1000) + 'k/' + renderer.info.render.calls); for (const o of hid) o.visible = true; }
+    sun.castShadow = false; renderer.info.reset(); renderer.render(G.scene, cam); split.push('shadows ' + Math.round(renderer.info.render.triangles / 1000) + 'k/' + renderer.info.render.calls); sun.castShadow = true;
+    if (location.search.includes('meshes')) { // which kinds of mesh are on screen (diagnostic)
+      cam.updateMatrixWorld(); const fr = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse)), cnt = {};
+      G.scene.traverseVisible((o) => { if (!o.isMesh && !o.isPoints) return; if (o.frustumCulled && o.geometry.boundingSphere !== undefined) { if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere(); const sp = o.geometry.boundingSphere.clone().applyMatrix4(o.matrixWorld); if (!fr.intersectsSphere(sp)) return; }
+        let p = o, tag = ''; while (p.parent && p.parent !== G.scene) p = p.parent; tag = p === o ? 'top' : 'grp' + p.children.length;
+        const k = tag + ' ' + o.geometry.type + '/' + (Array.isArray(o.material) ? 'multi' : o.material.type); cnt[k] = (cnt[k] || 0) + 1; });
+      out.push('   meshes: ' + Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => k + ' ' + v).join(' · '));
     }
     renderer.info.reset(); for (let i = 0; i < 5; i++) renderer.render(G.scene, cam);
     out.push('   without: ' + split.join(' · '));

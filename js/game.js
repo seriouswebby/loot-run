@@ -179,16 +179,16 @@ function spawnPolice() {
   for (const n of G.npcs) if (n.kind === 'cop' && !n.down && n.ai.mode !== 'walk' && dist(n.x, n.z, t.x, t.z) < 140) foot++;
   for (const c of G.cars) if (c.police && !c.wreck && c.ai && (c.ai.mode === 'pursuit' || c.ai.mode === 'perimeter' || c.ai.mode === 'parked') && dist(c.x, c.z, t.x, t.z) < 160) cars++;
   if (cars < carT) {
-    const cands = W.nodes.filter((n) => { const d = dist(n.x, n.z, t.x, t.z); return d > 60 && d < 115; });
+    const cands = W.nodes.filter((n) => { const d = dist(n.x, n.z, t.x, t.z); return d > 60 && d < 130; }), hid = cands.filter((n) => !G.canSee(n.x, n.z, 4));
     if (cands.length) {
-      const n = pick(cands), nb = W.nodes[pick(n.adj)];
+      const n = pick(hid.length ? hid : cands), nb = W.nodes[pick(n.adj)];
       const car = new Car('police', n.x, n.z, Math.atan2(t.x - n.x, t.z - n.z));
       car.driver = 'ai'; car.ai = { mode: 'pursuit', stuckT: 0, revT: 0 }; car.siren = true; car.v = 10;
       if (nb) car.ai.node = nb.id;
     }
   }
   if (foot < footT && G.playerZone !== 'highway' && G.playerZone !== 'air' && G.npcs.filter((n) => n.kind === 'cop').length < 12) {
-    const p = randomSidewalkPoint(t.x, t.z, 38, 65, true);
+    const p = randomSidewalkPoint(t.x, t.z, 38, 75, true, true) || randomSidewalkPoint(t.x, t.z, 38, 65, true);
     if (p) spawnCop(p.x, p.z, 'chase');
   }
 }
@@ -984,7 +984,7 @@ function nearestParked() {
 }
 
 /* ---------------- population ---------------- */
-function randomSidewalkPoint(px, pz, minD, maxD, avoidLos) {
+function randomSidewalkPoint(px, pz, minD, maxD, avoidLos, hidden) {
   for (let k = 0; k < 30; k++) {
     const b = pick(W.blocks);
     if (dist(b.cx, b.cz, px, pz) > maxD + 25) continue;
@@ -997,6 +997,7 @@ function randomSidewalkPoint(px, pz, minD, maxD, avoidLos) {
     const d = dist(x, z, px, pz);
     if (d < minD || d > maxD) continue;
     if (avoidLos && !W.segBlocked(x, z, px, pz) && k < 20) continue;
+    if (hidden && G.canSee(x, z, 1)) continue;
     return { x, z, b, sx, sz };
   }
   return null;
@@ -1009,32 +1010,37 @@ function updatePopulation(dt) {
   let peds = 0, patrol = 0;
   for (const n of G.npcs) {
     const d = dist(n.x, n.z, t.x, t.z);
-    if (n.kind === 'ped' && n.ai.mode !== 'vera') { if (d > 115) n.remove(); else peds++; }
+    const unseen = () => !G.canSee(n.x, n.z, 1) || d > 340;
+    if (n.kind === 'ped' && n.ai.mode !== 'vera') {
+      const keep = n.ai.park ? Funland.keepVisitor(n, t) : d <= 170;
+      if (!keep && unseen()) n.remove(); else if (!n.ai.park) peds++;
+    }
     if (n.kind === 'cop') {
       if (n.ai.mode === 'walk') patrol++;
-      if ((Heat.level === 0 && d > 100) || d > 190 || (n.down && d > 70)) n.remove();
+      if (((Heat.level === 0 && d > 140) || d > 230 || (n.down && d > 90)) && unseen()) n.remove();
     }
   }
-  if (peds < 26) { const p = randomSidewalkPoint(t.x, t.z, 30, 85); if (p) spawnPed(p.x, p.z, p.b, p.sx, p.sz); }
+  if (peds < 32) { const p = randomSidewalkPoint(t.x, t.z, 35, 150, false, true); if (p) spawnPed(p.x, p.z, p.b, p.sx, p.sz); }
   Funland.populate(t);
-  if (Heat.level === 0 && patrol < 2) { const p = randomSidewalkPoint(t.x, t.z, 45, 90); if (p) { const c = spawnCop(p.x, p.z, 'walk'); c.ai.mode = 'walk'; c.ai.block = p.b; c.ai.sx = p.sx; c.ai.sz = p.sz; c.ai.dir = 1; c.ai.speed = 1.8; pedTarget(c); } }
+  if (Heat.level === 0 && patrol < 2) { const p = randomSidewalkPoint(t.x, t.z, 50, 140, false, true); if (p) { const c = spawnCop(p.x, p.z, 'walk'); c.ai.mode = 'walk'; c.ai.block = p.b; c.ai.sx = p.sx; c.ai.sz = p.sz; c.ai.dir = 1; c.ai.speed = 1.8; pedTarget(c); } }
   // vehicles
   let traffic = 0, parked = 0;
   for (const c of G.cars) {
     if (c.dead) continue;
     const d = dist(c.x, c.z, t.x, t.z), mine = P.inCar === c;
-    if (c.wreck && c.wreckT <= 0 && d > 40 && !mine) { c.remove(); continue; }
+    const unseen = !G.canSee(c.x, c.z, 4) || d > 360;
+    if (c.wreck && c.wreckT <= 0 && d > 40 && !mine && unseen) { c.remove(); continue; }
     if (c.persistent || mine || c.mission) continue;
     if (c.ai && c.ai.mode === 'roadblock') continue;
-    if (d > 185) { c.remove(); continue; }
+    if (d > 250 && unseen) { c.remove(); continue; }
     if (c.driver === 'ai' && c.ai && (c.ai.mode === 'traffic' || c.ai.mode === 'patrol')) traffic++;
-    else if (c.parked && d < 120) parked++;
+    else if (c.parked && d < 170) parked++;
   }
-  if (traffic < 18 && !G.noSpawn) spawnTraffic(t);
-  if (parked < 7) spawnCurbCar(t);
-  let bikes = 0; for (const c of G.cars) if (c.T.bike && c.parked && !c.driver && dist(c.x, c.z, t.x, t.z) < 90) bikes++;
-  if (bikes < 4) {
-    const p = randomSidewalkPoint(t.x, t.z, 25, 80);
+  if (traffic < 24 && !G.noSpawn) spawnTraffic(t);
+  if (parked < 9) spawnCurbCar(t);
+  let bikes = 0; for (const c of G.cars) if (c.T.bike && c.parked && !c.driver && dist(c.x, c.z, t.x, t.z) < 130) bikes++;
+  if (bikes < 5) {
+    const p = randomSidewalkPoint(t.x, t.z, 30, 125, false, true);
     if (p && carFree(p.x, p.z, 3)) {
       const horiz = Math.abs(p.z - p.b.cz) > Math.abs(p.x - p.b.cx);
       const type = pick(['bicycle', 'bicycle', 'bmx', 'motorbike']);
@@ -1047,7 +1053,7 @@ function updatePopulation(dt) {
 }
 function carFree(x, z, r) { for (const c of G.cars) if (!c.dead && dist(c.x, c.z, x, z) < r) return false; return true; }
 function spawnTraffic(t) {
-  const near = W.edges.filter((e) => { const a = W.nodes[e.a], b = W.nodes[e.b]; return segPointDist(t.x, t.z, a.x, a.z, b.x, b.z) < 150; });
+  const near = W.edges.filter((e) => { const a = W.nodes[e.a], b = W.nodes[e.b]; return segPointDist(t.x, t.z, a.x, a.z, b.x, b.z) < 230; });
   if (!near.length) return null;
   for (let k = 0; k < 10; k++) {
     const e = pick(near);
@@ -1056,7 +1062,7 @@ function spawnTraffic(t) {
     const s = rand(0.25, 0.75) * L;
     const x = A.x + dx * s - dz * lo, z = A.z + dz * s + dx * lo;
     const d = dist(x, z, t.x, t.z);
-    if (d < 65 || d > 150 || !carFree(x, z, 9)) continue;
+    if (d < 70 || d > 230 || !carFree(x, z, 9) || G.canSee(x, z, 4)) continue; // traffic arrives from out of sight
     const r = Math.random();
     const type = r < 0.07 ? 'police' : r < 0.15 ? 'taxi' : r < 0.23 ? 'van' : r < 0.31 ? 'pickup' : r < 0.37 ? 'sports' : r < 0.39 ? 'armored' : r < 0.42 ? 'supercar' : r < 0.52 ? 'hatch' : r < 0.61 ? 'suv' : r < 0.66 ? 'muscle' : r < 0.72 ? 'truck' : r < 0.78 ? 'motorbike' : 'sedan';
     const car = new Car(type, x, z, Math.atan2(dx, dz), { driver: 'ai' }); car.lane = lane;
@@ -1069,7 +1075,7 @@ function spawnTraffic(t) {
 function spawnCurbCar(t) {
   for (let k = 0; k < 10; k++) {
     const s = pick(W.curbSpots), d = dist(s.x, s.z, t.x, t.z);
-    if (d < 40 || d > 110 || !carFree(s.x, s.z, 6)) continue;
+    if (d < 45 || d > 170 || !carFree(s.x, s.z, 6) || G.canSee(s.x, s.z, 4)) continue;
     const type = pick(['sedan', 'sedan', 'hatch', 'hatch', 'suv', 'sports', 'van', 'pickup', 'muscle', 'taxi', chance(0.3) ? 'supercar' : 'truck']);
     const car = new Car(type, s.x, s.z, s.h, { parked: true }); car.locked = true;
     return car;

@@ -1152,6 +1152,17 @@ function runAutotest() {
     const alive = vis.filter((n) => !n.dead), back = alive.filter((n) => n.ai.mode === 'park').length;
     return (vis.length >= 15 && moved >= vis.length * 0.5 && strayed === 0 && fled >= vis.length * 0.8 && back >= alive.length * 0.8) || `visitors ${vis.length} moved ${moved} off the paths ${strayed} fled ${fled} back strolling ${back}/${alive.length}`;
   });
+  T('pop-in: things only appear where the camera cannot see (behind you, behind buildings, past the fog)', () => {
+    reset(); const mode = G.camMode, cam0 = G.cam; G.camMode = 'chase'; tp(0, 25); P.facing = CAM.yaw = 0; CAM.pitch = 0.2; G.frameN = (G.frameN || 0) + 1; updateCamera(1); G.frameN++;
+    const ahead = G.canSee(0, 60, 1), behind = G.canSee(0, -10, 1), fogged = G.canSee(0, 25 + G.scene.fog.far + 50, 1);
+    const b = W.blocks.find((k) => k.type === 'city' && k.cz > 60), hidden = !G.canSee(b.cx, b.cz + 22, 1) || !G.canSee(b.cx + 40, b.cz + 22, 1);
+    // spawn a crowd of traffic and pedestrians: none of them where you can see
+    G.noSpawn = false; for (let i = 0; i < 40; i++) { spawnTraffic(G.body()); const p = randomSidewalkPoint(P.x, P.z, 35, 150, false, true); if (p) spawnPed(p.x, p.z, p.b, p.sx, p.sz); }
+    const seenCars = G.cars.filter((c) => !c.dead && !c.persistent && c.driver === 'ai' && c.ai && c.ai.mode === 'traffic' && G.canSee(c.x, c.z, 4)).length;
+    const seenPeds = G.npcs.filter((n) => !n.dead && n.kind === 'ped' && n.ai.mode === 'walk' && dist(n.x, n.z, P.x, P.z) > 34 && G.canSee(n.x, n.z, 1)).length;
+    G.camMode = mode; G.cam = cam0; G.frameN++; G.noSpawn = true;
+    return (ahead && !behind && !fogged && hidden && seenCars === 0 && seenPeds === 0) || `ahead ${ahead} behind ${behind} fogged ${fogged} behind-a-building ${hidden} spawned in view: cars ${seenCars} peds ${seenPeds}`;
+  });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;
     const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };

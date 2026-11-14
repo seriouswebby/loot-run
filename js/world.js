@@ -462,17 +462,17 @@ function addBuilding(cx, cz, w, d, h, style, opts) {
     const span = f < 2 ? d : w;
     for (let k = 0; k < 4; k++) { const i = f * 4 + k; uv.setXY(i, uv.getX(i) * span / 8, uv.getY(i) * h / 7); }
   }
-  const fac = FAC[style] || FAC.brick;
-  const side = opts.color ? new THREE.MeshLambertMaterial({ color: opts.color }) : new THREE.MeshLambertMaterial({ map: fac.tex });
-  const roof = new THREE.MeshLambertMaterial({ color: fac.roof });
-  // regroup the box's six faces into two draw calls (walls, then roof and floor) instead of six
+  const fac = FAC[style] || FAC.brick, wallKey = opts.color ? 'c' + opts.color : (FAC[style] ? style : 'brick');
+  // materials are shared: buildings are drawn merged, a few per 200 m tile (see batchBuildings)
+  const BM = W.bmats || (W.bmats = {});
+  const side = BM['w' + wallKey] || (BM['w' + wallKey] = opts.color ? new THREE.MeshLambertMaterial({ color: opts.color }) : new THREE.MeshLambertMaterial({ map: fac.tex }));
+  const roof = BM['r' + fac.roof] || (BM['r' + fac.roof] = new THREE.MeshLambertMaterial({ color: fac.roof }));
+  // walls first, then the roof and floor
   const idx = geo.index.array, gr = geo.groups, ni = [];
   for (const f of [0, 1, 4, 5, 2, 3]) for (let i = 0; i < gr[f].count; i++) ni.push(idx[gr[f].start + i]);
   geo.setIndex(ni); geo.clearGroups(); geo.addGroup(0, 24, 0); geo.addGroup(24, 12, 1);
-  const mesh = new THREE.Mesh(geo, [side, roof]);
-  mesh.position.set(cx, h / 2, cz); mesh.castShadow = true; mesh.receiveShadow = true;
-  S.add(mesh);
-  const b = { minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2, h, mesh, mats: [side, roof], fade: 1 };
+  geo.translate(cx, h / 2, cz);
+  const b = { minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2, h, geo, side, roof, wallKey, mesh: null, mats: null, fade: 1, solo: false, ranges: [] };
   W.buildings.push(b);
   if (opts.collide !== false) W.addCollider(b.minX, b.minZ, b.maxX, b.maxZ, h, 'building');
   if (h > 9 && rnd() < 0.7) {
@@ -483,6 +483,51 @@ function addBuilding(cx, cz, w, d, h, style, opts) {
   P.box(cx - w / 2 + 0.15, h + 0.25, cz, 0.3, 0.5, d, fac.trim); P.box(cx + w / 2 - 0.15, h + 0.25, cz, 0.3, 0.5, d, fac.trim);
   return b;
 }
+/* Buildings are drawn merged: one mesh per material per 200 m tile, instead of two draw calls (and two more for
+   shadows) per building. A building that has to fade out of the way of the camera is lifted out of its batch into
+   a mesh of its own while it's see-through (soloBuilding). */
+function batchBuildings() {
+  const TILE = 200, groups = new Map();
+  for (const b of W.buildings) {
+    if (!b.geo) continue;
+    const tk = Math.floor((b.minX + b.maxX) / 2 / TILE) + ',' + Math.floor((b.minZ + b.maxZ) / 2 / TILE);
+    for (const part of [0, 1]) {
+      const key = (part ? 'r' + b.roof.color.getHexString() : 'w' + b.wallKey) + '|' + tk;
+      if (!groups.has(key)) groups.set(key, { mat: part ? b.roof : b.side, list: [] });
+      groups.get(key).list.push([b, part]);
+    }
+  }
+  for (const g of groups.values()) {
+    const pos = [], nor = [], uv = [], index = [], spans = [];
+    for (const [b, part] of g.list) {
+      const ga = b.geo.attributes, idx = b.geo.index.array, map = new Map(), v0 = pos.length / 3;
+      const start = part ? 24 : 0, count = part ? 6 : 24; // walls, or just the roof (nobody sees the floor)
+      for (let i = start; i < start + count; i++) {
+        const v = idx[i];
+        if (!map.has(v)) { map.set(v, pos.length / 3); pos.push(ga.position.getX(v), ga.position.getY(v), ga.position.getZ(v)); nor.push(ga.normal.getX(v), ga.normal.getY(v), ga.normal.getZ(v)); uv.push(ga.uv.getX(v), ga.uv.getY(v)); }
+        index.push(map.get(v));
+      }
+      spans.push([b, v0, pos.length / 3 - v0]);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(index); geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, g.mat); mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.buildings = true; S.add(mesh);
+    for (const [b, v0, n] of spans) b.ranges.push({ mesh, v0, n, orig: new Float32Array(pos.slice(v0 * 3, (v0 + n) * 3)) });
+  }
+}
+/* lift a building out of its batch (to fade it) or put it back */
+W.soloBuilding = function (b, on) {
+  if (!b.ranges.length || b.solo === on) return;
+  if (on && !b.mesh) { b.mats = [b.side.clone(), b.roof.clone()]; b.mesh = new THREE.Mesh(b.geo, b.mats); b.mesh.castShadow = true; b.mesh.receiveShadow = true; }
+  for (const r of b.ranges) {
+    const a = r.mesh.geometry.attributes.position;
+    for (let i = 0; i < r.n; i++) for (let k = 0; k < 3; k++) a.array[(r.v0 + i) * 3 + k] = on ? r.orig[k] : r.orig[i * 3 + k]; // collapse to a point, or restore
+    a.needsUpdate = true;
+  }
+  if (on) S.add(b.mesh); else S.remove(b.mesh);
+  b.solo = on;
+};
 function addSign(x, y, z, face, text, bg, fg, w, h, sub) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w || 8, h || 2), new THREE.MeshBasicMaterial({ map: signTex(text, bg, fg, sub) }));
   m.position.set(x, y, z);
@@ -1132,6 +1177,7 @@ W.build = function (scene, seed) {
   buildRamps();
   if (buildTerrainMesh(S)) W.groundPlane.visible = false;
   plantTreesOnHills();
+  batchBuildings();
   for (const k in GB) GB[k].build(S);
   P.build(S);
   buildMinimap();

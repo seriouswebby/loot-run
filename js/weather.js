@@ -6,10 +6,10 @@
    wind pushes aircraft around. */
 
 const WEATHER = {
-  clear: { label: 'SUNNY', hint: 'Clear skies · cops see far', sky: '#9fd0ef', fogNear: 480, fogFar: 1350, sun: 0.95, hemi: 0.72, clouds: 0.12, cloudCol: '#ffffff', wind: 0.15, sight: 1, grip: 1, w: 0, dur: [240, 480] },
-  clouds: { label: 'PARTLY CLOUDY', hint: 'Normal visibility', sky: '#a9c6da', fogNear: 420, fogFar: 1150, sun: 0.72, hemi: 0.75, clouds: 0.55, cloudCol: '#f4f6f8', wind: 0.3, sight: 1, grip: 1, w: 16, dur: [150, 300] },
-  cloudy: { label: 'OVERCAST', hint: 'Grey skies', sky: '#98a5b0', fogNear: 320, fogFar: 900, sun: 0.42, hemi: 0.8, clouds: 1, cloudCol: '#c9ced3', wind: 0.35, sight: 0.95, grip: 1, w: 9, dur: [120, 240] },
-  windy: { label: 'WINDY', hint: 'Strong gusts · aircraft drift', sky: '#a7cbe0', fogNear: 440, fogFar: 1250, sun: 0.85, hemi: 0.74, clouds: 0.4, cloudCol: '#ffffff', wind: 1, sight: 1, grip: 0.95, w: 8, dur: [100, 200] },
+  clear: { label: 'SUNNY', hint: 'Clear skies · cops see far', sky: '#9fd0ef', fogNear: 650, fogFar: 1900, sun: 0.95, hemi: 0.72, clouds: 0.12, cloudCol: '#ffffff', wind: 0.15, sight: 1, grip: 1, w: 0, dur: [240, 480] },
+  clouds: { label: 'PARTLY CLOUDY', hint: 'Normal visibility', sky: '#a9c6da', fogNear: 560, fogFar: 1600, sun: 0.72, hemi: 0.75, clouds: 0.55, cloudCol: '#f4f6f8', wind: 0.3, sight: 1, grip: 1, w: 16, dur: [150, 300] },
+  cloudy: { label: 'OVERCAST', hint: 'Grey skies', sky: '#98a5b0', fogNear: 420, fogFar: 1250, sun: 0.42, hemi: 0.8, clouds: 1, cloudCol: '#c9ced3', wind: 0.35, sight: 0.95, grip: 1, w: 9, dur: [120, 240] },
+  windy: { label: 'WINDY', hint: 'Strong gusts · aircraft drift', sky: '#a7cbe0', fogNear: 600, fogFar: 1750, sun: 0.85, hemi: 0.74, clouds: 0.4, cloudCol: '#ffffff', wind: 1, sight: 1, grip: 0.95, w: 8, dur: [100, 200] },
   rain: { label: 'RAIN', hint: 'Cops see less · roads slick', sky: '#7d8b97', fogNear: 90, fogFar: 430, sun: 0.25, hemi: 0.7, rain: 0.55, clouds: 1, cloudCol: '#8d969e', wind: 0.45, sight: 0.8, grip: 0.7, w: 7, dur: [100, 200] },
   storm: { label: 'THUNDERSTORM', hint: 'Choppers grounded · cops see less · roads slick', sky: '#4e5964', fogNear: 35, fogFar: 280, sun: 0.12, hemi: 0.55, rain: 1, clouds: 1, cloudCol: '#5b6168', wind: 0.9, sight: 0.7, grip: 0.6, lightning: true, noHeli: true, w: 3, dur: [80, 150] },
   fog: { label: 'FOG', hint: 'Cops can barely see you', sky: '#b7bfc4', fogNear: -20, fogFar: 75, sun: 0.3, hemi: 0.85, clouds: 0, cloudCol: '#ffffff', wind: 0.05, sight: 0.55, grip: 0.95, w: 3, dur: [80, 160] },

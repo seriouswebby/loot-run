@@ -358,18 +358,19 @@ const Funland = {
   },
   /* visitors: spawned on the paths when you're near, wandering from node to node and stopping to look */
   populate(t) {
-    const F = W.FUN; if (!F.links || dist(t.x, t.z, (F.minX + F.maxX) / 2, (F.minZ + F.maxZ) / 2) > 240) return;
+    const F = W.FUN; if (!F.links || dist(t.x, t.z, (F.minX + F.maxX) / 2, (F.minZ + F.maxZ) / 2) > 420) return;
     let n = 0; for (const p of G.npcs) if (!p.dead && p.ai && p.ai.park) n++;
     if (n >= 22) return;
     for (let k = 0; k < 8; k++) {
       const [a, b] = pick(F.links), u = rand(0.1, 0.9), x = a.x + (b.x - a.x) * u, z = a.z + (b.z - a.z) * u, d = dist(x, z, t.x, t.z);
-      if (d < 18 || d > 105) continue;
+      if (d < 18 || G.canSee(x, z, 1)) continue; // they walk in from somewhere you aren't looking
       const p = spawnPed(x, z, W.nearestBlock(x, z), 1, 1);
       Object.assign(p.ai, { mode: 'park', park: true, node: a, prev: b, waitT: rand(0, 2), speed: rand(1.1, 1.6), tx: a.x, tz: a.z }); // first along this path to its end
       return p;
     }
     return null;
   },
+  keepVisitor(p, t) { const F = W.FUN; return dist(t.x, t.z, (F.minX + F.maxX) / 2, (F.minZ + F.maxZ) / 2) < 460; },
   nextTarget(p) {
     const a = p.ai, at = a.node, opts = at.links.length > 1 ? at.links.filter((l) => l !== a.prev) : at.links, nb = pick(opts);
     a.prev = at; a.node = nb;

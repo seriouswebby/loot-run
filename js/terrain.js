@@ -211,7 +211,7 @@ function buildTerrainMesh(scene) {
     sh.fragmentShader = 'uniform float snowCover;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.95, 0.97), snowCover * 0.9);');
   };
   W.terrainMat = mat;
-  const TC = 32, col = [0, 0, 0], H = T.H, nx = T.nx, meshes = [];
+  const TC = 64, col = [0, 0, 0], H = T.H, nx = T.nx, meshes = []; // 512 m tiles: few draw calls, still culled
   for (let tj = 0; tj < T.nz - 1; tj += TC) for (let ti = 0; ti < T.nx - 1; ti += TC) {
     const cx = Math.min(TC, T.nx - 1 - ti), cz = Math.min(TC, T.nz - 1 - tj), vx = cx + 1, vz = cz + 1;
     const pos = new Float32Array(vx * vz * 3), colr = new Float32Array(vx * vz * 3), uv = new Float32Array(vx * vz * 2), idx = [];
