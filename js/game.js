@@ -91,6 +91,7 @@ const Heat = {
     this.spotted();
     if (this.level > before) {
       if (!G.autotest) Sfx.sting('heat');
+      Voice.heatUp(this.level);
       G.toast((why ? why + ' · ' : '') + 'Heat ' + this.level, 'heat');
       G.S.stats.maxHeat = Math.max(G.S.stats.maxHeat, this.level);
       if (before === 0) this.spawnT = 0.5;
@@ -153,7 +154,7 @@ const Heat = {
     this.need = (4 + this.level * 2.4) * zone.evade * (G.S.tools.mask ? 0.75 : 1);
     if (this.evade >= this.need) {
       this.clear(); G.S.stats.escapes++;
-      G.toast('You lost the cops!', 'good'); Sfx.sting('lost');
+      G.toast('You lost the cops!', 'good'); Sfx.sting('lost'); Voice.radio(['dispatch/evaded']);
       return;
     }
     this.spawnT -= dt;
@@ -197,6 +198,7 @@ function onZoneChange(prev, now) {
     if (dist(e.x, e.z, t.x, t.z) < 14) continue;
     if (G.npcs.filter((c) => c.kind === 'cop').length >= 12) break;
     for (let k = 0; k < (Heat.level >= 3 ? 2 : 1); k++) spawnCop(e.x + rand(-2, 2), e.z + rand(-2, 2), 'chase');
+    if (!n) Voice.radio(['dispatch/perimeter', Voice.placeKey(t.x, t.z)]);
     n++;
   }
   if (n) G.toast(now === 'forest' ? 'Police are covering the Forest Park exits!' : (G.curAlley.dead ? 'Dead end! Cops are blocking the alley mouth!' : 'Cops are covering both ends of the alley!'), 'warn');
@@ -211,6 +213,7 @@ function camSees(c, x, z) {
   return !W.segBlocked(c.x, c.z, x, z);
 }
 function witness(x, z, hearR) {
+  G.lastWitness = null;
   for (const n of G.npcs) {
     if (n.down || n.dead) continue;
     const d = dist(n.x, n.z, x, z);
@@ -220,8 +223,8 @@ function witness(x, z, hearR) {
   for (const n of G.npcs) {
     if (n.kind !== 'ped' || n.down || n.dead || n.ai.mode === 'vera') continue;
     const d = dist(n.x, n.z, x, z);
-    if (d > 1 && d < 22 && !W.segBlocked(n.x, n.z, x, z)) return 'A witness called it in';
-    if (hearR && d > 1 && d < hearR * 0.6) return 'Someone heard it and called the cops';
+    if (d > 1 && d < 22 && !W.segBlocked(n.x, n.z, x, z)) { G.lastWitness = n; return 'A witness called it in'; }
+    if (hearR && d > 1 && d < hearR * 0.6) { G.lastWitness = n; return 'Someone heard it and called the cops'; }
   }
   return null;
 }
@@ -250,10 +253,12 @@ G.crime = function (type, x, z, o) {
   }
   G.crimeCd[type] = now;
   const before = Heat.level;
+  if (G.lastWitness && !victimSaw) Voice.bark('witness', G.lastWitness, { force: true });
+  Voice.report(type, x, z);
   Heat.add(c.n, c.cap, c.label + ' — ' + why.toLowerCase());
   if (c.cap <= 2 && Heat.level === before && before >= c.cap) {
     G.rampage = (G.rampage || 0) + 1; G.rampageT = 15;
-    if (G.rampage >= 3) { G.rampage = 0; Heat.add(1, 4, 'Rampage'); }
+    if (G.rampage >= 3) { G.rampage = 0; Voice.report('rampage', x, z); Heat.add(1, 4, 'Rampage'); }
   }
 };
 G.onKnockout = function (a) {
@@ -334,9 +339,11 @@ G.startRob = function (r) {
   const h = G.robHeat(r), s = secStatus(r);
   if (h > 0) {
     const why = [s.alarmOn ? 'silent alarm' : null, s.camsOn ? 'cameras' : null, r.base ? 'clerk panicked' : null].filter(Boolean).join(' + ');
+    Voice.report(r.kind === 'bank' ? 'bank' : 'rob', r.x, r.z);
     Heat.add(h, 5, why ? 'Robbery — ' + why : 'Robbery');
   } else G.toast('Clean job: no alarm, no cameras. Nobody is calling this in.', 'good');
   panic(r.x, r.z, 16);
+  Voice.bark('clerk', { x: r.x, z: r.z, barkT: 0 }, { force: true });
 };
 G.completeRob = function (r) {
   r.robbing = false; r.cd = r.cool;
@@ -358,6 +365,7 @@ G.ejectDriver = function (car) {
   const b = W.nearestBlock(x, z);
   const p = spawnPed(x, z, b, 1, 1); W.collideCircle(p, p.r);
   p.ai.mode = 'flee'; p.ai.fleeT = 8; p.ai.thx = car.x; p.ai.thz = car.z;
+  if (car.driver === 'ai') Voice.bark('carjacked', p, { force: true });
   return p;
 };
 G.enterCar = function (car) {
@@ -527,6 +535,7 @@ G.knockedOut = function () {
   if (P.inCar) G.exitCar(true);
   if (P.inHeli) G.exitHeli(true);
   P.down = true; P.chute = false; P.tumble = null; // a knocked-out skydiver loses the chute
+  if (Heat.level > 0) Voice.radio(['dispatch/suspect_down']);
   Phys.ragdoll(P, { x: P.kx + P.vx, y: P.yv, z: P.kz + P.vz }); P.vx = P.vz = 0;
   const loss = Math.round(G.S.cash * 0.15);
   G.startRespawn('KNOCKED OUT', 'Hospital bill: -' + money(loss), W.places.hospital, loss, true);
@@ -536,6 +545,8 @@ G.busted = function () {
   if (P.inCar) G.exitCar(true);
   if (P.inHeli) G.exitHeli(true);
   P.handsUp = 99; P.chute = false;
+  { let cop = null, cd = 30; for (const n of G.npcs) if (n.kind === 'cop' && !n.down && dist(n.x, n.z, P.x, P.z) < cd) { cd = dist(n.x, n.z, P.x, P.z); cop = n; } if (cop) Voice.bark('cop_cuff', cop, { force: true }); }
+  if (Heat.level > 0) Voice.radio(['dispatch/custody']);
   const loss = Math.round(G.S.cash * 0.25);
   G.S.stats.busts++;
   G.startRespawn('CUFFED', 'Bail and confiscation: -' + money(loss), W.places.police, loss, false);

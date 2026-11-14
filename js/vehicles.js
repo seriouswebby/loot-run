@@ -681,6 +681,7 @@ const Roadblocks = {
     }
     this.list.push(rb);
     G.toast(Heat.level >= 3 ? 'Roadblock ahead! Spikes in the gap.' : 'Roadblock ahead on the highway!', 'warn');
+    Voice.radio([Voice.unit('roadblock'), Voice.placeKey(rb.x, rb.z)].concat(rb.spike ? [Voice.unit('spikes')] : []));
     Sfx.alarm();
     return true;
   },

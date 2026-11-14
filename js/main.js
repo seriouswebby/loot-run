@@ -26,12 +26,12 @@ const UI = {
     G.prevState = G.state === 'dialog' ? G.prevState : G.state; G.state = 'dialog'; Input.exitLock();
     this.showLine(); $('dialog').hidden = false;
   },
-  showLine() { const [who, text] = this.dlg.lines[this.dlg.i]; $('dlgName').textContent = who; $('dlgText').textContent = text; $('dlgStep').textContent = (this.dlg.i + 1) + ' / ' + this.dlg.lines.length; },
+  showLine() { const [who, text] = this.dlg.lines[this.dlg.i]; $('dlgName').textContent = who; $('dlgText').textContent = text; $('dlgStep').textContent = (this.dlg.i + 1) + ' / ' + this.dlg.lines.length; Voice.dialog(text); },
   advanceDialog() {
     if (!this.dlg) return;
     this.dlg.i++; Sfx.click();
     if (this.dlg.i >= this.dlg.lines.length) {
-      $('dialog').hidden = true; this.dlg = null; G.state = 'play';
+      Voice.stopDialog(); $('dialog').hidden = true; this.dlg = null; G.state = 'play';
       const d = this.onDlgDone; this.onDlgDone = null; if (d) d();
     } else this.showLine();
   },
@@ -82,7 +82,8 @@ const UI = {
     this.set('evadeFill', Heat.level > 0 && Heat.seenT <= 0 ? Math.round(clamp(Heat.evade / Heat.need, 0, 1) * 100) + '%' : '0%', 'width');
     $('heatBox').classList.toggle('active', Heat.level > 0);
     const z = W.ZONES[G.playerZone] || W.ZONES.street;
-    this.set('zoneLabel', z.label + (G.playerZone === 'alley' && G.curAlley && G.curAlley.dead ? ' (DEAD END)' : ''));
+    const B0 = G.body();
+    this.set('zoneLabel', G.playerZone === 'street' ? W.streetName(B0.x, B0.z).toUpperCase() : z.label + (G.playerZone === 'alley' && G.curAlley && G.curAlley.dead ? ' (DEAD END)' : ''));
     this.set('zoneHint', z.hint);
     $('zone').dataset.z = G.playerZone;
     // objective

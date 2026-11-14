@@ -78,6 +78,7 @@ function countyRoads() {
     const ring = W.nodeMap.get(x + ',' + z); if (ring != null) return ring; // joins an existing (Ring Highway) node
     return W.addNode(+x.toFixed(2), +z.toFixed(2), false, j ? 6 : 0);
   };
+  const edgeName = new Map();
   for (const r of W.COUNTY_ROADS) {
     let prev = node(r.pts[0][0], r.pts[0][1], true);
     for (let i = 1; i < r.pts.length; i++) {
@@ -85,7 +86,7 @@ function countyRoads() {
       for (let k = 1; k <= n; k++) {
         const x = ax + (bx - ax) * k / n, z = az + (bz - az) * k / n;
         const id = k === n ? node(bx, bz, junction.has(key(r.pts[i]))) : node(x, z, false);
-        W.addEdge(prev, id); prev = id;
+        W.addEdge(prev, id); edgeName.set(Math.min(prev, id) + ',' + Math.max(prev, id), r.name); prev = id;
       }
     }
   }
@@ -97,7 +98,7 @@ function countyRoads() {
     const L = dist(a.x, a.z, b.x, b.z), dx = (b.x - a.x) / L, dz = (b.z - a.z) / L;
     const ax = a.x + dx * a.half, az = a.z + dz * a.half, bx = b.x - dx * b.half, bz = b.z - dz * b.half;
     GB.road.strip(ax, az, bx, bz, 6, 0.04, 6);
-    W.countyEdges.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, e });
+    W.countyEdges.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, e, name: edgeName.get(Math.min(e.a, e.b) + ',' + Math.max(e.a, e.b)) });
   }
   // round pads where county roads bend or meet, so corners don't leave notches
   for (const n of W.nodes) {

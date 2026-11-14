@@ -100,7 +100,7 @@ class Actor {
     this.kx += ((this.x - fx) / d) * (knock || 3); this.kz += ((this.z - fz) / d) * (knock || 3);
     FX.burst(this.x, 1.3, this.z, 5, ['#ffffff', '#ffd166'], 4, 0.12, 0.35, { grav: 6 });
     if (this.hp <= 0 && !wasDown) { this.knockOut(); return true; }
-    if (!this.down) { Sfx.hurt(this.x, this.z); if (src === G.player) onNpcAttacked(this); }
+    if (!this.down) { Sfx.hurt(this.x, this.z); Voice.bark(this.kind === 'cop' ? 'cop_hurt' : 'ped_hurt', this); if (src === G.player) onNpcAttacked(this); }
     return false;
   }
   knockOut() {
@@ -268,9 +268,10 @@ function onNpcAttacked(a) {
   }
 }
 function panic(x, z, r) {
+  let shouted = false;
   for (const n of G.npcs) {
     if (n.kind !== 'ped' || n.down || n.ai.mode === 'fight' || n.ai.mode === 'vera') continue;
-    if (dist(n.x, n.z, x, z) < r) { n.ai.mode = 'flee'; n.ai.fleeT = rand(6, 11); n.ai.thx = x; n.ai.thz = z; }
+    if (dist(n.x, n.z, x, z) < r) { n.ai.mode = 'flee'; n.ai.fleeT = rand(6, 11); n.ai.thx = x; n.ai.thz = z; if (!shouted) shouted = Voice.bark('ped_panic', n); }
   }
 }
 
@@ -329,8 +330,13 @@ function copAI(c, dt) {
   a.losT -= dt;
   if (a.losT <= 0) {
     a.losT = rand(0.25, 0.4);
+    const saw = a.sees;
     a.sees = copSees(c, tx, tz, d);
     if (a.sees) Heat.spotted(c.x, c.z);
+    // shout on first sight, and now and then while chasing on foot
+    if (a.sees && !saw && Heat.level > 0) Voice.bark('cop_spot', c, { every: 9 });
+    else if (a.sees && Heat.level > 0 && d < 30 && !car && Math.random() < 0.04) Voice.bark('cop_chase', c, { every: 10 });
+    else if (!a.sees && saw && Heat.level > 0 && Math.random() < 0.3) Voice.bark('cop_lost', c, { every: 12 });
   }
   a.shootCd -= dt; a.punchCd -= dt;
   const canShoot = Heat.level >= 2 && a.sees;

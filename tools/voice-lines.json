@@ -1,0 +1,86 @@
+{
+  "_note": "Every spoken line in Loot Run. Rendered by tools/build-voice.py with the Kokoro TTS model (Apache-2.0). Vera's mission lines are read straight from js/game.js. Each bark line is voiced by the voices listed for its group, in rotation.",
+  "voices": {
+    "vera": "af_heart",
+    "dispatch": "af_bella",
+    "unit": ["am_michael", "am_puck"],
+    "pedM": ["am_puck", "bm_george", "am_fenrir"],
+    "pedF": ["af_sarah", "bf_emma", "af_kore", "af_aoede"],
+    "cop": ["am_fenrir", "am_michael", "bm_george"],
+    "clerk": ["af_kore", "am_puck"]
+  },
+  "barks": {
+    "ped_hurt": { "voices": ["pedM", "pedF"], "lines": ["Ow! What's your problem?", "Hey! Stop it!", "Help! Somebody help me!", "Get away from me!", "Are you crazy?", "Please, stop!"] },
+    "ped_panic": { "voices": ["pedM", "pedF"], "lines": ["He's got a gun!", "Run! Run!", "Oh my God!", "Somebody call the police!", "Get down!"] },
+    "witness": { "voices": ["pedF", "pedM"], "lines": ["I'm calling the cops!", "Hello, police? I need to report a crime.", "I saw that! I'm calling nine one one!", "Hey! Somebody stop him!"] },
+    "carjacked": { "voices": ["pedM", "pedF"], "lines": ["Hey! That's my car!", "Get out of my car!", "No, no, no! My car!", "Thief! Stop that guy!"] },
+    "clerk": { "voices": ["clerk"], "lines": ["Please don't shoot! Just take it!", "Okay, okay! Here's the money!", "The cops are already on their way, you know."] },
+    "cop_spot": { "voices": ["cop"], "lines": ["Freeze! Police!", "Stop right there!", "Police! Don't move!", "Hands where I can see them!"] },
+    "cop_chase": { "voices": ["cop"], "lines": ["Suspect on foot, I'm in pursuit!", "Stop running!", "You can't run forever!", "Get on the ground, now!"] },
+    "cop_hurt": { "voices": ["cop"], "lines": ["Agh! I'm hit!", "Officer needs assistance!", "Shots fired! Shots fired!"] },
+    "cop_cuff": { "voices": ["cop"], "lines": ["You're under arrest!", "Hands behind your back!", "You have the right to remain silent."] },
+    "cop_lost": { "voices": ["cop"], "lines": ["Where'd he go?", "I lost him!", "He was right here a second ago."] }
+  },
+  "radio": {
+    "dispatch": {
+      "crime_assault": "All units, report of an assault.",
+      "crime_mug": "All units, report of a mugging.",
+      "crime_gunfire": "Shots fired, shots fired.",
+      "crime_carjack": "All units, carjacking in progress.",
+      "crime_carTheft": "Vehicle theft reported.",
+      "crime_atm": "Report of an A T M break-in.",
+      "crime_atmBlast": "Explosion at an A T M. Possible safe cracking.",
+      "crime_assaultCop": "An officer has been assaulted. All units respond.",
+      "crime_copKO": "Officer down! Officer down!",
+      "crime_copCar": "Be advised, a patrol car has been stolen.",
+      "crime_copHeli": "Air One has been stolen. Repeat, Air One is stolen.",
+      "crime_milHeli": "Military aircraft stolen from Air Base Seven.",
+      "crime_explosion": "Explosion reported.",
+      "crime_rob": "All units, armed robbery in progress.",
+      "crime_bank": "Silent alarm at Bayhaven Federal. Possible bank robbery.",
+      "crime_rampage": "Suspect is on a rampage. All available units.",
+      "heat_2": "Suspect is fleeing. Units, pursue.",
+      "heat_3": "Suspect is armed and dangerous. Air One, you are cleared to assist.",
+      "heat_4": "All units, set up roadblocks. Spike strips are authorized.",
+      "heat_5": "Every available unit, respond. Lethal force is authorized.",
+      "evaded": "All units, suspect has evaded. Resume patrol.",
+      "custody": "Copy, suspect in custody. Good work.",
+      "suspect_down": "Suspect is down. Send an ambulance.",
+      "perimeter": "Units, cover the exits.",
+      "sus_foot": "Suspect is on foot.",
+      "sus_car": "Suspect is in a stolen vehicle.",
+      "sus_bike": "Suspect is on a bike.",
+      "sus_air": "Suspect is airborne. Air One, track him.",
+      "storm": "Air One is grounded by the storm."
+    },
+    "unit": {
+      "ack_1": "Copy, en route.",
+      "ack_2": "Ten four, on my way.",
+      "ack_3": "Unit twelve responding.",
+      "ack_4": "Twenty one, I'm two minutes out.",
+      "roadblock": "Roadblock is in place.",
+      "spikes": "Spike strips are down.",
+      "air_inbound": "Air One is up, inbound to your location.",
+      "air_eyes": "Air One, I have eyes on the suspect.",
+      "air_lost": "Air One, I've lost him under the trees.",
+      "lost": "We've lost visual on the suspect."
+    }
+  },
+  "places": {
+    "ring_n": "On the Ring Highway, north side.",
+    "ring_e": "On the Ring Highway, east side.",
+    "ring_s": "On the Ring Highway, south side.",
+    "ring_w": "On the Ring Highway, west side.",
+    "forest": "In Forest Park.",
+    "beach": "Down at the beach.",
+    "pier": "Near Pier Nine.",
+    "airport": "At the airport.",
+    "airbase": "At Air Base Seven.",
+    "county": "Out in the county.",
+    "air": "Over the city."
+  },
+  "streets": {
+    "ew": ["Oak", "Pine", "Maple", "Cedar", "Main", "Elm", "Market", "Union", "Harbor"],
+    "ns": ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth"]
+  }
+}

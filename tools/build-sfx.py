@@ -149,6 +149,9 @@ def main():
         for key, sid, info in credits:
             t = info['title'].replace('|', '/')
             f.write(f"| `{key}` | [{t}](https://freesound.org/s/{sid}/) | {info['user']} | [CC0 1.0](https://{CC0}) |\n")
+        f.write('\n# Voices\n\nAll spoken lines (Vera, people, police and the radio) are generated with the [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) ')
+        f.write('text-to-speech model by hexgrad, released under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx). ')
+        f.write('The script is `tools/voice-lines.json`; `tools/build-voice.py` renders it.\n')
     print(f'{len(data)} sounds, {total / 1024:.0f} KB mp3, {total * 4 / 3 / 1024:.0f} KB base64')
 
 

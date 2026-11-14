@@ -120,7 +120,7 @@ const Choppers = {
     const want = this.want(), act = this.active();
     this.spawnCd -= dt;
     if (act.length < want && this.spawnCd <= 0) { this.spawnAI(); this.spawnCd = 8; }
-    if (act.length > want) { act[0].leaving = true; if (Weather.noHeli() && Heat.level >= 3) G.toast('The storm grounded the police helicopters!', 'good'); }
+    if (act.length > want) { act[0].leaving = true; if (Weather.noHeli() && Heat.level >= 3) { G.toast('The storm grounded the police helicopters!', 'good'); Voice.radio(['dispatch/storm']); } }
     if (Heat.level === 0) this.announced = false;
     for (const h of this.list) {
       if (h.dead) continue;
@@ -156,7 +156,7 @@ const Choppers = {
     const h = new Chopper('police', t.x + Math.cos(a) * 140, t.z + Math.sin(a) * 140, a + Math.PI, { y: 30, pilot: 'ai' });
     h.ai = { sees: false, checkT: 0, lostT: 99, lastX: Heat.lastX, lastZ: Heat.lastZ, searchT: 0, orbit: rand(0, TAU), cd: 2.5, burst: 0, burstT: 0 };
     h.spotX = Heat.lastX; h.spotZ = Heat.lastZ;
-    if (!this.announced) { this.announced = true; G.toast('Police helicopter inbound! Hide under the Forest Park trees or in an alley.', 'warn'); Sfx.sting('chopper'); }
+    if (!this.announced) { this.announced = true; G.toast('Police helicopter inbound! Hide under the Forest Park trees or in an alley.', 'warn'); Sfx.sting('chopper'); Voice.radio([Voice.unit('air_inbound')]); }
     return h;
   },
   idle(h, dt) {

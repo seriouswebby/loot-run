@@ -51,3 +51,7 @@ All sound effects are public-domain (CC0 1.0) recordings from [Freesound](https:
 | `engine_prop` | [A small propeller plane.wav](https://freesound.org/s/403316/) | straget | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `engine_jet` | [G08-25_4-E Jet Constant Noise.wav](https://freesound.org/s/437888/) | craigsmith | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `engine_fighter` | [Afterburner sound.wav](https://freesound.org/s/104883/) | StoneyJ | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+
+# Voices
+
+All spoken lines (Vera, people, police and the radio) are generated with the [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) text-to-speech model by hexgrad, released under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx). The script is `tools/voice-lines.json`; `tools/build-voice.py` renders it.

@@ -35,6 +35,8 @@ Progress saves in your browser after every story job.
 | --- | --- |
 | `js/core.js` | Math helpers, input, particles, floating text |
 | `js/audio.js` | Audio engine: recorded effects with positional mixing, looping sirens/engines/rotor/ambience, chase music; synthesized fallback |
+| `js/voice.js` | Spoken lines: Vera's briefings, shouts from people and cops, police radio chatter with street names |
+| `js/voicedata.js` | The spoken lines, embedded as MP3 (generated — see Voices below) |
 | `js/sfxdata.js` | The recorded sounds, embedded as MP3 (generated — see Sound below) |
 | `js/world.js` | City generation, road graph, Ring Highway, zones, collisions, minimap |
 | `js/outer.js` | The county outside the city: country roads, farms, woods, land set aside for the airport, lake and river |
@@ -49,6 +51,16 @@ Progress saves in your browser after every story job.
 ## Sound
 
 The sound effects are public-domain (CC0) recordings from [Freesound](https://freesound.org), listed in [CREDITS.md](CREDITS.md). `tools/sfx-manifest.json` says which recording each in-game sound uses and how it is trimmed; `python3 tools/build-sfx.py` downloads them, confirms each one's CC0 license, trims, normalises and loops them, and writes `js/sfxdata.js` (embedded so the game still works when opened straight from disk). To swap a sound, change its `id` in the manifest and rebuild.
+
+## Voices
+
+Vera's briefings, people's shouts and the police radio are spoken lines generated with the open [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) text-to-speech model (Apache-2.0). The lines live in `tools/voice-lines.json` (Vera's are read from the missions in `js/game.js`); to regenerate `js/voicedata.js` after changing them:
+
+```bash
+uv run --python 3.12 --with kokoro-onnx --with soundfile tools/build-voice.py --model DIR
+```
+
+where `DIR` holds `kokoro-v1.0.onnx` and `voices-v1.0.bin` from the [kokoro-onnx model release](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0).
 
 ## Tests
 

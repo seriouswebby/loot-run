@@ -521,6 +521,28 @@ function runAutotest() {
     G.exitCar(true); car.remove();
     return (onFoot && drove) || `on foot ok ${onFoot} (${P.x.toFixed(0)},${P.z.toFixed(0)}) car came along ${drove}`;
   });
+  T('voices: every briefing line is recorded, every spot has a radio location, bark groups are full', () => {
+    const bad = [];
+    for (const m of MISSIONS) for (const part of ['intro', 'outro']) for (const [, text] of m[part] || []) if (!VOICE_TEXT[text] || !VOICE_DATA[VOICE_TEXT[text]]) bad.push('no voice: ' + text.slice(0, 30));
+    const L = W.LAND; let missing = 0, sample = '';
+    for (let i = 0; i < 3000; i++) { const x = rand(L.minX, L.maxX), z = rand(L.minZ, L.maxZ), k = Voice.placeKey(x, z); if (!Voice.has(k)) { missing++; sample = k + ' @' + Math.round(x) + ',' + Math.round(z); } }
+    if (missing) bad.push(missing + ' spots without a place clip, e.g. ' + sample);
+    for (const g of ['ped_hurt', 'ped_panic', 'witness', 'carjacked', 'clerk', 'cop_spot', 'cop_chase', 'cop_hurt', 'cop_cuff', 'cop_lost']) if (Voice.groupKeys(g).length < 3) bad.push(g + ' has ' + Voice.groupKeys(g).length);
+    for (const k in CRIMES) if (!Voice.has('dispatch/crime_' + k)) bad.push('no radio call for ' + k);
+    return !bad.length || bad.slice(0, 5).join(' | ');
+  });
+  T('voices: a punched person yells; a witnessed theft is shouted and called in on the radio', () => {
+    reset(); G.noSpawn = true; const x = W.places.spawn.x, z = W.places.spawn.z; tp(x, z);
+    for (const n of G.npcs.slice()) if (n.kind === 'ped' && n.ai.mode !== 'vera' && dist(n.x, n.z, x, z) < 60) n.remove();
+    const ped = spawnPed(x + 1.5, z, W.nearestBlock(x, z), 1, 1); ped.ai.mode = 'idle'; ped.hp = 999;
+    Voice.log.length = 0; Voice.cd = 0; ped.hurt(5, P.x, P.z, 1, P);
+    const yelled = Voice.log.some((l) => l.what === 'ped_hurt');
+    Voice.cd = 0; ped.barkT = 0; G.crimeCd = {}; Heat.clear(); Voice.radioQ.length = 0;
+    const car = new Car('sedan', x + 4, z + 3, 0, { parked: true }); car.locked = true; tp(x + 4, z + 1.5); G.enterCar(car);
+    const shouted = Voice.log.some((l) => l.what === 'witness'), radio = Voice.log.find((l) => l.what.startsWith('radio:dispatch/crime_carTheft+x/'));
+    G.exitCar(true); car.remove(); ped.remove(); Heat.clear(); G.noSpawn = false;
+    return (yelled && shouted && !!radio) || `yelled ${yelled} witness shouted ${shouted} radio ${radio ? radio.what : 'none'} (log: ${Voice.log.map((l) => l.what).join(', ')})`;
+  });
   T('crimes need a witness: nobody around, nobody calls it in', () => {
     reset(); G.noSpawn = true; const x = -235, z = -W.HWY - 4;
     for (const n of G.npcs.slice()) if (dist(n.x, n.z, x, z) < 70) n.remove();
@@ -956,8 +978,8 @@ function runAutotest() {
     Sfx.init(off);
     const want = typeof SFX_DATA === 'undefined' ? 0 : Object.keys(SFX_DATA).length;
     const timeout = new Promise((r) => setTimeout(() => r(-1), 15000));
+    const lines = [];
     Promise.race([Sfx.samplesReady, timeout]).then((n) => {
-      const lines = [];
       lines.push(n === want && want > 0 ? 'PASS recorded sounds decode (' + n + ')' : 'FAIL recorded sounds — decoded ' + n + ' of ' + want);
       const bad = []; // every sample has sound in it
       for (const g in Sfx.samples) for (const smp of Sfx.samples[g]) {
@@ -966,16 +988,24 @@ function runAutotest() {
         if (smp.loop && !(smp.loop[1] <= smp.buf.duration + 0.01)) bad.push(g + ' loop past end');
       }
       lines.push(!bad.length ? 'PASS recorded sounds are audible' : 'FAIL silent/short samples: ' + bad.join(', '));
+      // voices decode in this context too, and a radio call renders through the radio filter
+      Voice.radioQ.length = 0; Voice.radioBusy = false;
+      return Promise.all(['vera/0', 'bark/ped_hurt/0', 'dispatch/crime_rob', 'x/Main/Fifth'].map((k) => Voice.get(k)));
+    }).then((vb) => {
+      const durs = vb.map((b) => (b ? b.duration : 0));
+      lines.push(durs.every((d) => d > 0.3) ? 'PASS voice clips decode (' + durs.map((d) => d.toFixed(1) + 's').join(', ') + ')' : 'FAIL voice clips — durations ' + durs.join(', '));
+      Voice.radio(['dispatch/crime_rob', 'x/Main/Fifth']);
       Sfx.shot('pistol', 5, 0); Sfx.shot('shotgun', -10, 3); Sfx.explode(20, 10); Sfx.cash(); Sfx.punch(1, 1); Sfx.crash(0.8, 3, 0); Sfx.sting('heat'); Sfx.thunder();
       Sfx.glass(4, 2); Sfx.hurt(2, 2); Sfx.honk(-6, 3); Sfx.pop(3, 3); Sfx.alarm(8, 8); Sfx.smoke(2, 0); Sfx.land(0, 1); Sfx.jump(0, 1); Sfx.whoosh(1, 0); Sfx.impact(3, 3); Sfx.heliGun(10, -10); Sfx.buy();
       for (let i = 0; i < 30; i++) Sfx.update(0.05, { playing: true, lx: 0, lz: 0, rx: 1, rz: 0, sirens: [{ x: 30, z: 5 }, { x: -20, z: 8 }], heat: 4, zone: 'forest', rain: 1, slip: 0.6, engine: { speed: 20, throttle: 1, boost: false }, heli: { x: 10, z: -15 } });
-      return off.startRendering().then((buf) => {
-        let peak = 0, sum = 0, nan = false; const d = buf.getChannelData(0);
-        for (let i = 0; i < d.length; i++) { const v = d[i]; if (!isFinite(v)) nan = true; peak = Math.max(peak, Math.abs(v)); sum += v * v; }
-        const rms = Math.sqrt(sum / d.length);
-        lines.push((!nan && rms > 0.005 && peak <= 1.0) ? 'PASS audio mix renders (rms ' + rms.toFixed(3) + ', peak ' + peak.toFixed(2) + ')' : 'FAIL audio mix — rms ' + rms + ' peak ' + peak + ' nan ' + nan);
-        finish(lines);
-      });
-    }).catch((e) => finish(['FAIL audio — ' + e]));
+      // the radio call is scheduled once its clips have decoded; give it a moment before rendering
+      return new Promise((r) => setTimeout(r, 300)).then(() => off.startRendering());
+    }).then((buf) => {
+      let peak = 0, sum = 0, nan = false; const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) { const v = d[i]; if (!isFinite(v)) nan = true; peak = Math.max(peak, Math.abs(v)); sum += v * v; }
+      const rms = Math.sqrt(sum / d.length);
+      lines.push((!nan && rms > 0.005 && peak <= 1.0) ? 'PASS audio mix renders (rms ' + rms.toFixed(3) + ', peak ' + peak.toFixed(2) + ')' : 'FAIL audio mix — rms ' + rms + ' peak ' + peak + ' nan ' + nan);
+      finish(lines);
+    }).catch((e) => finish(lines.concat(['FAIL audio — ' + e])));
   } catch (e) { finish(['FAIL audio — EXC ' + e.message]); }
 }
