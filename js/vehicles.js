@@ -174,7 +174,7 @@ class Car {
     return { maxV: Math.min(88, T.maxV * mul * (boost ? 1.55 : 1)), accel: T.accel * (boost ? 2.6 : 1) * (mul > 1 ? 1.25 : 1), cond };
   }
   drive(dt, thr, steer, hb, boost) {
-    if (PhysCar.car === this) { PhysCar.input(thr, steer, hb, boost); return; } // realistic handling: the physics body drives
+    if (this.phys) { this.phys.input(thr, steer, hb, boost); return; } // realistic handling: the physics body drives
     const T = this.T, { maxV, accel, cond } = this.limits(boost);
     if (this.y <= 0.001) { const sl = W.slopeAlong(this.x, this.z, Math.sin(this.h), Math.cos(this.h)); if (sl) this.v -= sl * (OFFROAD[this.type] ? 5 : 9) * dt; } // 4x4s pull up hills better
     if (thr > 0) {
@@ -193,7 +193,7 @@ class Car {
     this.vx = damp(this.vx, fx * this.v, grip, dt); this.vz = damp(this.vz, fz * this.v, grip, dt);
   }
   integrate(dt) {
-    if (PhysCar.car === this) return; // moved by the physics step
+    if (this.phys) return; // moved by the physics step
     // move in short hops so fast cars and bikes can't skip over thin barriers
     const sp = Math.hypot(this.vx + this.kx, this.vz + this.kz), n = Math.min(12, Math.max(1, Math.ceil(sp * dt / 0.25))), h = dt / n;
     for (let i = 0; i < n; i++) {
@@ -361,7 +361,7 @@ class Car {
       this.bar[0].material.color.set(on && ph ? 0xff2020 : 0x551111);
       this.bar[1].material.color.set(on && !ph ? 0x2050ff : 0x111155);
     }
-    if (PhysCar.car === this) { PhysCar.pose(this); if (this.rider) this.rider.visible = false; return; }
+    if (this.phys) { this.phys.pose(); if (this.rider) this.rider.visible = false; return; }
     // airborne (or the ground just rose up to meet a falling car): fall, and land properly either way
     if (this.y > 0 || this.yv !== 0) {
       this.yv -= 22 * dt; this.y += this.yv * dt; this.airT = (this.airT || 0) + dt;
@@ -381,7 +381,7 @@ class Car {
     this.mesh.rotation.z = this.lean + (this.y > 0.05 ? 0 : rollG);
     if (this.rider) this.rider.visible = this.driver === 'ai';
   }
-  remove() { if (PhysCar.car === this) PhysCar.detach(); this.dead = true; G.scene.remove(this.mesh); disposeObj(this.mesh); }
+  remove() { if (this.phys) this.phys.destroy(); this.dead = true; G.scene.remove(this.mesh); disposeObj(this.mesh); }
 }
 
 /* ---------------- skid marks (pooled instanced quads) ---------------- */

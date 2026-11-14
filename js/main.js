@@ -527,7 +527,7 @@ function computeInteract() {
     return out;
   }
   if (P.inCar) {
-    const car = P.inCar, ch = W.places.chop, air = PhysCar.car === car ? PhysCar.wasAir && PhysCar.airT > 0.15 : car.y > 0.3 && car.yv !== 0;
+    const car = P.inCar, ch = W.places.chop, air = car.phys ? car.phys.wasAir && car.phys.airT > 0.15 : car.y > 0.3 && car.yv !== 0;
     if (!air) out.f = { label: 'Get out', run: () => G.exitCar() };
     if (dist(car.x, car.z, ch.x, ch.z) < ch.r + 2) {
       out.e = { id: 'sell', label: 'Sell ' + car.T.name.toLowerCase() + ' to Rusty for ' + money(G.carValue(car)), disabled: Heat.level > 0 ? "Rusty won't buy while you have heat" : null, run: () => G.sellCar() };

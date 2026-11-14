@@ -55,7 +55,7 @@ const Phys = {
      otherwise fill it with every wall in the county) */
   evictStatics() {
     const pts = [];
-    if (PhysCar.car) pts.push(PhysCar.car.x, PhysCar.car.z);
+    for (const v of PhysCar.list) pts.push(v.car.x, v.car.z);
     for (const a of this.ragdolls) pts.push(a.x, a.z);
     for (const p of this.props) if (p.body) pts.push(p.x, p.z);
     for (const d of this.debris) { const pos = d.b.getPosition(); pts.push(pos.x, pos.z); }
@@ -241,10 +241,10 @@ const Phys = {
     for (const p of this.props) if (p.body) near.push(p.x, p.z);
     for (const d of this.debris) { const pos = d.b.getPosition(); near.push(pos.x, pos.z); }
     const isNear = (x, z, r) => { for (let i = 0; i < near.length; i += 2) if (Math.abs(near[i] - x) < r && Math.abs(near[i + 1] - z) < r) return true; return false; };
-    if (PhysCar.car) near.push(PhysCar.car.x, PhysCar.car.z);
+    for (const v of PhysCar.list) near.push(v.car.x, v.car.z);
     for (const c of G.cars) {
       let k = this.kin.get(c);
-      const want = !c.dead && c !== PhysCar.car && isNear(c.x, c.z, 14);
+      const want = !c.dead && !c.phys && isNear(c.x, c.z, 14);
       if (!want) { if (k) { this.kill(k); this.kin.delete(c); } continue; }
       this.q.setFromAxisAngle(this.v.set(0, 1, 0), c.h);
       const hh = c.T.bike ? 0.5 : 0.75, y = hh + (c.y || 0);
@@ -256,7 +256,7 @@ const Phys = {
     const P = G.player, on = !P.inCar && !P.inHeli && !P.ragdoll && !P.down && isNear(P.x, P.z, 6);
     if (on) {
       const pos = { x: P.x, y: P.y + 0.9, z: P.z };
-      if (!this.playerKin) { this.playerKin = this.body({ type: 'kinematic', position: pos }); this.playerKin.createBox({ halfExtents: { x: 0.3, y: 0.9, z: 0.3 } }); }
+      if (!this.playerKin) { this.playerKin = this.body({ type: 'kinematic', position: pos }); this.playerKin.createBox({ halfExtents: { x: 0.3, y: 0.9, z: 0.3 }, filter: { categoryBits: 16, maskBits: 0xffff } }); } // its own layer: physics cars don't treat you as a post
       else this.playerKin.setTargetTransform({ position: pos, rotation: { x: 0, y: 0, z: 0, w: 1 } }, dt);
     } else if (this.playerKin) { this.kill(this.playerKin); this.playerKin = null; }
   },

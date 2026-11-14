@@ -408,7 +408,7 @@ G.enterCar = function (car) {
 };
 G.exitCar = function (force) {
   const P = G.player, car = P.inCar; if (!car) return;
-  if (PhysCar.car === car) PhysCar.detach();
+  if (car.phys) PhysCar.detach(car);
   const fx = Math.sin(car.h), fz = Math.cos(car.h), off = car.T.w / 2 + 0.75;
   let placed = false;
   for (const s of [-1, 1]) {
