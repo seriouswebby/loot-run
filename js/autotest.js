@@ -1405,6 +1405,32 @@ function runAutotest() {
     car.remove(); parked.remove();
     return (was && moved > 1 && alarm && hurt && off && back && stays && handed) || `physics ${was} pushed ${moved.toFixed(1)} m alarm ${alarm} dented ${hurt} · K off ${off} on again ${back} · stays after you get out ${stays} · back to arcade when far ${handed}`;
   });
+  const soak = (x, z, sec) => {
+    reset(); G.noSpawn = false; tp(x, z); P.y = 0; G.god = true; const cam0 = G.cam; G.cam = null;
+    let smashed = 0, hits = 0, maxPhys = 0; const realSmash = G.smash, realHits = carHitsActors;
+    G.smash = (c, car, ex, ez) => { if (car && car.driver === 'ai') smashed++; return realSmash(c, car, ex, ez); };
+    carHitsActors = (car) => { const before = G.npcs.filter((n) => n.carHitT > G.time).length; realHits(car); if (car.driver === 'ai' && G.npcs.filter((n) => n.carHitT > G.time).length > before) hits++; };
+    const track = new Map(); let stuck = 0, offroad = 0, hurt = 0;
+    for (let i = 0; i < sec * 60; i++) {
+      step(STEP); P.x = x; P.z = z;
+      maxPhys = Math.max(maxPhys, [...PhysCar.list].filter((v) => v.car.driver === 'ai').length);
+      if (i % 60 === 0) for (const c of G.cars) {
+        if (c.dead || !c.phys || c.driver !== 'ai' || !c.ai || c.ai.mode !== 'traffic') continue;
+        let d = 1e9; for (const e of W.edges) d = Math.min(d, segPointDist(c.x, c.z, W.nodes[e.a].x, W.nodes[e.a].z, W.nodes[e.b].x, W.nodes[e.b].z)); if (d > (W.onHighway(c.x, c.z) ? 18 : 9)) offroad++;
+        const t = track.get(c) || { x: c.x, z: c.z, n: 0 }; if (dist(t.x, t.z, c.x, c.z) < 1 && !c.ai.blocked) t.n++; else { t.n = 0; t.x = c.x; t.z = c.z; } track.set(c, t); if (t.n === 6) stuck++;
+      }
+    }
+    for (const c of G.cars) if (!c.dead && c.driver === 'ai' && c.hp < c.maxHp * 0.6) hurt++;
+    G.smash = realSmash; carHitsActors = realHits; G.god = false; G.cam = cam0; G.noSpawn = true;
+    return { smashed, hits, stuck, offroad, hurt, maxPhys };
+  };
+  T('physics traffic soak: two minutes at a city junction and on the Ring Highway without crashes, felled lamps, people hit or stuck cars', () => {
+    if (!Phys.ready) return 'SKIP';
+    const city = soak(W.rp(4) + 10, W.rp(4) + 10, 120), ring = soak(0, -W.HWY - 22, 120);
+    // (people do step out in front of traffic: over three 2-minute runs physics traffic hit 4, arcade traffic 3)
+    const ok = (r) => r.smashed === 0 && r.hits <= 6 && r.stuck <= 1 && r.offroad <= 2 && r.hurt === 0 && r.maxPhys >= 3;
+    return (ok(city) && ok(ring)) || 'city ' + JSON.stringify(city) + ' ring ' + JSON.stringify(ring);
+  });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;
     const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };

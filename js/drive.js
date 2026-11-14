@@ -300,7 +300,7 @@ const PhysCar = {
   on: true, world: true, list: new Set(), mT: 0,
   RIDE: 0.83, R: 0.36, L0: 0.52, G: 20,
   MAX: 16, RON: 55, ROFF: 80, // up to 16 physics cars, within 55 m of you; past 80 m they go back to the arcade model
-  classes: { parked: true, traffic: false, police: false }, // which kinds of car near you become physics bodies
+  classes: { parked: true, traffic: true, police: false }, // which kinds of car near you become physics bodies
 
   init() {
     let pref = null, world = null; try { pref = localStorage.getItem('lootrun.handling'); world = localStorage.getItem('lootrun.physWorld'); } catch (e) { /* private window */ }

@@ -1091,7 +1091,7 @@ function boot() {
   const physReady = Phys.init(); PhysCar.init();
   const q = new URLSearchParams(location.search);
   if (q.has('autotest')) { G.autotest = true; physReady.then(() => runAutotest()); return; }
-  if (q.has('bench')) { G.autotest = true; runBench(); return; } // synchronous: headless --dump-dom waits for it in real time
+  if (q.has('bench')) { G.autotest = true; if (q.has('phys')) physReady.then(() => runBench()); else runBench(); return; } // synchronous unless ?phys (then it waits for Box3D)
   if (q.has('demo')) { startGame(null); G.camMode = 'iso'; physReady.then(() => demoSetup(q.get('demo'))); }
   requestAnimationFrame((t) => { lastT = t; frame(t); });
 }
@@ -1260,7 +1260,7 @@ function runBench() {
     }
     renderer.info.reset(); for (let i = 0; i < 5; i++) renderer.render(G.scene, cam);
     out.push('   without: ' + split.join(' · '));
-    const r = renderer.info.render; out.push(name.padEnd(10) + ' step ' + stepMs.toFixed(2) + ' ms · calls ' + Math.round(r.calls / 5) + ' · tris ' + Math.round(r.triangles / 5 / 1000) + 'k · cpu render ' + drawMs.toFixed(1) + ' ms · cars ' + G.cars.length + ' · npcs ' + G.npcs.length);
+    const r = renderer.info.render; out.push(name.padEnd(10) + ' step ' + stepMs.toFixed(2) + ' ms' + (Phys.ready ? ' (physics cars ' + PhysCar.list.size + ', static bodies ' + Phys.statics.size + ')' : '') + ' · calls ' + Math.round(r.calls / 5) + ' · tris ' + Math.round(r.triangles / 5 / 1000) + 'k · cpu render ' + drawMs.toFixed(1) + ' ms · cars ' + G.cars.length + ' · npcs ' + G.npcs.length);
   }
   $('autotest').hidden = false; $('autotest').textContent = out.join('\n'); document.title = 'BENCH DONE';
 }

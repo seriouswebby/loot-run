@@ -525,8 +525,9 @@ function steerTo(car, tx, tz, want, dt) {
   let steer = clamp(-d * 2.6, -1, 1);
   let thr = 0;
   if (Math.abs(d) > 0.6) want = Math.min(want, 8);
-  if (car.v < want - 0.8) thr = 1; else if (car.v > want + 1.5) thr = -1;
-  if (want <= 0.1 && car.v < 0.6) { thr = 0; car.v = Math.max(0, car.v); }
+  if (car.phys) thr = clamp((want - car.v) / 3, -1, 1); // a physics car gets smooth pedals
+  else if (car.v < want - 0.8) thr = 1; else if (car.v > want + 1.5) thr = -1;
+  if (want <= 0.1 && car.v < 0.6) { thr = 0; if (!car.phys) car.v = Math.max(0, car.v); }
   if (car.v < 0) steer = -steer;
   car.drive(dt, thr, steer, false, false);
 }
@@ -569,22 +570,29 @@ function obstacleAhead(car, look) {
 function aiTraffic(car, dt) {
   const a = car.ai;
   if (a.revT > 0) { a.revT -= dt; car.drive(dt, -1, a.revSteer, false, false); return; }
-  const tx = a.stage === 'exit' ? a.exitX : a.tx, tz = a.stage === 'exit' ? a.exitZ : a.tz;
-  if (dist(car.x, car.z, tx, tz) < 3.2) {
+  const tx = a.stage === 'exit' ? a.exitX : a.tx, tz = a.stage === 'exit' ? a.exitZ : a.tz, dT = dist(car.x, car.z, tx, tz);
+  // the next turn is chosen before the junction (so the driver can slow for it)
+  const choose = () => {
+    const B = W.nodes[a.to];
+    let opts = B.adj.filter((n) => n !== a.from);
+    if (!opts.length) opts = B.adj;
+    let next = pick(opts);
+    // a fleeing driver mostly takes the turn that leads away from you
+    if (a.flee && Math.random() < 0.8) { const t = G.body(); next = opts.slice().sort((p, q) => dist(W.nodes[q].x, W.nodes[q].z, t.x, t.z) - dist(W.nodes[p].x, W.nodes[p].z, t.x, t.z))[0]; }
+    return next;
+  };
+  if (a.stage !== 'exit' && dT < 26 && a.peek == null) a.peek = choose();
+  if (dT < 3.2) {
     if (a.stage === 'exit') a.stage = 'run';
-    else {
-      const B = W.nodes[a.to];
-      let opts = B.adj.filter((n) => n !== a.from);
-      if (!opts.length) opts = B.adj;
-      let next = pick(opts);
-      // a fleeing driver mostly takes the turn that leads away from you
-      if (a.flee && Math.random() < 0.8) { const t = G.body(); next = opts.slice().sort((p, q) => dist(W.nodes[q].x, W.nodes[q].z, t.x, t.z) - dist(W.nodes[p].x, W.nodes[p].z, t.x, t.z))[0]; }
-      a.from = a.to; a.to = next; navPoints(car);
-    }
+    else { const next = a.peek != null ? a.peek : choose(); a.peek = null; a.from = a.to; a.to = next; navPoints(car); }
   }
   a.checkT -= dt; a.ignoreT -= dt;
-  if (a.checkT <= 0) { a.checkT = 0.15; a.blocked = obstacleAhead(car, 6 + Math.max(0, car.v) * 0.6); }
+  if (a.checkT <= 0) { a.checkT = 0.15; a.blocked = obstacleAhead(car, 6 + Math.max(0, car.v) * (car.phys ? 0.95 : 0.6)); } // a physics car needs room to stop
   let want = a.flee ? Math.min(car.T.maxV * 0.85, a.limit * 1.8) : a.limit;
+  if (a.peek != null && a.stage !== 'exit' && dT < 26) { // slow for the turn: the sharper, the slower
+    const A = W.nodes[a.from], B = W.nodes[a.to], C = W.nodes[a.peek], turn = Math.abs(angDiff(Math.atan2(B.x - A.x, B.z - A.z), Math.atan2(C.x - B.x, C.z - B.z)));
+    want = Math.min(want, 15 - 9 * Math.min(1, turn / 1.57));
+  }
   for (const cr of W.railCrossings || []) {
     if (!cr.closed) continue;
     const dx = cr.x - car.x, dz = cr.z - car.z, d = Math.hypot(dx, dz);
