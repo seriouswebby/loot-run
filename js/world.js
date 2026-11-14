@@ -868,6 +868,15 @@ W.addTree = function (x, z, type) {
   t.col = W.addCircle(x, z, 0.45, 'tree'); t.col.destructible = { kind: 'tree', ref: t };
   W.trees.push(t);
 };
+/* is (x, z) under a standing tree's crown? (cover from helicopters) */
+W.underCanopy = function (x, z) {
+  for (const c of W.queryBox(x - 3, z - 3, x + 3, z + 3)) {
+    if (c.kind !== 'tree' || c.removed) continue;
+    const t = c.destructible && c.destructible.ref, r = t ? 1.9 * t.s : 1.8;
+    if ((c.x - x) * (c.x - x) + (c.z - z) * (c.z - z) < r * r) return true;
+  }
+  return false;
+};
 const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
 W.hideTree = function (t) {
   const m = W.treeMeshes; if (!m || t.ti == null) return;

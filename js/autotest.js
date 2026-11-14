@@ -244,7 +244,7 @@ function runAutotest() {
     Heat.add(5, 5, 'test'); steps(10); const two = Choppers.active().length; G.god = false;
     return (one === 1 && saw && two === 2) || `at heat3 ${one} saw ${saw} at heat5 ${two}`;
   });
-  T('forest canopy hides you from the chopper', () => {
+  T('forest canopy and lone trees hide you from the chopper', () => {
     reset(); tp(0, 25); Heat.add(3, 5, 'test'); const h = Choppers.spawnAI();
     let street = 0; G.playerZone = 'street'; h.x = P.x; h.z = P.z; h.spotX = P.x; h.spotZ = P.z;
     for (let i = 0; i < 200; i++) if (heliSees(h, P.x, P.z)) street++;
@@ -252,7 +252,16 @@ function runAutotest() {
     tp(tr.x + 1.3, tr.z); G.playerZone = 'forest'; h.x = P.x; h.z = P.z; h.spotX = P.x; h.spotZ = P.z;
     let forest = 0; for (let i = 0; i < 400; i++) if (heliSees(h, P.x, P.z)) forest++;
     h.spotX = P.x + 8; let forestOff = 0; for (let i = 0; i < 200; i++) if (heliSees(h, P.x, P.z)) forestOff++;
-    return (street === 200 && forest / 400 < 0.45 && forestOff === 0) || `street ${street}/200 forest ${forest}/400 spotlight-off ${forestOff}`;
+    // a lone street tree: standing under it hides you most of the time, a few steps away it doesn't
+    const st = W.trees.find((k) => k.col && !k.col.removed && W.zoneAt(k.x, k.z) !== 'forest' && W.underCanopy(k.x + 0.9, k.z));
+    let under = 0, open = 0;
+    if (st) {
+      tp(st.x + 0.9, st.z); G.playerZone = W.zoneAt(P.x, P.z); h.spotX = P.x; h.spotZ = P.z;
+      for (let i = 0; i < 400; i++) if (heliSees(h, P.x, P.z)) under++;
+      tp(st.x + 6, st.z); G.playerZone = W.zoneAt(P.x, P.z); h.x = P.x; h.z = P.z; h.spotX = P.x; h.spotZ = P.z;
+      if (!W.underCanopy(P.x, P.z)) for (let i = 0; i < 200; i++) if (heliSees(h, P.x, P.z)) open++; else open = 200;
+    }
+    return (street === 200 && forest / 400 < 0.3 && forestOff === 0 && st && under / 400 < 0.35 && open === 200) || `street ${street}/200 forest ${forest}/400 spotlight-off ${forestOff} lone tree ${!!st} under ${under}/400 open ${open}/200`;
   });
   T('thunderstorm grounds police choppers', () => {
     reset(); Weather.set('storm', true); Heat.add(5, 5, 'test');

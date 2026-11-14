@@ -179,10 +179,13 @@ function heliSees(h, tx, tz) {
   for (const c of Smoke.clouds) if (dist(c.x, c.z, tx, tz) < c.r) return false;
   const dH = dist(h.x, h.z, tx, tz), dS = dist(h.spotX, h.spotZ, tx, tz);
   if (zone === 'air') return dH < 110;
+  // trees: in the forest the spotlight has to land right on you and still only catches a glimpse now and then;
+  // a lone tree in town gives nearly as much cover while you stand under it
   if (zone === 'forest') {
-    if (W.onTrail(tx, tz)) return dS < 6;
-    return dS < (P.inCar ? 4.5 : 3.2) && Math.random() < (P.inCar ? 0.45 : 0.3);
+    if (W.onTrail(tx, tz)) return dS < 4.5;
+    return dS < (P.inCar ? 3.8 : 2.6) && Math.random() < (P.inCar ? 0.3 : 0.18);
   }
+  if (!P.inCar && !P.inHeli && W.underCanopy(tx, tz)) return dS < 2.8 && Math.random() < 0.22;
   if (zone === 'alley') return dS < 5.5;
   if (zone === 'highway' || zone === 'beach') return dH < 75;
   return dH < 42 || dS < 7;
@@ -239,7 +242,7 @@ function heliAI(h, dt) {
   if (a.burst > 0) { a.burstT -= dt; if (a.burstT <= 0) { a.burstT = 0.11; a.burst--; heliShoot(h, t); } }
 }
 function heliShoot(h, t) {
-  const P = G.player, zone = G.playerZone, canopy = zone === 'forest' && !W.onTrail(t.x, t.z);
+  const P = G.player, zone = G.playerZone, canopy = (zone === 'forest' && !W.onTrail(t.x, t.z)) || (!P.inCar && !P.inHeli && W.underCanopy(t.x, t.z));
   const moving = Math.hypot(P.vx, P.vz);
   let spread = 1.5 + moving * 0.1; if (canopy) spread *= 2.5;
   const ix = t.x + rand(-1, 1) * spread, iz = t.z + rand(-1, 1) * spread;
