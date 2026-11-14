@@ -31,8 +31,8 @@ W.inCounty = (x, z) => Math.abs(x) > W.BOUND + 0.5 || z < -W.BOUND - 0.5;
   // land kept clear for things built on top of the county later
   W.RESERVE = [
     { kind: 'airport', minX: -W.OUT + 25, maxX: -B - 70, minZ: 40, maxZ: W.SHORE - 25 },
-    { kind: 'lake', cx: -330, cz: -820, r: 140 },
-    { kind: 'river', minX: 880, maxX: 960, minZ: -W.OUT, maxZ: W.SHORE },
+    { kind: 'lake', cx: -280, cz: -830, r: 150 },
+    { kind: 'river', minX: 868, maxX: 972, minZ: -W.OUT - 60, maxZ: W.SHORE + 40 },
   ];
 })();
 W.inReserve = function (x, z, pad) {
@@ -59,6 +59,7 @@ function buildCounty() {
     && !W.inReserve(x, z, pad || 0) && !W.nearCountyRoad(x, z, 12 + (pad || 0))
     && !W.buildings.some((b) => x > b.minX - 4 - (pad || 0) && x < b.maxX + 4 + (pad || 0) && z > b.minZ - 4 - (pad || 0) && z < b.maxZ + 4 + (pad || 0));
   buildAirport(OP);
+  buildWater(OP);
   countyFarms(OP, free);
   const trees = countyWoods(free);
   countyTreeMeshes(trees);
@@ -272,4 +273,64 @@ function buildAirport(OP) {
   const mx = -930; for (let z = 150; z < 236; z += 5) post(mx, z);
   OP.box(mx, 1.2, 193, 0.03, 2.2, 86, '#b8bec4'); W.addCollider(mx - 0.15, 150, mx + 0.15, 236, 2.4, 'fence', true);
   W.zoneRects = (W.zoneRects || []).concat([{ zone: 'airport', ...f }]);
+}
+
+/* ---------------- Mirror Lake and the Bay River ----------------
+   The lake is one round water collider with a sandy shore and a jetty. The river winds from the north fence down to
+   the sea; it's a chain of water circles with gaps where roads cross it on bridges (railings keep you on the deck). */
+W.LAKE = { x: -280, z: -830, r: 128 };
+W.RIVER = { w: 34, pts: [[930, -W.OUT - 60], [905, -1060], [945, -760], [902, -470], [940, -170], [912, 120], [928, W.SHORE + 40]] };
+W.bridges = [];
+function buildWater(OP) {
+  const waterMat = new THREE.MeshLambertMaterial({ color: 0x3b86ad }), L = W.LAKE;
+  const disc = (x, z, r, y, col) => { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 64), col.isMaterial ? col : new THREE.MeshLambertMaterial({ color: col })); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; S.add(m); return m; };
+  // the lake: sand shore, water, a jetty with a rowboat
+  disc(L.x, L.z, L.r + 9, 0.022, '#d8c690'); disc(L.x, L.z, L.r, 0.03, waterMat);
+  W.addCircle(L.x, L.z, L.r - 1, 'water');
+  for (let k = 0; k < 14; k++) OP.box(L.x + L.r - 2 + k * 1.2 - 14, 0.3, L.z + 0.5, 1.1, 0.2, 3, '#8b6a45');
+  for (const s of [-1, 1]) for (let k = 0; k < 4; k++) OP.box(L.x + L.r - 15 + k * 4, 0.2, L.z + 0.5 + s * 1.4, 0.35, 1.2, 0.35, '#5b4630');
+  OP.box(L.x + L.r - 18, 0.25, L.z + 4.5, 1.6, 0.5, 4.2, '#c75a2a'); OP.box(L.x + L.r - 18, 0.52, L.z + 4.5, 1.2, 0.08, 3.6, '#e9d8a6');
+  W.places.lake = { id: 'lake', name: 'Mirror Lake', x: L.x + L.r + 8, z: L.z };
+  // the river: water strip + banks, sampled every few metres
+  const R = W.RIVER, hw = R.w / 2, crossing = [];
+  for (const e of W.countyEdges) for (let i = 1; i < R.pts.length; i++) {
+    const [ax, az] = R.pts[i - 1], [bx, bz] = R.pts[i];
+    const t = segSegT(ax, az, bx, bz, e.ax, e.az, e.bx, e.bz);
+    if (t) crossing.push({ x: ax + (bx - ax) * t[0], z: az + (bz - az) * t[0], e });
+  }
+  for (let i = 1; i < R.pts.length; i++) {
+    const [ax, az] = R.pts[i - 1], [bx, bz] = R.pts[i], len = dist(ax, az, bx, bz), dx = (bx - ax) / len, dz = (bz - az) / len;
+    GB.dirt.strip(ax, az, bx, bz, hw + 5, 0.024, 6);
+    const q = (x0, z0, x1, z1) => [[x0 - dz * hw, z0 + dx * hw], [x0 + dz * hw, z0 - dx * hw], [x1 + dz * hw, z1 - dx * hw], [x1 - dz * hw, z1 + dx * hw]];
+    const g = new THREE.BufferGeometry(), p = q(ax - dx * hw, az - dz * hw, bx + dx * hw, bz + dz * hw);
+    g.setAttribute('position', new THREE.Float32BufferAttribute([p[0][0], 0.032, p[0][1], p[1][0], 0.032, p[1][1], p[2][0], 0.032, p[2][1], p[3][0], 0.032, p[3][1]], 3));
+    g.setIndex([0, 2, 1, 0, 3, 2]); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, waterMat); m.receiveShadow = true; S.add(m);
+    // big circles down the middle, small ones near bridges so the water stops right at the deck
+    const nearRoad = (x, z) => { let d = 1e9; if (!crossing.some((c) => dist(x, z, c.x, c.z) < hw + 40)) return d; for (const e of W.countyEdges) d = Math.min(d, segPointDist(x, z, e.ax, e.az, e.bx, e.bz)); return d; };
+    for (let s = 0; s <= len; s += 3) {
+      const x = ax + dx * s, z = az + dz * s;
+      if (nearRoad(x, z) > hw + 7) { if (s % 6 === 0) W.addCircle(x, z, hw - 1, 'water'); continue; }
+      for (let o = -hw + 3; o <= hw - 3; o += 4) { const px = x - dz * o, pz = z + dx * o; if (nearRoad(px, pz) > 10.5) W.addCircle(px, pz, 3, 'water'); }
+    }
+  }
+  // bridges: a deck, railings you can't drive through, girders and piers in the water
+  for (const c of crossing) {
+    const e = c.e, L2 = dist(e.ax, e.az, e.bx, e.bz), dx = (e.bx - e.ax) / L2, dz = (e.bz - e.az) / L2, ang = Math.atan2(dx, dz), span = R.w + 12;
+    OP.box(c.x, -0.12, c.z, 13, 0.3, span, '#8d8f93', ang); // deck sits just under the road surface
+    for (const s of [-1, 1]) {
+      const sx = c.x - dz * s * 6.6, sz = c.z + dx * s * 6.6;
+      OP.box(sx, 0.55, sz, 0.35, 1.1, span, '#c8c4bb', ang); OP.box(sx, 1.15, sz, 0.5, 0.16, span, '#6f7378', ang);
+      for (let k = -span / 2; k <= span / 2; k += 1.2) { const rc = W.addCircle(sx + dx * k, sz + dz * k, 0.4, 'barrier'); rc.h = 1.1; }
+    }
+    for (const k of [-R.w / 4, R.w / 4]) OP.box(c.x + dx * k, -0.6, c.z + dz * k, 9, 1.4, 2, '#9a9a96', ang);
+    W.bridges.push({ x: c.x, z: c.z, name: e.name });
+  }
+}
+/* where two segments cross: [t along the first, u along the second], or null */
+function segSegT(ax, az, bx, bz, cx, cz, dx, dz) {
+  const rx = bx - ax, rz = bz - az, sx = dx - cx, sz = dz - cz, den = rx * sz - rz * sx;
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((cx - ax) * sz - (cz - az) * sx) / den, u = ((cx - ax) * rz - (cz - az) * rx) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? [t, u] : null;
 }

@@ -1092,6 +1092,8 @@ function demoSetup(kind) {
     Input.keys.KeyW = true; for (let i = 0; i < 200; i++) step(STEP); Input.keys.Space = true; for (let i = 0; i < 120; i++) step(STEP); Input.keys.Space = false; Input.keys.KeyA = true; for (let i = 0; i < 40; i++) step(STEP); Input.keys.KeyA = false; Input.keys.KeyW = false;
     CAM.yaw = h.yaw; CAM.pitch = 0.2;
   }
+  else if (kind === 'bridge') { const b = W.bridges.find((q) => q.name === 'East Road'); G.camMode = 'chase'; P.x = b.x - 40; P.z = b.z + 12; P.facing = CAM.yaw = Math.PI / 2 - 0.35; CAM.pitch = 0.25; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'lake') { const L = W.LAKE; G.camMode = 'chase'; P.x = L.x + L.r + 22; P.z = L.z + 6; P.facing = CAM.yaw = -Math.PI / 2; CAM.pitch = 0.2; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }

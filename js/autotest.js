@@ -499,6 +499,24 @@ function runAutotest() {
     }
     return !bad.length || bad.join(' | ');
   });
+  T('water: bridges carry you over the river; the river and Mirror Lake stop cars', () => {
+    const bad = [], drive = (x, z, h, sec) => { reset(); G.noSpawn = true; const car = new Car('sedan', x, z, h); tp(x, z); G.enterCar(car); Input.keys.KeyW = true; steps(sec); Input.keys.KeyW = false; const out = { x: car.x, z: car.z }; G.exitCar(true); car.remove(); G.noSpawn = false; return out; };
+    if (W.bridges.length < 3) bad.push('bridges ' + W.bridges.length);
+    const b = W.bridges.find((q) => q.name === 'East Road');
+    if (!b) bad.push('no East Road bridge'); else {
+      const e = W.countyEdges.find((q) => q.name === 'East Road' && segPointDist(b.x, b.z, q.ax, q.az, q.bx, q.bz) < 1), L = dist(e.ax, e.az, e.bx, e.bz), ux = (e.bx - e.ax) / L, uz = (e.bz - e.az) / L;
+      const across = drive(b.x - ux * 60, b.z - uz * 60, Math.atan2(ux, uz), 6);
+      if (across.x < b.x + 30) bad.push('stuck at the bridge, x ' + across.x.toFixed(0));
+      // drive off the bridge sideways: the railing stops you
+      // steer off the bridge sideways: the railing keeps you out of the water (you may slide off the end onto the bank)
+      const side = drive(b.x, b.z, 0, 3), rd = Math.min(...W.RIVER.pts.slice(1).map((q, i) => segPointDist(side.x, side.z, W.RIVER.pts[i][0], W.RIVER.pts[i][1], q[0], q[1])));
+      if (rd < W.RIVER.w / 2 - 1 && Math.abs(side.z - b.z) > 7) bad.push('drove off the bridge into the river at ' + side.x.toFixed(0) + ',' + side.z.toFixed(0));
+    }
+    // straight at the river bank away from any bridge, and at the lake
+    const r = W.RIVER.pts[2], rv = drive(r[0] - 60, r[1], Math.PI / 2, 5); if (rv.x > r[0] - W.RIVER.w / 2 + 1) bad.push('drove into the river, x ' + rv.x.toFixed(0));
+    const L = W.LAKE, lk = drive(L.x + L.r + 40, L.z + 30, -Math.PI / 2, 5); if (dist(lk.x, lk.z, L.x, L.z) < L.r - 1) bad.push('drove into the lake');
+    return !bad.length || bad.join(' | ');
+  });
   T('county: no trees standing on the country roads', () => {
     const bad = [];
     for (const e of W.countyEdges) {

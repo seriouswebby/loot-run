@@ -976,6 +976,13 @@ function buildMinimap() {
   g.fillStyle = '#41583a'; g.fillRect(0, 0, SZ, SZ);
   g.fillStyle = '#d9c58f'; g.fillRect(0, Z(W.HWY + W.HWH + 0.6), SZ, (W.SHORE - W.HWY - W.HWH - 0.6) * k);
   g.fillStyle = '#2c6f93'; g.fillRect(0, Z(W.SHORE), SZ, SZ);
+  // the lake and the river
+  if (W.LAKE) {
+    g.fillStyle = '#d8c690'; g.beginPath(); g.arc(X(W.LAKE.x), Z(W.LAKE.z), (W.LAKE.r + 9) * k, 0, TAU); g.fill();
+    g.fillStyle = '#2c6f93'; g.beginPath(); g.arc(X(W.LAKE.x), Z(W.LAKE.z), W.LAKE.r * k, 0, TAU); g.fill();
+    g.strokeStyle = '#2c6f93'; g.lineWidth = W.RIVER.w * k; g.lineJoin = 'round'; g.lineCap = 'butt'; g.beginPath();
+    W.RIVER.pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z)))); g.stroke(); g.lineCap = 'square';
+  }
   // the airport: tarmac, runway paint, fence
   if (W.AIRPORT) {
     const A = W.AIRPORT, R = (q, col) => { g.fillStyle = col; g.fillRect(X(q.minX), Z(q.minZ), (q.maxX - q.minX) * k, (q.maxZ - q.minZ) * k); };
