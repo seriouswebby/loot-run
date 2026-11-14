@@ -46,13 +46,13 @@ Planes and jets: W/S throttle, build speed on the runway, Space to pull up, Shif
 | `js/world.js` | City generation, road graph, Ring Highway, zones, collisions, minimap |
 | `js/outer.js` | The county outside the city: country roads, roundabout, farms, woods, the airport, Mirror Lake, the Bay River and bridges, Pine Ridge and its tunnel, the railway |
 | `js/terrain.js` | Hills: rolling farmland, wooded hills, snowy highlands and badland mesas (everything built stays on flat ground), plus the stunt jumps |
-| `js/districts.js` | Districts out in the county: Funland (a theme park with rides you can board and a ticket office to rob), Millbrook village (a diner, a general store and a gas station to rob), and people strolling their paths |
+| `js/districts.js` | Districts out in the county: Funland (a theme park with rides you can board and a ticket office to rob), Millbrook village (a diner, a general store and a gas station to rob), the Bay River Dam and its reservoir, cacti and boulders in the badlands, and people strolling district paths |
 | `js/puffs.js` | Soft billowing smoke from damaged and burning cars, tyres and explosions |
 | `js/physics.js` | Box3D world: ragdolls, loose props, flying debris, and the static walls around anything physical |
 | `js/drive.js` | Realistic handling: your car as a Box3D body on spring-damper wheels with a tyre model |
 | `js/actors.js` | Characters, pedestrians, cops, weapons, bullets, pickups |
 | `js/vehicles.js` | Car/bike physics, traffic and police AI, roadblocks, explosions |
-| `js/game.js` | Heat, crimes, security, robberies, shop, story missions, spawning |
+| `js/game.js` | Heat, crimes, security, robberies, shop, story missions (Vera) and side jobs (Dixie, Earl, Sal), spawning |
 | `js/train.js` | The county train: runs the rail loop, stops at stations, carries riders on its roof, hits what's on the line |
 | `js/air.js` | Helicopters (police + flyable), parachutes, rockets, grenades, C4 |
 | `js/weather.js` | Dynamic weather |

@@ -513,7 +513,7 @@ function buildBadlands() {
   for (let k = 0; k < 9000 && (W.cacti.length < 420 || W.rocks.length < 260); k++) {
     const x = 330 + rnd() * (W.OUT - 345), z = -W.OUT + 12 + rnd() * (W.OUT - 482);
     if (W.biomeAt(x, z).bad < 0.55 || W.inReserve(x, z, 4) || W.nearCountyRoad(x, z, 10) || W.queryBox(x - 2.5, z - 2.5, x + 2.5, z + 2.5).length) continue;
-    if (W.RAMPS.some((r) => dist(x, z, r.x, r.z) < 40)) continue;
+    if (W.RAMPS.some((r) => { const dx = x - r.x, dz = z - r.z, along = dx * r.fx + dz * r.fz, side = dx * r.fz - dz * r.fx; return along > -90 && along < 110 && Math.abs(side) < 14; })) continue; // a ramp's run-up and landing
     if (rnd() < 0.6) { if (W.cacti.length < 420) W.cacti.push({ x, z, s: 0.7 + rnd() * 0.7, r: rnd() * TAU, v: rnd() < 0.5 ? 0 : 1 }); }
     else if (W.rocks.length < 260) W.rocks.push({ x, z, s: 0.5 + rnd() * 1.4, r: rnd() * TAU });
   }

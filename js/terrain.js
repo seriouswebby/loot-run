@@ -64,7 +64,11 @@ function buildTerrain() {
   const C = 8, x0 = -W.OUT - 80, z0 = -W.OUT - 80, x1 = W.OUT + 80, z1 = W.SHORE + 80;
   const nx = Math.ceil((x1 - x0) / C) + 1, nz = Math.ceil((z1 - z0) / C) + 1, H = new Float32Array(nx * nz);
   W.TERRAIN = { C, x0, z0, nx, nz, H, env: null };
-  for (const st of W.STUNTS) W.FLAT.push({ minX: st.x - st.len, maxX: st.x + st.len, minZ: st.z - st.len, maxZ: st.z + st.len, pad: 6 });
+  // every stunt jump sits on a level, graded track: 70 m of run-up and 70 m of landing (they all face along the map's axes)
+  for (const st of W.STUNTS) {
+    const fx = Math.round(Math.sin(st.ang)), fz = Math.round(Math.cos(st.ang)), ax = st.x - fx * 70, az = st.z - fz * 70, bx = st.x + fx * 70, bz = st.z + fz * 70, w = Math.max(9, st.len);
+    W.FLAT.push({ minX: Math.min(ax, bx) - (fx ? 0 : w), maxX: Math.max(ax, bx) + (fx ? 0 : w), minZ: Math.min(az, bz) - (fz ? 0 : w), maxZ: Math.max(az, bz) + (fz ? 0 : w), pad: 6 });
+  }
   // county buildings stay level too
   for (const b of W.buildings) if (W.inCounty(b.minX, b.minZ) || W.inCounty(b.maxX, b.maxZ)) W.FLAT.push({ minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ, pad: 10 });
   if (!W.HILLS) return;

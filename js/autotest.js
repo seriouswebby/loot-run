@@ -180,13 +180,14 @@ function runAutotest() {
   const satisfy = (s) => {
     const a = Story.active;
     switch (s.t) {
-      case 'goto': { const p = W.places[s.at]; tp(p.x, p.z); break; }
+      case 'goto': { const p = W.places[s.at]; if (P.ride) { Funland.leave(true); P.y = 0; P.yv = 0; P.top = null; } if (P.inHeli) { const h = P.inHeli; h.x = p.x; h.z = p.z; h.y = Math.max(h.y, 30); steps(0.2); } else if (P.inCar) { P.inCar.x = p.x; P.inCar.z = p.z + 2; } else tp(p.x, p.z); break; }
       case 'rob': { const r = W.places[s.target]; r.cd = 0; G.S.tools.drill = true; if (!r.onTrain) tp(r.x, r.z); else { P.x = r.x; P.z = r.z; } hold(G.robHoldTime(r) + 0.3); break; }
       case 'robKind': { const r = W.robs.find((k) => k.kind === s.kind && k.cd <= 0); tp(r.x, r.z); hold(G.robHoldTime(r) + 0.3); break; }
       case 'buy': G.buy(s.item); break;
       case 'steal': {
+        if (P.ride) { Funland.leave(true); P.y = 0; P.yv = 0; P.top = null; }
         let car = s.missionCar ? a.car : null;
-        if (!car) { car = new Car('sedan', P.x + 3, P.z, 0, { parked: true }); car.locked = true; }
+        if (!car) { car = new Car(s.type || 'sedan', P.x + 3, P.z, 0, { parked: true }); car.locked = true; }
         tp(car.x + 2.5, car.z); G.enterCar(car); break;
       }
       case 'loseHeat': Heat.clear(); break;
@@ -209,6 +210,21 @@ function runAutotest() {
       case 'ride': a.rideT = s.time; break;
       case 'airborne': { const h = P.inHeli; h.y = s.alt + 10; h.v = 40; h.thr = 0.7; break; }
       case 'loopCams': for (const c of W.places[s.target].sec.cams) G.loopCam(c); break;
+      case 'funride': { // walk up, wait for the ride, get on, ride it up
+        const r = Funland.RIDES[s.ride]; if (P.inCar) G.exitCar(true); tp(r.x, r.z);
+        for (let k = 0; k < 60 * 40 && !Funland.ready(s.ride); k++) step(STEP);
+        G.interact = computeInteract(); if (G.interact.f) G.interact.f.run();
+        for (let k = 0; k < 60 * 60 && Story.active && Story.step() === s; k++) step(STEP);
+        break;
+      }
+      case 'stunt': { // drive the named jump for real
+        const r = W.RAMPS.find((q) => q.name === s.name), x = r.x - r.fx * 55, z = r.z - r.fz * 55, h = Math.atan2(r.fx, r.fz);
+        if (P.inHeli) G.exitHeli(true);
+        let car = P.inCar; if (!car || car.T.bike) { if (car) G.exitCar(true); car = new Car('sports', x, z, h); tp(x + 2, z); G.enterCar(car); }
+        car.x = x; car.z = z; car.h = h; car.v = 32; car.vx = r.fx * 32; car.vz = r.fz * 32; Input.keys.KeyW = true;
+        for (let k = 0; k < 60 * 10 && Story.active && Story.step() === s; k++) step(STEP);
+        Input.keys.KeyW = false; break;
+      }
       default: break;
     }
   };
@@ -219,6 +235,17 @@ function runAutotest() {
     while (Story.active && guard++ < 30) { const s = Story.step(); if (!s) break; last = s.t; satisfy(s); steps(0.3); }
     G.god = false;
     return G.S.storyDone === i + 1 || 'stuck at step ' + (Story.active ? Story.active.i + ' (' + Story.step().t + ')' : 'after ' + last + ' (job failed)') + ' done ' + G.S.storyDone + ' toast: ' + ($('toasts').firstChild || {}).textContent;
+  }));
+  SIDE_JOBS.forEach((m) => T('side job ' + m.id + ': ' + m.title + ' (' + GIVERS[m.giver].first + ')', () => {
+    reset(); const done0 = G.S.jobsDone.slice(), story0 = G.S.storyDone; G.S.cash = 60000; G.S.tools = {}; const p = W.places[GIVERS[m.giver].place]; tp(p.x + 1, p.z);
+    G.god = true; Story.begin(m);
+    let guard = 0, last = '';
+    while (Story.active && guard++ < 30) { const s = Story.step(); if (!s) break; last = s.t; satisfy(s); steps(0.3); }
+    G.god = false; for (const k of ['KeyW', 'KeyA', 'KeyD']) Input.keys[k] = false; if (P.ride) Funland.leave(true); if (P.inCar) G.exitCar(true); if (P.inHeli) G.exitHeli(true);
+    const ok = G.S.jobsDone.includes(m.id) && G.S.storyDone === story0;
+    const why = 'stuck at step ' + (Story.active ? Story.active.i + ' (' + Story.step().t + ')' : 'after ' + last + ' (job failed)') + ' toast: ' + ($('toasts').firstChild || {}).textContent;
+    Story.active = null; G.S.jobsDone = done0; G.S.storyDone = story0;
+    return ok || why;
   }));
   T('3rd person: A/D strafe without turning the camera', () => {
     reset(); tp(0, 25); G.camMode = 'chase'; CAM.yaw = 0; CAM.wasInCar = false; updateCamera(0.016);
@@ -945,7 +972,7 @@ function runAutotest() {
       explosion(b.x + 1, b.z, 7, 120, null); steps(1);
       const survived = !b.wreck && !b.dead && b.burning <= 0 && b.fallen;
       const cam0 = G.cam; G.frameN = (G.frameN || 0) + 1; updateCamera(1); G.frameN++; b.leftT = 0.5; steps(1); const stays = !b.dead; // in view: it waits
-      G.cam = null; steps(3.5); G.cam = cam0; G.frameN++; // out of sight: gone
+      G.cam = null; steps(3.5); G.cam = null; G.frameN++; // out of sight: gone
       if (!(thrown && back && left > 100 && survived && stays && b.dead)) bad.push(`${type}: thrown ${thrown} back on ${back} timer ${left && left.toFixed(0)} survived blast ${survived} waited while seen ${stays} despawned ${b.dead}`);
       G.god = false; if (P.inCar) G.exitCar(true); if (!b.dead) b.remove(); G.noSpawn = false;
     }
@@ -1163,7 +1190,7 @@ function runAutotest() {
     G.noSpawn = false; for (let i = 0; i < 40; i++) { spawnTraffic(G.body()); const p = randomSidewalkPoint(P.x, P.z, 35, 150, false, true); if (p) spawnPed(p.x, p.z, p.b, p.sx, p.sz); }
     const seenCars = G.cars.filter((c) => !c.dead && !c.persistent && c.driver === 'ai' && c.ai && c.ai.mode === 'traffic' && G.canSee(c.x, c.z, 4) && dist(c.x, c.z, P.x, P.z) < 185).length;
     const seenPeds = G.npcs.filter((n) => !n.dead && n.kind === 'ped' && n.ai.mode === 'walk' && dist(n.x, n.z, P.x, P.z) > 34 && G.canSee(n.x, n.z, 1)).length;
-    G.camMode = mode; G.cam = cam0; G.frameN++; G.noSpawn = true;
+    G.camMode = mode; G.cam = null; G.frameN++; G.noSpawn = true;
     return (ahead && !behind && !fogged && hidden && seenCars === 0 && seenPeds === 0) || `ahead ${ahead} behind ${behind} fogged ${fogged} behind-a-building ${hidden} spawned in view: cars ${seenCars} peds ${seenPeds}`;
   });
   T('open road in the chase camera: traffic still appears ahead of you (far off), not only behind', () => {
@@ -1180,7 +1207,7 @@ function runAutotest() {
       }
     }
     spawnTraffic = realSpawn;
-    Input.keys.KeyW = false; G.exitCar(true); car.remove(); G.camMode = mode; G.cam = cam0; G.frameN++; G.noSpawn = true;
+    Input.keys.KeyW = false; G.exitCar(true); car.remove(); G.camMode = mode; G.cam = null; G.frameN++; G.noSpawn = true;
     return (ahead > 0 && near === 0) || `traffic seen ahead ${ahead} · popped in close and in view ${near}`;
   });
   /* ---- realistic handling (the Box3D car) ---- */
@@ -1331,6 +1358,31 @@ function runAutotest() {
     G.save(); const sv = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'); if (!(sv.jobsDone || []).includes('dx1') || sv.storyDone !== story0) bad.push('save: ' + JSON.stringify({ j: sv.jobsDone, s: sv.storyDone }));
     G.S.jobsDone = done0; G.S.storyDone = story0; G.S.stunts = stunts0; G.save();
     return !bad.length || bad.join(' | ');
+  });
+  T('realistic handling: a car dropped onto a stall roof or a fence counts as resting (you can get out, no stunt clock)', () => {
+    if (!Phys.ready) return 'SKIP';
+    const bad = [];
+    for (const [what, x, z, y] of [['stall roof', 747.2, 120, 3.6], ['picket fence', 650 + 12 + 8 + 4.5 + 5, -408, 1.6]]) {
+      const car = physDrive('sedan', x, z, 0); PhysCar.b.setTransform({ x, y: y + 1.2, z }, { x: 0, y: 0, z: 0, w: 1 }); steps(3);
+      G.interact = computeInteract(); const canExit = !!(G.interact.f && G.interact.f.label === 'Get out');
+      if (!canExit || PhysCar.airT > 1.5) bad.push(what + ': get out ' + canExit + ' air clock ' + PhysCar.airT.toFixed(1) + ' s (car at ' + car.physY.toFixed(1) + ' m)');
+      G.exitCar(true); car.remove();
+    }
+    return !bad.length || bad.join(' | ');
+  });
+  T('roadblocks still go up ahead of you on the Ring Highway with a live chase camera', () => {
+    reset(); const mode = G.camMode, cam0 = G.cam; G.camMode = 'chase'; G.noSpawn = true;
+    const k = W.HWY - W.RR, st = W.ringPoint(2 * k + 40), car = new Car('sports', st.x, st.z + 7.5, Math.PI / 2); tp(st.x, st.z + 5); G.enterCar(car); car.v = 30; car.vx = 30;
+    Heat.add(3, 5, 'test'); let seen = false, t = 0;
+    for (; t < 60 && !seen; t += STEP) {
+      const s = W.ringParam(car.x, car.z), ahead = W.ringPoint(s + 25), want = Math.atan2(ahead.x - ahead.tz * 7.5 - car.x, ahead.z + ahead.tx * 7.5 - car.z), d = angDiff(car.h, want);
+      Input.keys.KeyW = Math.abs(d) < 0.3; Input.keys.KeyA = d > 0.05; Input.keys.KeyD = d < -0.05; G.god = true;
+      G.frameN = (G.frameN || 0) + 1; updateCamera(STEP); step(STEP); seen = Roadblocks.list.length > 0;
+    }
+    for (const kk of ['KeyW', 'KeyA', 'KeyD']) Input.keys[kk] = false; G.god = false;
+    const rb = Roadblocks.list[0], d = rb ? dist(rb.x, rb.z, car.x, car.z) : 0; G.exitCar(true); car.remove(); Heat.clear(); clearPolice(); Roadblocks.clear();
+    G.camMode = mode; G.cam = null; G.frameN++;
+    return (seen && d > 120) || 'roadblock ' + seen + ' after ' + t.toFixed(0) + ' s, ' + d.toFixed(0) + ' m ahead';
   });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;

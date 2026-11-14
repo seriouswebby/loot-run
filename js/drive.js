@@ -190,7 +190,9 @@ const PhysCar = {
       if (pen > 0.004) { const lv0 = b.getLinearVelocity(), f = this.contacts ? 1 : 0.94; b.setTransform({ x: pos.x, y: pos.y + pen, z: pos.z }, q2); b.setLinearVelocity({ x: lv0.x * f, y: Math.max(0, lv0.y), z: lv0.z * f }); pos = b.getPosition(); this.floorHit = true; } }
     let lv = b.getLinearVelocity();
     this.Q.set(q.x, q.y, q.z, q.w); const upY = new THREE.Vector3(0, 1, 0).applyQuaternion(this.Q).y;
-    const air = !this.contacts && !this.floorHit;
+    // resting on something that isn't ground (a stall's roof, a fence, a boulder): it has stopped falling, so it isn't in the air
+    this.restT = !this.contacts && !this.floorHit && Math.abs(lv.y) < 0.6 ? (this.restT || 0) + dt : 0;
+    const air = !this.contacts && !this.floorHit && this.restT < 0.25;
     if (!air && Math.abs(dg) < Math.max(0.12, this.sp * dt * 0.75)) this.gvy = dg / dt;
     if (dg) { b.setTransform({ x: pos.x, y: pos.y - dg, z: pos.z }, q); this.g0 = g1; pos = b.getPosition(); }
     // leaving the ground off a crest or a ramp lip: keep the climb the ground was giving us

@@ -751,5 +751,5 @@ const Roadblocks = {
     if (rb.spike) rb.spike.life = 0;
     for (const c of rb.cops) if (!c.dead && c.ai.mode === 'guard') c.remove(); // cops who left their post to chase you stay in the chase
   },
-  clear() { for (const rb of this.list) this.removeRB(rb); this.list.length = 0; },
+  clear() { for (const rb of this.list) this.removeRB(rb); this.list.length = 0; this.timer = 4; }, // a fresh chase gets a fresh roadblock clock
 };
