@@ -27,6 +27,7 @@ W.inCounty = (x, z) => Math.abs(x) > W.BOUND + 0.5 || z < -W.BOUND - 0.5;
     { name: 'Orchard Road', pts: [[R.x, -460], [780, -460], [1050, -460], [E, -460]] },
     { name: 'Harbor Lane', pts: [[R.x, R.z], [R.x, 180], [R.x + 40, 300]] },
     { name: 'Coast Road', pts: [[E, 0], [E, 300]] },
+    { name: 'Funland Drive', pts: [[700, 18], [735, 46], [735, 82]] },
   ];
   // land kept clear for things built on top of the county later
   W.RESERVE = [
@@ -67,9 +68,10 @@ function buildCounty() {
   buildRail(OP);
   countyFarms(OP, free);
   const trees = countyWoods(free);
+  trees.push(...buildDistricts());
   countyTreeMeshes(trees);
   OP.build(S);
-  W.benchSpots = [['county', W.ROUNDABOUT.x + 40, W.ROUNDABOUT.z - 6.5], ['woods', -500, -520], ['airport', -650, 140]];
+  W.benchSpots = [['county', W.ROUNDABOUT.x + 40, W.ROUNDABOUT.z - 6.5], ['woods', -500, -520], ['airport', -650, 140], ['funland', 735, 150]];
   rnd = saved;
 }
 

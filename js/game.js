@@ -1016,6 +1016,7 @@ function updatePopulation(dt) {
     }
   }
   if (peds < 26) { const p = randomSidewalkPoint(t.x, t.z, 30, 85); if (p) spawnPed(p.x, p.z, p.b, p.sx, p.sz); }
+  Funland.populate(t);
   if (Heat.level === 0 && patrol < 2) { const p = randomSidewalkPoint(t.x, t.z, 45, 90); if (p) { const c = spawnCop(p.x, p.z, 'walk'); c.ai.mode = 'walk'; c.ai.block = p.b; c.ai.sx = p.sx; c.ai.sz = p.sz; c.ai.dir = 1; c.ai.speed = 1.8; pedTarget(c); } }
   // vehicles
   let traffic = 0, parked = 0;

@@ -1080,6 +1080,44 @@ function runAutotest() {
     G.exitCar(); car.remove(); G.noSpawn = false;
     return (moved > 0.05 && car.hp < car.maxHp && bumperOff) || `dent ${moved.toFixed(3)} hp ${car.hp.toFixed(0)}/${car.maxHp} glass changed ${glass} front bumper off ${bumperOff}`;
   });
+  T('Funland: a flat park off Funland Drive, clear of farms and county trees; drive in, rob the ticket office', () => {
+    reset(); G.noSpawn = true; const F = W.FUN;
+    let bumps = 0; for (let x = F.minX - 10; x <= F.maxX + 6; x += 6) for (let z = 30; z <= F.maxZ + 8; z += 6) if (W.groundAt(x, z) !== 0) bumps++;
+    const fields = W.fields.filter((f) => f.x1 > F.minX - 5 && f.x0 < F.maxX + 5 && f.z1 > 20 && f.z0 < F.maxZ + 5).length;
+    const strays = W.trees.filter((t) => !t.park && !(t.col && t.col.removed) && t.x > F.minX && t.x < F.maxX && t.z > F.minZ && t.z < F.maxZ).length;
+    const houses = W.buildings.filter((b) => b.maxX > F.minX && b.minX < F.maxX && b.maxZ > F.minZ - 60 && b.minZ < F.maxZ && b.h > 5).length; // only the 4.4 m ticket office and gift shop belong
+    const road = W.countyEdges.some((e) => e.name === 'Funland Drive'), zone = W.zoneAt(F.gate, 200);
+    const car = new Car('sedan', F.gate + 2, 50, 0); tp(F.gate + 2, 47); G.enterCar(car);
+    Input.keys.KeyW = true; let inside = false; for (let i = 0; i < 300 && !inside; i++) { step(STEP); inside = W.inFunland(car.x, car.z) && car.z > F.minZ + 6; }
+    Input.keys.KeyW = false; G.exitCar(true); car.remove();
+    const tix = W.places.funtix; tix.cd = 0; tix.robbing = false; tp(tix.x, tix.z); const cash0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(tix) + 0.6);
+    const robbed = G.S.cash > cash0 + 600; Heat.clear(); clearPolice();
+    return (!bumps && !fields && !strays && !houses && road && zone === 'funland' && inside && robbed) || `bumps ${bumps} fields ${fields} stray trees ${strays} houses ${houses} road ${road} zone ${zone} drove in ${inside} robbed ${robbed} (cash ${cash0} to ${G.S.cash})`;
+  });
+  T('Funland rides run: the wheel turns, the drop tower climbs and falls, the Viper laps back into its station', () => {
+    reset(); G.noSpawn = true; const R = W.FUN.rides, c = R.coaster, V = c.V;
+    const a0 = R.wheel.ang; steps(1); const turned = R.wheel.ang > a0 || R.wheel.ang < a0 - 1;
+    let lowRail = 1e9; for (let i = 0; i < V.n; i++) lowRail = Math.min(lowRail, V.y[i]);
+    c.state = 'load'; c.dwell = 0.05; c.s = c.sStop;
+    let maxY = 0, maxV = 0, left = false, back = false, t = 0;
+    for (; t < 160 && !back; t += STEP) { step(STEP); maxY = Math.max(maxY, c.pos.y); maxV = Math.max(maxV, c.v); if (c.state === 'run') left = true; else if (left) back = true; }
+    let lo = 1e9, hi = 0, fall = 0; for (let i = 0; i < 35 / STEP; i++) { step(STEP); lo = Math.min(lo, R.drop.y); hi = Math.max(hi, R.drop.y); fall = Math.min(fall, R.drop.vy); }
+    const h = new Chopper('tour', R.wheel.x - 4.5, R.wheel.z + 3, 0, { y: 20 }); h.vx = 10; heliCollide(h); const pushed = h.x < R.wheel.x - 5.5 && h.y < 21; h.remove();
+    const ok = turned && lowRail > 0.5 && back && t > 25 && maxY > 24 && maxV > 15 && lo < 2 && hi > 40 && fall < -18 && pushed;
+    return ok || `wheel turned ${turned} lowest rail ${lowRail.toFixed(2)} coaster back ${back} after ${t.toFixed(0)}s top ${maxY.toFixed(1)} fastest ${maxV.toFixed(1)} drop ${lo.toFixed(1)}..${hi.toFixed(1)} fall ${fall.toFixed(1)} chopper pushed out ${pushed} (x ${h.x.toFixed(1)})`;
+  });
+  T('Funland visitors stroll the paths, scatter when scared, then go back to strolling', () => {
+    reset(); for (const n of G.npcs) if (n.kind === 'ped') n.remove(); G.npcs = G.npcs.filter((n) => !n.dead);
+    const F = W.FUN; tp(F.gate, 191); for (let i = 0; i < 40; i++) Funland.populate(P);
+    const vis = G.npcs.filter((n) => n.ai && n.ai.park && !n.dead), at0 = vis.map((n) => [n.x, n.z]);
+    steps(8);
+    const offPath = (n) => Math.min(...F.links.map(([a, b]) => segPointDist(n.x, n.z, a.x, a.z, b.x, b.z))) > 5;
+    const moved = vis.filter((n, i) => dist(n.x, n.z, at0[i][0], at0[i][1]) > 3).length, strayed = vis.filter((n) => !n.dead && offPath(n)).length;
+    panic(F.gate, 191, 300); const fled = vis.filter((n) => n.ai.mode === 'flee').length;
+    steps(15);
+    const alive = vis.filter((n) => !n.dead), back = alive.filter((n) => n.ai.mode === 'park').length;
+    return (vis.length >= 15 && moved >= vis.length * 0.5 && strayed === 0 && fled >= vis.length * 0.8 && back >= alive.length * 0.8) || `visitors ${vis.length} moved ${moved} off the paths ${strayed} fled ${fled} back strolling ${back}/${alive.length}`;
+  });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;
     const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };

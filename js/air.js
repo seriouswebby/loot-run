@@ -423,7 +423,7 @@ function flyHeli(h, dt, fw, st, up, down) {
 function heliCollide(h) {
   const r = 3;
   // the ridge: solid below its crest
-  for (const b of W.RIDGE || []) {
+  for (const b of W.tallProps && W.tallProps.length ? [...(W.RIDGE || []), ...W.tallProps] : W.RIDGE || []) { // the ridge, the big wheel, the drop tower
     if (h.y >= b.h || h.x + r < b.minX || h.x - r > b.maxX || h.z + r < b.minZ || h.z - r > b.maxZ) continue;
     const dx = Math.min(h.x - b.minX, b.maxX - h.x), dz = Math.min(h.z - b.minZ, b.maxZ - h.z), up = b.h - h.y;
     if (up < Math.min(dx, dz) && up < 12) { h.y = b.h; if (h.vy < 0) h.vy = 0; continue; } // skim over the crest

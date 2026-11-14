@@ -21,6 +21,24 @@ class PropBatch {
       this.n += 4;
     }
   }
+  /* a square beam of width w between two points, in any direction (struts, spokes, braces) */
+  beam(ax, ay, az, bx, by, bz, w, color) {
+    const c = this.c.set(color), L = Math.hypot(bx - ax, by - ay, bz - az) || 1e-6;
+    const d = [(bx - ax) / L, (by - ay) / L, (bz - az) / L], ref = Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    const cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    let u = cr(d, ref); const ul = Math.hypot(u[0], u[1], u[2]); u = [u[0] / ul, u[1] / ul, u[2] / ul];
+    const v = cr(d, u), m = [(ax + bx) / 2, (ay + by) / 2, (az + bz) / 2], hw = w / 2, hl = L / 2;
+    // each face: outward normal n (half-extent hn) and two tangents whose cross product is n, so the winding faces out
+    const faces = [[d, hl, u, hw, v, hw], [d.map((x) => -x), hl, v, hw, u, hw], [u, hw, v, hw, d, hl], [u.map((x) => -x), hw, d, hl, v, hw], [v, hw, d, hl, u, hw], [v.map((x) => -x), hw, u, hw, d, hl]];
+    for (const [n, hn, t1, h1, t2, h2] of faces) {
+      const b = this.n;
+      for (const [a, bb] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        for (let k = 0; k < 3; k++) this.pos.push(m[k] + n[k] * hn + t1[k] * a * h1 + t2[k] * bb * h2);
+        this.nor.push(n[0], n[1], n[2]); this.col.push(c.r, c.g, c.b);
+      }
+      this.idx.push(b, b + 1, b + 2, b, b + 2, b + 3); this.n += 4;
+    }
+  }
   build(scene, shadows) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
@@ -95,6 +113,7 @@ W.ZONES = {
   tunnel: { label: 'PINE RIDGE TUNNEL', hint: 'Covered · choppers can\'t see you · no way out but the ends', sight: 30, evade: 0.6, car: 1.25 },
   airport: { label: 'AIRPORT', hint: 'Wide open · aircraft to steal · runway = drag strip', sight: 85, evade: 1.25, car: 1.45 },
   country: { label: 'COUNTRY ROAD', hint: 'Open road · fast · cops see you coming', sight: 75, evade: 1.15, car: 1.35 },
+  funland: { label: 'FUNLAND', hint: 'Crowds · rides · lose the cops in the crowd', sight: 38, evade: 0.85, car: 0.9 },
   beach: { label: 'BEACH', hint: 'Open sand · no cover', sight: 70, evade: 1.2, car: 1.0 },
   air: { label: 'AIRBORNE', hint: 'Fast · every cop can see you', sight: 90, evade: 1.5, car: 1 },
 };
@@ -243,6 +262,7 @@ W.zoneAt = function (x, z) {
   if (W.onHighway(x, z)) return 'highway';
   if (z > W.HWY + W.HWH + 0.5) return 'beach';
   if (Math.abs(x) <= W.HALF + 6 && Math.abs(z) <= W.HALF + 6) return 'street';
+  if (W.inFunland && W.inFunland(x, z)) return 'funland';
   if (W.inAirport && W.inAirport(x, z)) return 'airport';
   if (W.inTunnel && W.inTunnel(x, z)) return 'tunnel';
   if (W.inCounty && W.inCounty(x, z)) return W.nearCountyRoad(x, z, 6.5) ? 'country' : 'outskirts';
@@ -1023,6 +1043,7 @@ function buildMinimap() {
   }
   // the county: fields and woods
   for (const f of W.fields || []) { g.fillStyle = '#8a7350'; g.fillRect(X(f.x0), Z(f.z0), (f.x1 - f.x0) * k, (f.z1 - f.z0) * k); g.fillStyle = f.crop; for (let r = f.z0 + 3; r < f.z1 - 2; r += 6) g.fillRect(X(f.x0 + 3), Z(r), (f.x1 - f.x0 - 6) * k, 1.6 * k); }
+  if (W.drawDistrictsMap) W.drawDistrictsMap(g, X, Z, k);
   g.fillStyle = '#2f4a2a'; for (const t of W.trees) if (W.inCounty && W.inCounty(t.x, t.z)) { g.beginPath(); g.arc(X(t.x), Z(t.z), 2.2 * k, 0, TAU); g.fill(); }
   const F = W.FOREST; g.fillStyle = '#24391f'; g.fillRect(X(F.minX), Z(F.minZ), (F.maxX - F.minX) * k, (F.maxZ - F.minZ) * k);
   g.strokeStyle = '#8f744d'; g.lineWidth = 4; for (const t of W.trails) { g.beginPath(); g.moveTo(X(t[0]), Z(t[1])); g.lineTo(X(t[2]), Z(t[3])); g.stroke(); }

@@ -42,6 +42,9 @@ Planes and jets: W/S throttle, build speed on the runway, Space to pull up, Shif
 | `js/sfxdata.js` | The recorded sounds, embedded as MP3 (generated — see Sound below) |
 | `js/world.js` | City generation, road graph, Ring Highway, zones, collisions, minimap |
 | `js/outer.js` | The county outside the city: country roads, roundabout, farms, woods, the airport, Mirror Lake, the Bay River and bridges, Pine Ridge and its tunnel, the railway |
+| `js/terrain.js` | Hills: rolling farmland, wooded hills, snowy highlands and badland mesas (everything built stays on flat ground), plus the stunt jumps |
+| `js/districts.js` | Districts out in the county: Funland, a theme park with a big wheel, the Viper coaster, a drop tower, a carousel and a ticket office to rob |
+| `js/puffs.js` | Soft billowing smoke from damaged and burning cars, tyres and explosions |
 | `js/actors.js` | Characters, pedestrians, cops, weapons, bullets, pickups |
 | `js/vehicles.js` | Car/bike physics, traffic and police AI, roadblocks, explosions |
 | `js/game.js` | Heat, crimes, security, robberies, shop, story missions, spawning |

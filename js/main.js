@@ -180,6 +180,11 @@ function drawMap(ctx, size, cx, cz, span, full) {
   label(pl.hospital.x, pl.hospital.z, '+', '#ff5a5f');
   label(pl.police.x, pl.police.z, 'P', '#6fa8ff');
   if (pl.airport) label(pl.airport.x, pl.airport.z - (full ? 24 : 10), '✈', '#ffffff');
+  if (pl.funland && inView(pl.funland.x, pl.funland.z)) { // a little big-wheel glyph for Funland
+    const fx = X(pl.funland.x), fz = Z(pl.funland.z) - (full ? 14 : 7), r = full ? 7 : 5;
+    ctx.strokeStyle = '#0f1216'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(fx, fz, r, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = '#ff5d8f'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(fx, fz, r, 0, TAU); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4; ctx.moveTo(fx + Math.cos(a) * r, fz + Math.sin(a) * r); ctx.lineTo(fx - Math.cos(a) * r, fz - Math.sin(a) * r); } ctx.moveTo(fx - r * 0.6, fz + r * 1.6); ctx.lineTo(fx, fz); ctx.lineTo(fx + r * 0.6, fz + r * 1.6); ctx.stroke();
+  }
   if (Story.available()) label(pl.hideout.x, pl.hideout.z, 'V', '#ffd23f'); else label(pl.hideout.x, pl.hideout.z, 'K', '#d9c9a8');
   // cameras nearby
   if (!full) for (const c of W.cams) if (c.deadT <= 0 && inView(c.x, c.z) && dist(c.x, c.z, t.x, t.z) < 70) {
@@ -777,6 +782,7 @@ function step(dt) {
   updateZone(dt);
   updatePlayer(dt);
   Train.update(dt);
+  Funland.update(dt);
   processHold(dt);
   for (const n of G.npcs) { if (n.dead) continue; if (n.kind === 'cop') copAI(n, dt); else pedAI(n, dt); }
   Heat.update(dt);
@@ -1116,6 +1122,10 @@ function demoSetup(kind) {
   else if (kind === 'countyiso') { P.x = -560; P.z = -560; CAM.zoomIso = 90; CAM.curIso = 90; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'airport') { G.camMode = 'chase'; P.x = -650; P.z = 62; P.facing = CAM.yaw = 0; CAM.pitch = 0.18; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'airbase') { G.camMode = 'chase'; P.x = -960; P.z = 192; P.facing = CAM.yaw = -Math.PI / 2 - 0.3; CAM.pitch = 0.2; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'funland') { G.camMode = 'chase'; P.x = 735; P.z = 66; P.facing = CAM.yaw = 0; CAM.pitch = 0.05; for (let i = 0; i < 400; i++) step(STEP); P.x = 735; P.z = 66; for (let i = 0; i < 4; i++) step(STEP); }
+  else if (kind === 'funland2') { G.camMode = 'chase'; P.x = 735; P.z = 200; P.facing = CAM.yaw = -2.2; CAM.pitch = 0.1; for (let i = 0; i < 1500; i++) step(STEP); P.x = 735; P.z = 200; for (let i = 0; i < 4; i++) step(STEP); }
+  else if (kind === 'viper') { G.camMode = 'chase'; P.x = 676; P.z = 238; P.facing = CAM.yaw = -2.5; CAM.pitch = -0.12; const c = W.FUN.rides.coaster; for (let i = 0; i < 9000 && !(c.state === 'run' && c.trip > (c.sTop - c.sStop + c.V.len) % c.V.len + 8); i++) step(STEP); P.x = 676; P.z = 238; step(STEP); }
+  else if (kind === 'funlandiso') { P.x = 735; P.z = 200; CAM.zoomIso = 260; CAM.curIso = 260; for (let i = 0; i < 300; i++) step(STEP); P.x = 735; P.z = 200; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'airportiso') { P.x = -760; P.z = 210; CAM.zoomIso = 230; CAM.curIso = 230; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'planes') { G.camMode = 'chase'; P.x = -680; P.z = 150; P.facing = CAM.yaw = Math.PI * 0.85; CAM.pitch = 0.22; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'fighters') { G.camMode = 'chase'; P.x = -1160; P.z = 178; P.facing = CAM.yaw = Math.PI * 0.95; CAM.pitch = 0.2; for (let i = 0; i < 30; i++) step(STEP); }
