@@ -82,8 +82,8 @@ class PVeh {
     this.inp.set = false;
     if (c.burning > 0 || c.wreck) { thr = 0; steer = 0; hb = true; }
     // steering: full lock when slow, a few degrees at speed (a keyboard aid; AI drivers get a little more); a flat tyre tugs the wheel
-    const lock = c.T.tank ? 0 : this.player ? 0.6 / (1 + Math.abs(vF) / 11) : 0.62 / (1 + Math.abs(vF) / 20);
-    this.steerA = damp(this.steerA, -steer * lock + (c.popped ? Math.sin(G.time * 13) * 0.05 : 0), 9 / (1 + Math.abs(vF) / 25), dt); // keys ease in gently at speed
+    const lock = c.T.tank ? 0 : this.player ? 0.78 / (1 + Math.abs(vF) / 20) : 0.62 / (1 + Math.abs(vF) / 20);
+    this.steerA = damp(this.steerA, -steer * lock + (c.popped ? Math.sin(G.time * 13) * 0.05 : 0), 16 / (1 + Math.abs(vF) / 40), dt); // keys ease in (a little more gently at speed)
     c.steerV = steer;
     // grip: tyres, weather, surface (SUVs and utes keep theirs off-road)
     const zone = W.zoneAt(c.x, c.z), off = OFFROAD_ZONES.includes(zone);
@@ -132,7 +132,7 @@ class PVeh {
     // what the tyres could give; off with the handbrake, so you can still throw it into a slide
     if (contacts >= 3 && !hb && Math.abs(vF) > 3 && !c.T.tank) {
       const wb = 2 * this.wheels[0].lz, rMax = mu0 * Gr * 1.6 / Math.abs(vF), rDes = clamp(vF * Math.tan(this.steerA) / wb, -rMax, rMax);
-      const r = av.x * up.x + av.y * up.y + av.z * up.z, I = m * (c.T.len * c.T.len + c.T.w * c.T.w) / 12 * 0.8, tq = clamp((rDes - r) * I * 3, -m * 6, m * 6);
+      const r = av.x * up.x + av.y * up.y + av.z * up.z, I = m * (c.T.len * c.T.len + c.T.w * c.T.w) / 12 * 0.8, tq = clamp((rDes - r) * I * 5, -m * 9, m * 9);
       b.applyTorque({ x: up.x * tq, y: up.y * tq, z: up.z * tq }, true);
     }
     // a tank's tracks pull against each other: it turns on the spot
@@ -364,7 +364,7 @@ const PhysCar = {
     const mine = G.player.inCar; if (!this.on) { if (mine && mine.phys) mine.phys.destroy(); } else if (mine) this.attach(mine); // L: your car only (K is the traffic)
     return this.on;
   },
-  grip(car) { return { tank: 1.7, supercar: 1.4, sports: 1.38, muscle: 1.2, police: 1.3, taxi: 1.22, truck: 1.0, van: 1.05, armored: 1.0, suv: 1.15, pickup: 1.12, hatch: 1.25 }[car.type] || 1.25; },
+  grip(car) { return 1.15 * ({ tank: 1.7, supercar: 1.4, sports: 1.38, muscle: 1.2, police: 1.3, taxi: 1.22, truck: 1.0, van: 1.05, armored: 1.0, suv: 1.15, pickup: 1.12, hatch: 1.25 }[car.type] || 1.25); },
   attach(car) { if (!this.usable(car)) return false; if (!car.phys) new PVeh(car); return true; },
   detach(car) { car = car || this.car; if (car && car.phys) car.phys.destroy(); },
   preStep(dt) { this.manage(dt); for (const v of [...this.list]) v.preStep(dt); },

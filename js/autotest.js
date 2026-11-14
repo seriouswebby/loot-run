@@ -1487,6 +1487,21 @@ function runAutotest() {
     G.S.tank = tank0; Tanks.auto = false;
     return !bad.length || bad.join(' | ');
   });
+  const turnTest = (type, speed, physOn) => {
+    const pOn = PhysCar.on; PhysCar.on = physOn; reset(); G.noSpawn = true; for (const c of G.cars.slice()) if (!c.persistent) c.remove(); G.cars = G.cars.filter((c) => !c.dead);
+    const rw = W.AIRPORT.runway, car = new Car(type, rw.minX + 150, (rw.minZ + rw.maxZ) / 2 - 10, Math.PI / 2); tp(car.x, car.z - 3); G.enterCar(car);
+    car.v = speed; car.vx = speed; car.vz = 0; steps(0.3); car.v = speed; car.vx = speed; car.vz = 0; steps(0.1);
+    const h0 = car.h; Input.keys.KeyD = true; let slipMax = 0;
+    for (let i = 0; i < 60; i++) { Input.keys.KeyW = car.v < speed; step(STEP); const sp = Math.hypot(car.vx, car.vz); if (sp > 3) slipMax = Math.max(slipMax, Math.abs(angDiff(car.h, Math.atan2(car.vx, car.vz)))); }
+    Input.keys.KeyD = Input.keys.KeyW = false; const turned = Math.abs(angDiff(h0, car.h)); G.exitCar(true); car.remove(); PhysCar.on = pOn;
+    return { turned, slipMax };
+  };
+  T('realistic handling turns nearly as sharply as the arcade model, without spinning out', () => {
+    if (!Phys.ready) return 'SKIP';
+    const bad = []; // (tuned: 72% at 8 m/s, 91% at 15, 83% at 25, 79% for a sports car at 35)
+    for (const [type, sp] of [['sedan', 8], ['sedan', 15], ['sedan', 25], ['sports', 35]]) { const a = turnTest(type, sp, false), p = turnTest(type, sp, true); if (p.turned < a.turned * 0.65 || p.slipMax > 0.45) bad.push(type + ' at ' + sp + ' m/s: ' + p.turned.toFixed(2) + ' rad vs arcade ' + a.turned.toFixed(2) + ', slide ' + p.slipMax.toFixed(2)); }
+    return !bad.length || bad.join(' | ');
+  });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;
     const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };
