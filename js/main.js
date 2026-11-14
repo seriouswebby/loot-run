@@ -157,10 +157,10 @@ G.shake = (a) => { G.shakeAmt = Math.min(1.2, G.shakeAmt + a); };
 
 /* ---------------- minimap + big map ---------------- */
 function drawMap(ctx, size, cx, cz, span, full) {
-  const s = size / span, k = W.mmScale, o = W.mmOff;
+  const s = size / span, k = W.mmScale;
   ctx.save();
   ctx.fillStyle = '#41583a'; ctx.fillRect(0, 0, size, size);
-  ctx.drawImage(W.minimap, (cx - span / 2 + o) * k, (cz - span / 2 + o) * k, span * k, span * k, 0, 0, size, size);
+  ctx.drawImage(W.minimap, (cx - span / 2 - W.mmX0) * k, (cz - span / 2 - W.mmZ0) * k, span * k, span * k, 0, 0, size, size);
   const X = (x) => (x - cx) * s + size / 2, Z = (z) => (z - cz) * s + size / 2;
   const inView = (x, z) => Math.abs(x - cx) < span / 2 && Math.abs(z - cz) < span / 2;
   const P = G.player, t = G.body();
@@ -239,19 +239,29 @@ function drawMinimap() {
   const c = $('minimap'), ctx = c.getContext('2d'), P = G.player, t = G.body();
   drawMap(ctx, c.width, t.x, t.z, P.inHeli ? 320 : P.inCar ? 200 : 150, false);
 }
+/* the big map: opens on the whole world; mouse wheel zooms around the cursor, drag to pan */
+const BM = { cx: 0, cz: 0, span: 1, drag: null, moved: false };
+function openBigMap() { BM.cx = W.VIEW.cx; BM.cz = W.VIEW.cz; BM.span = W.VIEW.span; G.state = 'map'; $('bigmap').hidden = false; drawBigMap(); }
 function drawBigMap() {
   const c = $('bigmapCanvas'), ctx = c.getContext('2d');
-  drawMap(ctx, c.width, 0, 0, 2 * W.MAPH, true);
+  const h = W.VIEW.span / 2; BM.span = clamp(BM.span, 160, W.VIEW.span);
+  const m = (W.VIEW.span - BM.span) / 2; BM.cx = clamp(BM.cx, W.VIEW.cx - m, W.VIEW.cx + m); BM.cz = clamp(BM.cz, W.VIEW.cz - m, W.VIEW.cz + m); void h;
+  drawMap(ctx, c.width, BM.cx, BM.cz, BM.span, true);
+}
+function bigMapZoom(fx, fy, k) {
+  const wx = BM.cx + (fx - 0.5) * BM.span, wz = BM.cz + (fy - 0.5) * BM.span;
+  BM.span = clamp(BM.span * k, 160, W.VIEW.span);
+  BM.cx = wx - (fx - 0.5) * BM.span; BM.cz = wz - (fy - 0.5) * BM.span; drawBigMap();
 }
 /* waypoints: click the big map to set one, click it again (or right-click) to clear it */
 const WP_COL = '#ff4fd8';
 G.setWaypoint = function (x, z) {
-  G.waypoint = x == null ? null : { x: clamp(x, -W.MAPH, W.MAPH), z: clamp(z, -W.MAPH, W.MAPH) };
+  G.waypoint = x == null ? null : { x: clamp(x, W.LAND.minX, W.LAND.maxX), z: clamp(z, W.LAND.minZ, W.LAND.maxZ) };
   GPS.t = 0; GPS.update(0);
 };
 function bigMapClick(fx, fy, clear) {
   // fx, fy: click position as a fraction of the canvas (0..1)
-  const span = 2 * W.MAPH, x = (fx - 0.5) * span, z = (fy - 0.5) * span, wp = G.waypoint;
+  const span = BM.span, x = BM.cx + (fx - 0.5) * span, z = BM.cz + (fy - 0.5) * span, wp = G.waypoint;
   if (clear || (wp && dist(wp.x, wp.z, x, z) < span * 0.02)) { G.setWaypoint(null); Sfx.click(); }
   else { G.setWaypoint(x, z); Sfx.tick(); }
   drawBigMap();
@@ -768,7 +778,7 @@ function frameInput() {
   if (G.state === 'pause') { if (esc || Input.hit('KeyP')) togglePause(); return; }
   if (G.state !== 'play') return;
   if (esc || Input.hit('KeyP')) { togglePause(); return; }
-  if (Input.hit('KeyM')) { Input.exitLock(); G.state = 'map'; $('bigmap').hidden = false; drawBigMap(); return; }
+  if (Input.hit('KeyM')) { Input.exitLock(); openBigMap(); return; }
   if (Input.hit('KeyC')) {
     G.camMode = { iso: 'top', top: 'chase', chase: 'iso' }[G.camMode];
     if (G.camMode === 'chase') {
@@ -869,6 +879,8 @@ function frame(now) {
   Floaters.update(G.state === 'play' ? dt : 0, cam, innerWidth, innerHeight);
   const B = G.body();
   Weather.update(dt, CAM.fx, P.inHeli ? Math.max(0, P.inHeli.y - 12) : Math.max(0, P.y - 4), CAM.fz);
+  // nothing past the fog can be seen, so don't draw it: with the county out there this culls most of the world
+  if (G.scene.fog) { const far = Math.min(900, G.scene.fog.far + 25); if (Math.abs(persp.far - far) > 5) { persp.far = far; persp.updateProjectionMatrix(); } }
   const sir = G.cars.filter((c) => c.siren && !c.wreck && !c.dead).sort((a, b) => dist(a.x, a.z, B.x, B.z) - dist(b.x, b.z, B.x, B.z)).slice(0, 2);
   let heli = null, hd = 1e9;
   for (const h of Choppers.list) if (!h.dead && h.rotor > 0.3) { const d = h === P.inHeli ? 0 : dist(h.x, h.z, B.x, B.z); if (d < hd) { hd = d; heli = h; } }
@@ -944,9 +956,18 @@ function bootUI() {
   $('btnEndPlay').addEventListener('click', () => { $('ending').hidden = true; G.state = 'play'; });
   $('bigmap').addEventListener('click', (e) => {
     const cv = $('bigmapCanvas');
-    if (e.target === cv) { const r = cv.getBoundingClientRect(); bigMapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, false); return; }
+    if (e.target === cv) { if (BM.moved) return; const r = cv.getBoundingClientRect(); bigMapClick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, false); return; }
     $('bigmap').hidden = true; G.state = 'play';
   });
+  const cvs = $('bigmapCanvas'), frac = (e) => { const r = cvs.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, r.width]; };
+  cvs.addEventListener('wheel', (e) => { e.preventDefault(); const [fx, fy] = frac(e); bigMapZoom(fx, fy, e.deltaY > 0 ? 1.2 : 1 / 1.2); }, { passive: false });
+  cvs.addEventListener('mousedown', (e) => { if (e.button !== 0) return; BM.drag = { x: e.clientX, y: e.clientY, cx: BM.cx, cz: BM.cz }; BM.moved = false; });
+  window.addEventListener('mousemove', (e) => {
+    if (!BM.drag) return; const [, , w] = frac(e), dx = e.clientX - BM.drag.x, dy = e.clientY - BM.drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 5) BM.moved = true;
+    if (BM.moved) { BM.cx = BM.drag.cx - dx / w * BM.span; BM.cz = BM.drag.cz - dy / w * BM.span; drawBigMap(); }
+  });
+  window.addEventListener('mouseup', () => { BM.drag = null; });
   $('bigmapCanvas').addEventListener('contextmenu', (e) => { e.preventDefault(); bigMapClick(0, 0, true); });
   for (const id of ['shop', 'pause', 'title', 'dialog', 'ending', 'bigmap']) {
     $(id).addEventListener('mouseenter', () => { G.uiBlock = true; }); $(id).addEventListener('mouseleave', () => { G.uiBlock = false; });
@@ -965,12 +986,15 @@ function boot() {
   GFX.aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   $('game').appendChild(renderer.domElement);
   Input.init(renderer.domElement);
+  const tBuild = performance.now();
   newWorld();
+  G.buildMs = performance.now() - tBuild;
   G.S = freshState();
   bootUI();
   const physReady = Phys.init();
   const q = new URLSearchParams(location.search);
   if (q.has('autotest')) { G.autotest = true; physReady.then(() => runAutotest()); return; }
+  if (q.has('bench')) { G.autotest = true; runBench(); return; } // synchronous: headless --dump-dom waits for it in real time
   if (q.has('demo')) { startGame(null); G.camMode = 'iso'; physReady.then(() => demoSetup(q.get('demo'))); }
   requestAnimationFrame((t) => { lastT = t; frame(t); });
 }
@@ -1028,9 +1052,11 @@ function demoSetup(kind) {
     for (let i = 0; i < 40; i++) { G.aimX = h.x + 2; G.aimZ = h.z + 18; step(STEP); }
     Input.mdown = false;
   }
-  else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); G.state = 'map'; $('bigmap').hidden = false; drawBigMap(); }
+  else if (kind === 'county') { G.camMode = 'chase'; P.x = W.ROUNDABOUT.x + 60; P.z = W.ROUNDABOUT.z - 3; P.facing = CAM.yaw = Math.PI / 2; CAM.pitch = 0.3; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'countyiso') { P.x = -560; P.z = -560; CAM.zoomIso = 90; CAM.curIso = 90; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
-  else if (kind === 'map') { GPS.update(0.5); G.state = 'map'; $('bigmap').hidden = false; drawBigMap(); }
+  else if (kind === 'map') { GPS.update(0.5); openBigMap(); }
   else if (kind === 'beach') { P.x = 30; P.z = W.SHORE - 8; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'dialog') { Story.start(); }
   else if (kind === 'bank') { const b = W.places.bank; P.x = b.x + 4; P.z = b.z + 3; for (let i = 0; i < 30; i++) step(STEP); }
@@ -1038,3 +1064,32 @@ function demoSetup(kind) {
 }
 
 window.addEventListener('error', (e) => { const el = $('autotest'); if (el && G.autotest) el.textContent += '\nERROR ' + e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno; });
+
+/* ?bench: world build time, simulation cost and draw cost at a few spots (for sizing the map) */
+function runBench() {
+  startGame(null); G.camMode = 'chase';
+  const out = ['build ' + G.buildMs.toFixed(0) + ' ms · colliders ' + W.colliders.length + ' · trees ' + W.trees.length + ' · buildings ' + W.buildings.length + ' · nodes ' + W.nodes.length];
+  const inst = []; G.scene.traverse((o) => { if (o.isInstancedMesh) { const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3; inst.push(Math.round(t * o.count / 1000) + 'k' + (o.frustumCulled ? '' : '!') + (g.boundingSphere ? '' : '?')); } });
+  out.push('instanced: ' + inst.length + ' meshes, biggest ' + inst.sort((a, b) => parseInt(b) - parseInt(a)).slice(0, 8).join(' '));
+  const spots = [['city', W.places.spawn.x, W.places.spawn.z]].concat(W.benchSpots || []);
+  for (const [name, x, z] of spots) {
+    const P = G.player; P.x = x; P.z = z; W.collideCircle(P, P.r);
+    for (let i = 0; i < 120; i++) step(STEP); // let traffic and people fill in
+    const t0 = performance.now(); for (let i = 0; i < 600; i++) step(STEP); const stepMs = (performance.now() - t0) / 600;
+    Weather.update(0.016, CAM.fx, 0, CAM.fz); persp.far = Math.min(900, G.scene.fog.far + 25); persp.updateProjectionMatrix();
+    const cam = updateCamera(0.016); renderer.info.autoReset = false; renderer.info.reset();
+    const t1 = performance.now(); for (let i = 0; i < 5; i++) renderer.render(G.scene, cam); const drawMs = (performance.now() - t1) / 5;
+    // where the triangles go: render again with one kind of object hidden at a time
+    const kinds = { instanced: (o) => o.isInstancedMesh, merged: (o) => o.isMesh && !o.isInstancedMesh && o.frustumCulled === false, buildings: (o) => o.isMesh && Array.isArray(o.material) };
+    const split = [];
+    for (const k in kinds) {
+      const hid = []; G.scene.traverse((o) => { if (o.visible && kinds[k](o)) { o.visible = false; hid.push(o); } });
+      renderer.info.reset(); renderer.render(G.scene, cam); split.push(k + ' ' + Math.round((renderer.info.render.triangles) / 1000) + 'k/' + renderer.info.render.calls);
+      for (const o of hid) o.visible = true;
+    }
+    renderer.info.reset(); for (let i = 0; i < 5; i++) renderer.render(G.scene, cam);
+    out.push('   without: ' + split.join(' · '));
+    const r = renderer.info.render; out.push(name.padEnd(10) + ' step ' + stepMs.toFixed(2) + ' ms · calls ' + Math.round(r.calls / 5) + ' · tris ' + Math.round(r.triangles / 5 / 1000) + 'k · cpu render ' + drawMs.toFixed(1) + ' ms · cars ' + G.cars.length + ' · npcs ' + G.npcs.length);
+  }
+  $('autotest').hidden = false; $('autotest').textContent = out.join('\n'); document.title = 'BENCH DONE';
+}

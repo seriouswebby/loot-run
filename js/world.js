@@ -91,6 +91,7 @@ W.ZONES = {
   forest: { label: 'FOREST PARK', hint: 'Hidden · slow · 4 exits · trees block choppers', sight: 16, evade: 0.5, car: 0.75 },
   rooftop: { label: 'ROOFTOP', hint: 'Cops on the street can\'t reach or see you · choppers can', sight: 8, evade: 0.8, car: 1 },
   outskirts: { label: 'OUTSKIRTS', hint: 'Open ground', sight: 60, evade: 1.1, car: 0.95 },
+  country: { label: 'COUNTRY ROAD', hint: 'Open road · fast · cops see you coming', sight: 75, evade: 1.15, car: 1.35 },
   beach: { label: 'BEACH', hint: 'Open sand · no cover', sight: 70, evade: 1.2, car: 0.8 },
   air: { label: 'AIRBORNE', hint: 'Fast · every cop can see you', sight: 90, evade: 1.5, car: 1 },
 };
@@ -238,6 +239,7 @@ W.zoneAt = function (x, z) {
   if (W.onHighway(x, z)) return 'highway';
   if (z > W.HWY + W.HWH + 0.5) return 'beach';
   if (Math.abs(x) <= W.HALF + 6 && Math.abs(z) <= W.HALF + 6) return 'street';
+  if (W.inCounty && W.inCounty(x, z)) return W.nearCountyRoad(x, z, 6.5) ? 'country' : 'outskirts';
   for (const e of W.edges) if (!e.hwy && segPointDist(x, z, W.nodes[e.a].x, W.nodes[e.a].z, W.nodes[e.b].x, W.nodes[e.b].z) <= 6.5) return 'street';
   return 'outskirts';
 };
@@ -736,10 +738,11 @@ function buildHighwayEdges() {
   const H = W.HWY, O = H + W.HWH + 0.6, I = H - W.HWH - 0.6, C = W.CONNECT, g = (c, w) => [c - (w || 6.5), c + (w || 6.5)];
   const F = W.FOREST;
   const k = H - W.RR;
-  barrierLine('x', -O, -k, k, []);
+  // outer side: gaps for the beach, Pier 9, and the county roads heading north, west and east (js/outer.js)
+  barrierLine('x', -O, -k, k, [g(-100)]);
   barrierLine('x', O, -k, k, [g(0, 8), g(45, 9)]);
-  barrierLine('z', -O, -k, k, []);
-  barrierLine('z', O, -k, k, []);
+  barrierLine('z', -O, -k, k, [g(0)]);
+  barrierLine('z', O, -k, k, [g(0)]);
   barrierLine('x', -I, -k, k, [...C.n.map((x) => g(x)), g(W.forestN, 5)]);
   barrierLine('x', I, -k, k, C.s.map((x) => g(x)));
   barrierLine('z', -I, -k, k, C.w.map((z) => g(z)));
@@ -819,17 +822,18 @@ function buildOutskirts() {
     const x = (rnd() * 2 - 1) * B, z = (rnd() * 2 - 1) * B;
     if (ok(x, z) && !W.buildings.some((b) => x > b.minX - 2 && x < b.maxX + 2 && z > b.minZ - 2 && z < b.maxZ + 2)) { W.addTree(x, z, rnd() < 0.5 ? 'pine' : 'round'); n++; }
   }
-  // boundary fences
-  for (const [axis, c] of [['x', -B], ['z', -B], ['z', B]]) {
-    for (let s = -B; s < H + 12; s += 4) {
+  // boundary fences, out at the edge of the county (js/outer.js)
+  const O = W.OUT;
+  for (const [axis, c] of [['x', -O], ['z', -O], ['z', O]]) {
+    for (let s = -O; s < H + 12; s += 4) {
       if (axis === 'x') P.box(s + 2, 0.9, c, 4, 1.8, 0.15, '#6b6f73'); else P.box(c, 0.9, s + 2, 0.15, 1.8, 4, '#6b6f73');
     }
   }
-  W.addCollider(-B - 60, -B - 60, B + 60, -B, 3, 'bound', true);
-  W.addCollider(-B - 60, -B - 60, -B, SH + 100, 3, 'bound', true);
-  W.addCollider(B, -B - 60, B + 60, SH + 100, 3, 'bound', true);
+  W.addCollider(-O - 60, -O - 60, O + 60, -O, 3, 'bound', true);
+  W.addCollider(-O - 60, -O - 60, -O, SH + 100, 3, 'bound', true);
+  W.addCollider(O, -O - 60, O + 60, SH + 100, 3, 'bound', true);
   // the beach: sand between the highway and the harbor, with umbrellas and palms
-  GB.sand.rect(-B, H + W.HWH + 0.6, B, SH + 1.5, 0.02, 8);
+  GB.sand.rect(-O, H + W.HWH + 0.6, O, SH + 1.5, 0.02, 8);
   for (let k = 0; k < 26; k++) {
     const x = -B + 20 + rnd() * (2 * B - 40), z = H + 15 + rnd() * (SH - H - 20);
     if (Math.abs(x) < 10 || Math.abs(x - 45) < 12) continue;
@@ -839,15 +843,15 @@ function buildOutskirts() {
   P.box(-60, 1.6, SH - 6, 2.4, 0.3, 2.4, '#e9d8a6'); for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) P.box(-60 + dx, 0.8, SH - 6 + dz, 0.2, 1.6, 0.2, '#e9d8a6');
   P.box(-60, 2.6, SH - 6, 2, 1.6, 2, '#e63946');
   // harbor water: colliders everywhere except the pier and the helicopter dock
-  W.addCollider(-B - 60, SH, -4, SH + 160, 1, 'water', true);
+  W.addCollider(-O - 60, SH, -4, SH + 160, 1, 'water', true);
   W.addCollider(4, SH, 37, SH + 160, 1, 'water', true);
-  W.addCollider(53, SH, B + 60, SH + 160, 1, 'water', true);
+  W.addCollider(53, SH, O + 60, SH + 160, 1, 'water', true);
   W.addCollider(-4, SH + 23, 4, SH + 160, 1, 'water', true);
   W.addCollider(37, SH + 12, 53, SH + 160, 1, 'water', true);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(2 * B + 200, 200), new THREE.MeshLambertMaterial({ color: 0x2f7ea3 }));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(2 * O + 400, 200), new THREE.MeshLambertMaterial({ color: 0x2f7ea3 }));
   water.rotation.x = -Math.PI / 2; water.position.set(0, -0.15, SH + 100); S.add(water);
   W.water = water;
-  GB.white.rect(-B, SH + 0.5, B, SH + 1.6, 0.025, 4);
+  GB.white.rect(-O, SH + 0.5, O, SH + 1.6, 0.025, 4);
   // Pier 9 and the getaway boat
   for (let z = SH - 1; z < SH + 23; z += 1.2) P.box(0, 0.25, z + 0.6, 8, 0.25, 1.1, '#8b6a45');
   for (const x of [-3.8, 3.8]) for (let z = SH; z < SH + 23; z += 5) P.box(x, 0.2, z, 0.5, 1.4, 0.5, '#5b4630');
@@ -880,7 +884,7 @@ W.underCanopy = function (x, z) {
 const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
 W.hideTree = function (t) {
   const m = W.treeMeshes; if (!m || t.ti == null) return;
-  m.trunks.setMatrixAt(t.ti, ZERO_M); m.trunks.instanceMatrix.needsUpdate = true;
+  const tm = t.tm || m.trunks; tm.setMatrixAt(t.ti, ZERO_M); tm.instanceMatrix.needsUpdate = true;
   t.cm.setMatrixAt(t.ci, ZERO_M); t.cm.instanceMatrix.needsUpdate = true;
 };
 function buildLamps() {
@@ -913,7 +917,10 @@ function buildTrees() {
   W.trees.forEach((t, i) => { t.ti = i; d.position.set(t.x, 0, t.z); d.rotation.set(0, rnd() * TAU, 0); d.scale.setScalar(t.s); d.updateMatrix(); trunks.setMatrixAt(i, d.matrix); });
   pines.forEach((t, i) => { t.ci = i; t.cm = pm; d.position.set(t.x, 0, t.z); d.rotation.set(0, rnd() * TAU, 0); d.scale.set(t.s, t.s * (0.9 + rnd() * 0.3), t.s); d.updateMatrix(); pm.setMatrixAt(i, d.matrix); pm.setColorAt(i, col.set(pick(['#2f5d34', '#28512d', '#356b3a', '#3d6e33']))); });
   rounds.forEach((t, i) => { t.ci = i; t.cm = rm; d.position.set(t.x, 0, t.z); d.rotation.set(rnd(), rnd() * TAU, 0); d.scale.setScalar(t.s); d.updateMatrix(); rm.setMatrixAt(i, d.matrix); rm.setColorAt(i, col.set(pick(['#4f8a3a', '#5e9a3f', '#477f36', '#6aa64a']))); });
-  for (const m of [trunks, pm, rm]) { m.castShadow = true; m.receiveShadow = true; S.add(m); }
+  // bounds that cover every city tree, so the whole set is skipped when you look away from it
+  let x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9; for (const t of W.trees) { x0 = Math.min(x0, t.x); z0 = Math.min(z0, t.z); x1 = Math.max(x1, t.x); z1 = Math.max(z1, t.z); }
+  const bs = new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, 4, (z0 + z1) / 2), Math.hypot(x1 - x0, z1 - z0) / 2 + 8);
+  for (const m of [trunks, pm, rm]) { m.geometry.boundingSphere = bs; m.frustumCulled = true; m.castShadow = true; m.receiveShadow = true; S.add(m); }
 }
 
 function placeATMs() {
@@ -956,13 +963,16 @@ function placeProps() {
 
 /* ---------------- minimap base ---------------- */
 function buildMinimap() {
-  const k = 2, o = W.MAPH, SZ = 2 * o * k;
+  const V = W.VIEW, k = Math.min(2, 2600 / V.span), x0 = V.cx - V.span / 2, z0 = V.cz - V.span / 2, SZ = Math.ceil(V.span * k);
   const c = document.createElement('canvas'); c.width = c.height = SZ;
   const g = c.getContext('2d');
-  const X = (x) => (x + o) * k, Z = (z) => (z + o) * k;
+  const X = (x) => (x - x0) * k, Z = (z) => (z - z0) * k;
   g.fillStyle = '#41583a'; g.fillRect(0, 0, SZ, SZ);
   g.fillStyle = '#d9c58f'; g.fillRect(0, Z(W.HWY + W.HWH + 0.6), SZ, (W.SHORE - W.HWY - W.HWH - 0.6) * k);
   g.fillStyle = '#2c6f93'; g.fillRect(0, Z(W.SHORE), SZ, SZ);
+  // the county: fields and woods
+  for (const f of W.fields || []) { g.fillStyle = '#8a7350'; g.fillRect(X(f.x0), Z(f.z0), (f.x1 - f.x0) * k, (f.z1 - f.z0) * k); g.fillStyle = f.crop; for (let r = f.z0 + 3; r < f.z1 - 2; r += 6) g.fillRect(X(f.x0 + 3), Z(r), (f.x1 - f.x0 - 6) * k, 1.6 * k); }
+  g.fillStyle = '#2f4a2a'; for (const t of W.trees) if (W.inCounty && W.inCounty(t.x, t.z)) { g.beginPath(); g.arc(X(t.x), Z(t.z), 2.2 * k, 0, TAU); g.fill(); }
   const F = W.FOREST; g.fillStyle = '#24391f'; g.fillRect(X(F.minX), Z(F.minZ), (F.maxX - F.minX) * k, (F.maxZ - F.minZ) * k);
   g.strokeStyle = '#8f744d'; g.lineWidth = 4; for (const t of W.trails) { g.beginPath(); g.moveTo(X(t[0]), Z(t[1])); g.lineTo(X(t[2]), Z(t[3])); g.stroke(); }
   for (const b of W.blocks) {
@@ -986,7 +996,7 @@ function buildMinimap() {
   });
   g.closePath(); g.stroke();
   g.fillStyle = '#8b6a45'; g.fillRect(X(-4), Z(W.SHORE), 8 * k, 23 * k); g.fillRect(X(37), Z(W.SHORE - 3), 16 * k, 15 * k);
-  W.minimap = c; W.mmScale = k; W.mmOff = o;
+  W.minimap = c; W.mmScale = k; W.mmX0 = x0; W.mmZ0 = z0;
 }
 
 /* ---------------- main build ---------------- */
@@ -1008,7 +1018,7 @@ W.build = function (scene, seed) {
     metal: { tex: facadeTex('#7f8a8f', '#3a4248', '#a3adb2', 0.05), roof: 0x5f676b, trim: '#a3adb2' },
     cabin: { tex: facadeTex('#7a5232', '#2b2016', '#a77a4f', 0.3, 'brick'), roof: 0x4a2f1c, trim: '#a77a4f' },
   };
-  const gw = 2 * W.BOUND + 200, gz0 = -W.BOUND - 100, gz1 = W.HWY + W.HWH + 0.7;
+  const gw = 2 * W.OUT + 200, gz0 = -W.OUT - 100, gz1 = W.HWY + W.HWH + 0.7;
   const gtex = TEX.grass.clone(); gtex.needsUpdate = true; gtex.repeat.set(gw / 10, (gz1 - gz0) / 10);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(gw, gz1 - gz0), new THREE.MeshLambertMaterial({ map: gtex }));
   ground.rotation.x = -Math.PI / 2; ground.position.z = (gz0 + gz1) / 2; ground.receiveShadow = true; S.add(ground);
@@ -1043,6 +1053,7 @@ W.build = function (scene, seed) {
   buildLamps();
   placeProps();
   buildTrees();
+  buildCounty();
   for (const k in GB) GB[k].build(S);
   P.build(S);
   buildMinimap();

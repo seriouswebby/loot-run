@@ -412,7 +412,7 @@ function runAutotest() {
     return (cop.down && Heat.level >= 3) || `cop down ${cop.down} heat ${Heat.level}`;
   });
   T('map waypoint: click to set, GPS routes there, click again to clear, clears on arrival', () => {
-    reset(); tp(0, 25); const ch = W.places.chop, span = 2 * W.MAPH, fx = ch.x / span + 0.5, fy = ch.z / span + 0.5;
+    reset(); tp(0, 25); openBigMap(); G.state = 'play'; $('bigmap').hidden = true; const ch = W.places.chop, span = W.VIEW.span, fx = (ch.x - W.VIEW.cx) / span + 0.5, fy = (ch.z - W.VIEW.cz) / span + 0.5;
     bigMapClick(fx, fy, false); const set = !!G.waypoint && dist(G.waypoint.x, G.waypoint.z, ch.x, ch.z) < 1;
     GPS.t = 0; GPS.update(STEP); const p = GPS.path, end = p && p[p.length - 1];
     const routed = GPS.toWaypoint && p && p.length > 2 && dist(end[0], end[1], ch.x, ch.z) < 1 && GPS.beam.visible;
@@ -420,6 +420,35 @@ function runAutotest() {
     bigMapClick(fx, fy, false); bigMapClick(0, 0, true); const rightClick = !G.waypoint;
     bigMapClick(fx, fy, false); tp(ch.x + 2, ch.z); steps(0.2); GPS.update(STEP); const reached = !G.waypoint && !GPS.toWaypoint;
     return (set && routed && cleared && rightClick && reached) || `set ${set} routed ${routed} (path ${p && p.length}) cleared ${cleared} right-click ${rightClick} reached ${reached}`;
+  });
+  T('county: drive off the Ring Highway through the gap onto a country road', () => {
+    reset(); G.noSpawn = true; const H = W.HWY;
+    for (const c of G.cars.slice()) if (dist(c.x, c.z, -100, -H) < 60) c.remove();
+    const car = new Car('sedan', -100 + 2.5, -H + 5, Math.PI); tp(-100 + 2.5, -H + 8); G.enterCar(car);
+    Input.keys.KeyW = true; steps(3.5); Input.keys.KeyW = false;
+    const out = car.z < -H - W.HWH - 25, zone = W.zoneAt(car.x, car.z);
+    G.exitCar(true); car.remove(); G.noSpawn = false;
+    return (out && zone === 'country') || `car z ${car.z.toFixed(0)} (needs < ${(-H - W.HWH - 25).toFixed(0)}) zone ${zone}`;
+  });
+  T('county: GPS routes out there and police still find you at heat 3', () => {
+    reset(); const R = W.ROUNDABOUT, x = R.x + 40, z = R.z - 3;
+    const path = GPS.route(W.places.spawn.x, W.places.spawn.z, x, z), end = path[path.length - 1];
+    const routed = path.length > 4 && dist(end[0], end[1], x, z) < 1;
+    tp(x, z); Heat.add(3, 5, 'test'); G.god = true;
+    let near = 0; for (let i = 0; i < 1500 && !near; i++) { step(STEP); near = G.cars.filter((c) => c.police && !c.wreck && dist(c.x, c.z, P.x, P.z) < 90).length; }
+    G.god = false;
+    return (routed && near > 0) || `routed ${routed} (path ${path.length}) police cars nearby ${near}`;
+  });
+  T('county: no trees standing on the country roads', () => {
+    const bad = [];
+    for (const e of W.countyEdges) {
+      const L = dist(e.ax, e.az, e.bx, e.bz);
+      for (let t = 0; t <= L; t += 4) {
+        const x = e.ax + (e.bx - e.ax) * t / L, z = e.az + (e.bz - e.az) * t / L;
+        for (const c of W.queryBox(x - 6, z - 6, x + 6, z + 6)) if (!c.removed && (c.kind === 'tree' || c.kind === 'building') && (c.circle ? dist(c.x, c.z, x, z) < 6 : x > c.minX - 6 && x < c.maxX + 6 && z > c.minZ - 6 && z < c.maxZ + 6)) bad.push(c.kind + '@' + Math.round(x) + ',' + Math.round(z));
+      }
+    }
+    return !bad.length || bad.length + ' blockers: ' + [...new Set(bad)].slice(0, 6).join(' ');
   });
   T('crimes need a witness: nobody around, nobody calls it in', () => {
     reset(); G.noSpawn = true; const x = -235, z = -W.HWY - 4;

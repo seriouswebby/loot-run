@@ -37,6 +37,7 @@ Progress saves in your browser after every story job.
 | `js/audio.js` | Audio engine: recorded effects with positional mixing, looping sirens/engines/rotor/ambience, chase music; synthesized fallback |
 | `js/sfxdata.js` | The recorded sounds, embedded as MP3 (generated — see Sound below) |
 | `js/world.js` | City generation, road graph, Ring Highway, zones, collisions, minimap |
+| `js/outer.js` | The county outside the city: country roads, farms, woods, land set aside for the airport, lake and river |
 | `js/actors.js` | Characters, pedestrians, cops, weapons, bullets, pickups |
 | `js/vehicles.js` | Car/bike physics, traffic and police AI, roadblocks, explosions |
 | `js/game.js` | Heat, crimes, security, robberies, shop, story missions, spawning |

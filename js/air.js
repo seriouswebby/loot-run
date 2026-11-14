@@ -310,7 +310,7 @@ function flyHeli(h, dt, fw, st, up, down) {
     const sp = Math.hypot(h.vx, h.vz); if (sp > 36) { h.vx *= 36 / sp; h.vz *= 36 / sp; }
   } else { h.vx = damp(h.vx, 0, 6, dt); h.vz = damp(h.vz, 0, 6, dt); }
   h.x += h.vx * dt; h.z += h.vz * dt;
-  const lim = W.BOUND + 30; h.x = clamp(h.x, -lim, lim); h.z = clamp(h.z, -lim, W.SHORE + 120);
+  const lim = W.OUT + 30; h.x = clamp(h.x, -lim, lim); h.z = clamp(h.z, -lim, W.SHORE + 120);
   heliCollide(h);
   h.tilt = damp(h.tilt, airborne ? fw * 0.22 : 0, 4, dt); h.roll = damp(h.roll, airborne ? st * 0.25 : 0, 4, dt);
 }
