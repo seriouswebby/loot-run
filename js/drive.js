@@ -39,18 +39,23 @@ const PhysCar = {
     if (!this.usable(car)) return false;
     if (this.car && this.car !== car) this.detach();
     if (this.car === car) return true;
-    const T = car.T, hx = T.w / 2 * 0.9, hy = 0.3, hz = T.len / 2 * 0.92, m = 1200 * T.mass;
+    // the body's box runs from just above the wheels' bottoms to the top of the roof, so it lies right on its roof or side
+    const T = car.T, m = 1200 * T.mass, mesh = car.mesh, p0 = mesh.position.clone(), q0 = mesh.quaternion.clone();
+    mesh.position.set(0, 0, 0); mesh.quaternion.identity(); mesh.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(mesh);
+    mesh.position.copy(p0); mesh.quaternion.copy(q0); mesh.updateMatrixWorld(true);
+    const top = clamp(bb.max.y, 1.1, 3.4), hx = T.w / 2 * 0.9, hy = (top - 0.45) / 2, hz = T.len / 2 * 0.92, oy = 0.45 + hy - this.RIDE;
     const b = Phys.body({ type: 'dynamic', position: { x: car.x, y: this.RIDE + (car.y || 0), z: car.z }, rotation: this.yawQ(car.h),
       linearVelocity: { x: car.vx, y: Math.max(0, car.yv || 0), z: car.vz }, angularDamping: 0.35, linearDamping: 0.01 });
     // the body shell, and low ballast so it takes a hard corner without tipping over (the centre of mass sits low, like a real car's)
-    const filter = { categoryBits: 1, maskBits: 0xffff & ~4 }; // not the kinematic stand-ins for other cars: those contacts are the arcade's
+    // not the kinematic stand-ins for other cars (those contacts are the arcade's), nor the physics world's flat floor (it rides the real ground)
+    const filter = { categoryBits: 1, maskBits: 0xffff & ~4 & ~8 };
     // half the mass in the shell, half as ballast low down at the front and back (low centre of mass, and it still turns like a long car)
-    b.createBox({ halfExtents: { x: hx, y: hy, z: hz }, density: (m * 0.5) / (8 * hx * hy * hz), friction: 0.3, restitution: 0.12, filter });
+    b.createBox({ halfExtents: { x: hx, y: hy, z: hz }, offset: { x: 0, y: oy, z: 0 }, density: (m * 0.5) / (8 * hx * hy * hz), friction: 0.3, restitution: 0.12, filter });
     for (const s of [-1, 1]) b.createSphere({ radius: 0.12, center: { x: 0, y: -0.16, z: s * hz * 0.75 }, density: (m * 0.25) / (4.19 * 0.12 ** 3), friction: 0.3, filter });
-    this.b = b; this.car = car; this.m = b.getMass();
+    this.b = b; this.car = car; this.m = b.getMass(); this.dims = { hx, hy, hz, oy }; this.floorHit = false;
     const track = T.w / 2 * 0.86, base = T.len / 2 * 0.66;
     this.wheels = [[-track, base, true], [track, base, true], [-track, -base, false], [track, -base, false]].map(([lx, lz, front]) => ({ lx, lz, front, l: this.L0 - 0.16, on: false, slip: 0 }));
-    this.g0 = W.groundAt(car.x, car.z); this.gvy = 0; this.airT = 0; this.wasAir = false; this.upsideT = 0; this.steerA = 0; this.launch = null;
+    this.g0 = W.groundAt(car.x, car.z); this.gvy = 0; this.airT = 0; this.wasAir = false; this.landing = null; this.upsideT = 0; this.steerA = 0; this.launch = null;
     this.statX = this.statZ = 1e9; this.ensureStatics(car.x, car.z, 0);
     if (Phys.kin.has(car)) { Phys.kill(Phys.kin.get(car)); Phys.kin.delete(car); }
     this.write();
@@ -76,7 +81,9 @@ const PhysCar = {
     const c = this.car, b = this.b;
     if (!b) return;
     if (c.dead || c.driver !== 'player' || G.player.inCar !== c || !this.on || !Phys.ready) { this.detach(); return; }
+    this.smash(); // knock down trees, lamp posts, pumps and cacti you hit at speed (the slowdown goes through sync)
     this.sync();
+    this.water();
     const pos = b.getPosition(), q = b.getRotation(), lv = b.getLinearVelocity(), av = b.getAngularVelocity(), m = this.m, Gr = this.G;
     const Q = this.Q.set(q.x, q.y, q.z, q.w);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(Q), fw = new THREE.Vector3(0, 0, 1).applyQuaternion(Q), rt = new THREE.Vector3(1, 0, 0).applyQuaternion(Q);
@@ -100,7 +107,7 @@ const PhysCar = {
       if (l >= this.L0) { w.on = false; w.l = this.L0; w.slip = 0; continue; }
       w.on = true; contacts++;
       const x = this.L0 - Math.max(l, -0.1), vl = (l - w.l) / dt; w.l = l;
-      const Fs = clamp(kS * x - cS * vl, 0, m * Gr * 2.5);
+      const Fs = clamp(kS * x - cS * vl + (l < 0 ? kS * 6 * -l : 0), 0, m * Gr * 4);
       // the wheel's heading: the fronts steer
       const ca = Math.cos(this.steerA), sa = Math.sin(this.steerA);
       const wf = w.front ? new THREE.Vector3(fw.x * ca + rt.x * sa, fw.y * ca + rt.y * sa, fw.z * ca + rt.z * sa) : fw.clone();
@@ -152,16 +159,14 @@ const PhysCar = {
     this.contacts = contacts; this.sp = sp;
     // on a stunt ramp the car rides the wedge like a rail (springs can't lift a car up a steep ramp at 40 m/s in a
     // third of a second): pitched to the slope, rising with it; at the lip physics takes over with that climb
-    const rp = W.rampUnder(pos.x, pos.z), along = rp ? (pos.x - rp.x) * rp.fx + (pos.z - rp.z) * rp.fz : 0;
-    if (rp && Math.abs(along) <= rp.len / 2 && contacts) {
+    const rp = contacts && W.rampAt(pos.x, pos.z) > 0.02 ? W.rampUnder(pos.x, pos.z) : null;
+    if (rp) {
       const dirV = lv.x * rp.fx + lv.z * rp.fz, s = rp.h / rp.len, yaw = Math.atan2(fw.x, fw.z), facing = Math.cos(yaw - Math.atan2(rp.fx, rp.fz));
       this.Q.setFromEuler(new THREE.Euler(-Math.atan(s * facing), yaw, 0, 'YXZ'));
       b.setTransform({ x: pos.x, y: this.RIDE, z: pos.z }, { x: this.Q.x, y: this.Q.y, z: this.Q.z, w: this.Q.w });
       b.setLinearVelocity({ x: lv.x, y: Math.max(0, s * dirV), z: lv.z }); b.setAngularVelocity({ x: 0, y: av.y, z: 0 });
       this.onRamp = true; this.lastRamp = rp; this.lastRampT = G.time;
     } else this.onRamp = false;
-    // knock down trees, lamp posts and pumps at speed, as the arcade cars do
-    this.smash(sp);
     this.rampWalls(lv);
     this.ensureStatics(pos.x, pos.z, sp);
     this.preV = { x: lv.x, y: lv.y, z: lv.z };
@@ -177,20 +182,36 @@ const PhysCar = {
       pos = b.getPosition();
     }
     const g1 = W.groundAt(pos.x, pos.z), dg = g1 - this.g0;
+    // the body's eight corners rest on the real ground (terrain, ramps, kerbs), wherever they are: on its roof or side
+    // the car lies on the hillside, not on a flat floor
+    this.floorHit = false;
+    { const q2 = b.getRotation(), Qc = this.Q.set(q2.x, q2.y, q2.z, q2.w), d = this.dims, v = this.V; let pen = 0;
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) { v.set(sx * d.hx, d.oy + sy * d.hy, sz * d.hz).applyQuaternion(Qc); pen = Math.max(pen, W.groundAt(pos.x + v.x, pos.z + v.z) - this.g0 - (pos.y + v.y)); }
+      if (pen > 0.004) { const lv0 = b.getLinearVelocity(), f = this.contacts ? 1 : 0.94; b.setTransform({ x: pos.x, y: pos.y + pen, z: pos.z }, q2); b.setLinearVelocity({ x: lv0.x * f, y: Math.max(0, lv0.y), z: lv0.z * f }); pos = b.getPosition(); this.floorHit = true; } }
     let lv = b.getLinearVelocity();
-    const air = !this.contacts;
+    this.Q.set(q.x, q.y, q.z, q.w); const upY = new THREE.Vector3(0, 1, 0).applyQuaternion(this.Q).y;
+    const air = !this.contacts && !this.floorHit;
     if (!air && Math.abs(dg) < Math.max(0.12, this.sp * dt * 0.75)) this.gvy = dg / dt;
     if (dg) { b.setTransform({ x: pos.x, y: pos.y - dg, z: pos.z }, q); this.g0 = g1; pos = b.getPosition(); }
     // leaving the ground off a crest or a ramp lip: keep the climb the ground was giving us
     if (air && !this.wasAir) {
-      this.airT = 0; this.launch = { x: c.x, z: c.z, ramp: W.rampUnder(c.x, c.z) || (G.time - (this.lastRampT || -9) < 0.6 ? this.lastRamp : null) };
+      // a bounce after touching down is still the same jump
+      if (this.landing) { this.airT = this.landing.air; this.launch = this.landing.launch; this.landing = null; }
+      else { this.airT = 0; this.launch = { x: c.x, z: c.z, ramp: W.rampUnder(c.x, c.z) || (G.time - (this.lastRampT || -9) < 0.6 ? this.lastRamp : null) }; }
       if (this.gvy > 0 && !this.onRamp) { b.setLinearVelocity({ x: lv.x, y: Math.max(lv.y, this.gvy), z: lv.z }); lv = b.getLinearVelocity(); }
     }
     if (air) this.airT += dt;
     else if (this.wasAir) {
       if (this.airT > 0.3) Sfx.land(c.x, c.z);
-      if (this.launch && this.airT > 0.9 && !c.wreck) G.stunt(c, this.airT, dist(this.launch.x, this.launch.z, pos.x, pos.z), this.launch.ramp);
+      // a jump counts if it settles onto its wheels within half a second (one wheel touches first)
+      if (this.launch && this.airT > 0.9 && !c.wreck) this.landing = { air: this.airT, launch: this.launch, t: 0.5 };
       this.launch = null; this.airT = 0;
+    }
+    const L = this.landing;
+    if (L && !air) {
+      L.t -= dt;
+      if (this.contacts >= 2 && upY > 0.7) { G.stunt(c, L.air, dist(L.launch.x, L.launch.z, pos.x, pos.z), L.launch.ramp); this.landing = null; }
+      else if (L.t <= 0) this.landing = null; // landed on its roof or side: no stunt
     }
     this.wasAir = air;
     // hits: a sudden change of speed that our own tyre forces can't explain (walls, props, hard landings sideways)
@@ -202,14 +223,13 @@ const PhysCar = {
       }
     }
     // stuck on its roof or side: after a moment it rights itself
-    this.Q.set(q.x, q.y, q.z, q.w); const upY = new THREE.Vector3(0, 1, 0).applyQuaternion(this.Q).y;
     if (upY < 0.35 && this.sp < 3) this.upsideT += dt; else this.upsideT = 0;
     if (this.upsideT > 1.6) {
       const f = new THREE.Vector3(0, 0, 1).applyQuaternion(this.Q);
       b.setTransform({ x: pos.x, y: this.RIDE + 0.4, z: pos.z }, this.yawQ(Math.atan2(f.x, f.z) || c.h)); b.setAngularVelocity({ x: 0, y: 0, z: 0 }); b.setLinearVelocity({ x: 0, y: 0, z: 0 });
       this.upsideT = 0; G.toast('Back on its wheels.');
     }
-    this.write();
+    this.write(); this.pose(c);
   },
 
   /* the car's fields from the body */
@@ -221,7 +241,7 @@ const PhysCar = {
     c.x = p.x; c.z = p.z; if (fh > 0.05) c.h = Math.atan2(f.x, f.z);
     c.vx = lv.x; c.vz = lv.z; c.v = fh > 0.05 ? (lv.x * f.x + lv.z * f.z) / fh : 0;
     c.y = Math.max(0, p.y - this.RIDE - 0.05); c.yv = 0; c.kx = c.kz = 0;
-    c.physY = p.y - this.RIDE; c.physQ = { x: q.x, y: q.y, z: q.z, w: q.w };
+    c.physY = p.y - this.RIDE; c.physQ = { x: q.x, y: q.y, z: q.z, w: q.w }; c.physP = { x: p.x, y: p.y, z: p.z };
     this.last = { x: c.x, z: c.z, h: c.h, vx: c.vx, vz: c.vz, v: c.v };
   },
   /* someone else moved the car since we last wrote it (a teleport, a shunt, a test): the body follows */
@@ -240,13 +260,29 @@ const PhysCar = {
     if (c.kx || c.kz) { const v2 = b.getLinearVelocity(); b.setLinearVelocity({ x: v2.x + c.kx, y: v2.y, z: v2.z + c.kz }); c.kx = c.kz = 0; }
     if (c.yv > 0) { const v2 = b.getLinearVelocity(); b.setLinearVelocity({ x: v2.x, y: v2.y + c.yv, z: v2.z }); c.yv = 0; }
   },
-  smash(sp) {
-    const c = this.car;
-    for (const [cx, cz] of c.circles()) for (const col of W.queryBox(cx - c.r - 1, cz - c.r - 1, cx + c.r + 1, cz + c.r + 1)) {
-      const s = col.destructible; if (!s || col.removed) continue;
-      const near = col.circle ? dist(cx, cz, col.x, col.z) < c.r + col.r + 0.6 : cx > col.minX - c.r - 0.6 && cx < col.maxX + c.r + 0.6 && cz > col.minZ - c.r - 0.6 && cz < col.maxZ + c.r + 0.6;
-      if (near && sp > (SMASH_SPEED[s.kind] || 99)) G.smash(col, c);
+  smash() {
+    const c = this.car, sp = Math.hypot(c.vx, c.vz); if (sp < 3) return;
+    const ux = c.vx / sp, uz = c.vz / sp, reach = c.r + 0.25 + sp * STEP;
+    for (const [cx, cz] of c.circles()) for (const col of W.queryBox(cx - reach - 1, cz - reach - 1, cx + reach + 1, cz + reach + 1)) {
+      const s = col.destructible; if (!s || col.removed || sp <= (SMASH_SPEED[s.kind] || 99)) continue;
+      const px = col.circle ? col.x : clamp(cx, col.minX, col.maxX), pz = col.circle ? col.z : clamp(cz, col.minZ, col.maxZ), dx = px - cx, dz = pz - cz;
+      if (Math.hypot(dx, dz) - (col.circle ? col.r : 0) < reach && dx * ux + dz * uz > 0) G.smash(col, c); // just ahead of you, in the way
     }
+  },
+  /* water: pushed back out to the bank, exactly as the arcade cars are (unless you're flying over it) */
+  water() {
+    const c = this.car, b = this.b; if (c.y >= 0.6) return;
+    let px = 0, pz = 0;
+    for (const [cx, cz] of c.circles()) for (const col of W.queryBox(cx - c.r - 0.5, cz - c.r - 0.5, cx + c.r + 0.5, cz + c.r + 0.5)) {
+      if (col.kind !== 'water' || col.removed || !col.circle) continue;
+      const dx = cx - col.x, dz = cz - col.z, d = Math.hypot(dx, dz) || 0.01, pen = c.r + col.r - d;
+      if (pen > 0 && pen > Math.hypot(px, pz)) { px = dx / d * pen; pz = dz / d * pen; }
+    }
+    if (!px && !pz) return;
+    const pos = b.getPosition(), lv = b.getLinearVelocity(), l = Math.hypot(px, pz), nx = px / l, nz = pz / l, vn = lv.x * nx + lv.z * nz;
+    b.setTransform({ x: pos.x + px, y: pos.y, z: pos.z + pz }, b.getRotation());
+    if (vn < 0) b.setLinearVelocity({ x: lv.x - nx * vn * 1.35, y: lv.y, z: lv.z - nz * vn * 1.35 });
+    this.write();
   },
   /* a stunt ramp's back wall only stops you coming at it from behind */
   rampWalls(lv) {
@@ -262,7 +298,8 @@ const PhysCar = {
   },
   /* draw the car where the body is, tilted with it */
   pose(car) {
-    car.mesh.position.set(car.x, (car.physY || 0) + W.groundAt(car.x, car.z), car.z);
-    if (car.physQ) car.mesh.quaternion.set(car.physQ.x, car.physQ.y, car.physQ.z, car.physQ.w);
+    const q = car.physQ, p = car.physP; if (!q || !p) return;
+    const Qp = this.Q.set(q.x, q.y, q.z, q.w), off = this.V.set(0, -this.RIDE, 0).applyQuaternion(Qp); // the mesh's origin sits RIDE below the body's centre, in the body's frame
+    car.mesh.position.set(p.x + off.x, p.y + off.y + W.groundAt(p.x, p.z), p.z + off.z); car.mesh.quaternion.copy(Qp);
   },
 };

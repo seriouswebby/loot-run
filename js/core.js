@@ -131,6 +131,15 @@ const FX = {
   clear() { this.live.length = 0; if (this.mesh) this.mesh.count = 0; },
 };
 
+/* free a removed object's GPU memory: the geometries and materials made just for it (shared ones are marked and kept) */
+function disposeObj(o) {
+  o.traverse((m) => {
+    if (!m.isMesh) return;
+    if (m.geometry && !m.geometry.userData.shared) m.geometry.dispose();
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) if (mat && !mat.userData.shared) mat.dispose();
+  });
+}
+
 /* ---------------- Floating world-space text ---------------- */
 const Floaters = {
   list: [], el: null, v: null,

@@ -18,7 +18,7 @@ const Phys = {
       this.b3 = b3;
       this.world = new b3.World({ gravity: { x: 0, y: -20, z: 0 }, enableSleep: true, enableContinuous: true });
       const g = this.world.createBody({ type: 'static', position: { x: 0, y: -0.5, z: 0 } });
-      g.createBox({ halfExtents: { x: 4000, y: 0.5, z: 4000 }, friction: 0.8 });
+      g.createBox({ halfExtents: { x: 4000, y: 0.5, z: 4000 }, friction: 0.8, filter: { categoryBits: 8, maskBits: 0xffff } });
       this.ready = true;
       return true;
     });
@@ -32,8 +32,8 @@ const Phys = {
   /* static copies of nearby walls and buildings, added lazily around whatever is moving */
   ensureStatics(x, z, r) {
     for (const c of W.queryBox(x - r, z - r, x + r, z + r)) {
-      if (this.statics.has(c) || c.removed || c.oneWay) continue; // ramp back walls are one-way: the physics car handles them
-      const h = c.kind === 'water' ? 3 : Math.max(0.6, c.h || 3); // a river bank or lake shore is a wall to cars (as in the arcade)
+      if (this.statics.has(c) || c.removed || c.oneWay || c.kind === 'water') continue; // one-way ramp walls and water: the physics car handles them
+      const h = Math.max(0.6, c.h || 3);
       let b;
       if (c.circle && c.r > 2) { // a big round thing (the lake, a carousel): a 16-sided prism whose sides touch the circle
         b = this.world.createBody({ type: 'static', position: { x: c.x, y: h / 2, z: c.z } }); const pts = [], R = c.r / Math.cos(Math.PI / 16);
@@ -229,7 +229,7 @@ const Phys = {
     for (let i = this.debris.length - 1; i >= 0; i--) {
       const d = this.debris[i], pos = d.b.getPosition(), rot = d.b.getRotation();
       d.t -= dt;
-      if (d.t <= 0 || !isFinite(pos.x)) { this.kill(d.b); G.scene.remove(d.mesh); this.debris.splice(i, 1); continue; }
+      if (d.t <= 0 || !isFinite(pos.x)) { this.kill(d.b); G.scene.remove(d.mesh); disposeObj(d.mesh); this.debris.splice(i, 1); continue; }
       d.mesh.position.set(pos.x, pos.y + W.groundAt(pos.x, pos.z), pos.z); d.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
     }
   },

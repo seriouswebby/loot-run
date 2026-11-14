@@ -25,6 +25,7 @@ function carGeo() {
   CARGEO.wheel = new THREE.CylinderGeometry(0.38, 0.38, 0.3, 10); CARGEO.wheel.rotateZ(Math.PI / 2);
   CARGEO.light = new THREE.BoxGeometry(0.4, 0.18, 0.06);
   CARGEO.bar = new THREE.BoxGeometry(0.5, 0.16, 0.3);
+  for (const k in CARGEO) CARGEO[k].userData.shared = true;
   return CARGEO;
 }
 function buildCarMesh(type, color) {
@@ -199,7 +200,7 @@ class Car {
       const g0 = W.groundAt(this.x, this.z);
       this.x += (this.vx + this.kx) * h; this.z += (this.vz + this.kz) * h;
       const dg = W.groundAt(this.x, this.z) - g0;
-      if (dg) this.groundStep(dg, h, sp * h);
+      if (dg) this.groundStep(dg, h, sp * h); else if (this.y <= 0.001) this.gvy = 0; // flat again: no climb to carry off the next edge
       this.collideStatic();
     }
     const k = Math.exp(-3 * dt); this.kx *= k; this.kz *= k;
@@ -224,8 +225,8 @@ class Car {
   collideStatic() {
     let best = null;
     const ox = this.x, oz = this.z;
-    for (const [cx, cz] of this.circles()) {
-      const p = { x: cx, z: cz };
+    for (let k = 0, n = this.circles().length; k < n; k++) {
+      const [cx, cz] = this.circles()[k], p = { x: cx, z: cz }; // re-read after each push
       const hit = W.collideCircle(p, this.r, this.y, this.vx, this.vz);
       if (hit) { this.x += p.x - cx; this.z += p.z - cz; if (!best || hit.depth > best.depth) best = hit; }
     }
@@ -380,7 +381,7 @@ class Car {
     this.mesh.rotation.z = this.lean + (this.y > 0.05 ? 0 : rollG);
     if (this.rider) this.rider.visible = this.driver === 'ai';
   }
-  remove() { if (PhysCar.car === this) PhysCar.detach(); this.dead = true; G.scene.remove(this.mesh); }
+  remove() { if (PhysCar.car === this) PhysCar.detach(); this.dead = true; G.scene.remove(this.mesh); disposeObj(this.mesh); }
 }
 
 /* ---------------- skid marks (pooled instanced quads) ---------------- */

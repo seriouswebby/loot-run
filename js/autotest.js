@@ -1208,8 +1208,8 @@ function runAutotest() {
   });
   T('realistic handling: a stunt ramp launches you, you land on your wheels and the jump is scored', () => {
     if (!Phys.ready) return 'SKIP';
-    const r = W.RAMPS.find((q) => q.name === 'River Run'), x = r.x - r.fx * 60, z = r.z - r.fz * 60, car = physDrive('supercar', x, z, Math.atan2(r.fx, r.fz));
-    G.S.stunts = []; car.v = 38; car.vx = r.fx * 38; car.vz = r.fz * 38; Input.keys.KeyW = true;
+    const r = W.RAMPS.find((q) => q.name === 'River Run'), x = r.x - r.fx * 60, z = r.z - r.fz * 60, car = physDrive('sedan', x, z, Math.atan2(r.fx, r.fz));
+    G.S.stunts = []; car.v = 30; car.vx = r.fx * 30; car.vz = r.fz * 30; Input.keys.KeyW = true; // a sedan flat out: a big jump that lands in the cleared run-off
     let top = 0, air = 0, landed = false; for (let i = 0; i < 60 * 8 && !landed; i++) { step(STEP); top = Math.max(top, car.y); if (car.y > 0.3) air += STEP; else if (air > 0.5) landed = true; }
     Input.keys.KeyW = false; steps(1); const up = bodyUp(), scored = G.S.stunts.includes('River Run'); G.exitCar(true); car.remove();
     // from behind, the ramp's back wall stops you
@@ -1287,6 +1287,21 @@ function runAutotest() {
     const b = W.buildings.filter((k) => k.h > 8 && k.maxX - k.minX > 10).sort((p, q) => q.h - p.h)[0]; tp((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2); P.y = b.h; P.yv = 0; steps(0.3);
     G.jumpQ = true; steps(0.15); const rose = P.y > b.h + 0.3; steps(1.5); if (!rose || Math.abs(P.y - b.h) > 0.05) bad.push(`roof jump: rose ${rose} ended at ${P.y.toFixed(2)} on a ${b.h.toFixed(1)} m roof`);
     tp(4, 25); P.y = 0;
+    return !bad.length || bad.join(' | ');
+  });
+  T('review fixes: no launch off the far kerb of the island; a car on its roof is drawn above ground; a short jump into the river ends on the bank', () => {
+    const bad = [], RB = W.ROUNDABOUT, physOn = PhysCar.on;
+    // arcade: over the island at speed, no big air off the far kerb
+    PhysCar.on = false; reset(); G.noSpawn = true; let car = new Car('sports', RB.x - 30, RB.z + 5.5, Math.PI / 2); tp(car.x, car.z - 3); G.enterCar(car); car.v = 30; car.vx = 30; Input.keys.KeyW = true;
+    let top = 0; for (let i = 0; i < 90; i++) { step(STEP); top = Math.max(top, car.y); } Input.keys.KeyW = false; if (top > 0.8) bad.push('arcade car flew ' + top.toFixed(1) + ' m off the island'); G.exitCar(true); car.remove(); PhysCar.on = physOn;
+    if (Phys.ready) {
+      car = physDrive('sedan', 60, W.SHORE - 40, 0); PhysCar.b.setTransform({ x: car.x, y: 1.2, z: car.z }, { x: 0, y: 0, z: 1, w: 0 }); steps(0.6);
+      const box = new THREE.Box3().setFromObject(car.mesh); if (box.min.y < W.groundAt(car.x, car.z) - 0.3) bad.push('car on its roof drawn ' + (W.groundAt(car.x, car.z) - box.min.y).toFixed(2) + ' m underground');
+      G.exitCar(true); car.remove();
+      const r = W.RIVER.pts.find((q) => q[1] === -760); car = physDrive('sedan', r[0] - 8, r[1], Math.PI / 2); car.v = 12; car.vx = 12; steps(2.5);
+      const rd = Math.min(...W.RIVER.pts.slice(1).map((q, i) => segPointDist(car.x, car.z, W.RIVER.pts[i][0], W.RIVER.pts[i][1], q[0], q[1])));
+      if (rd < W.RIVER.w / 2 - 2 || car.physY > 1) bad.push(`river: ${rd.toFixed(1)} m from the middle, ${car.physY.toFixed(1)} m up`); G.exitCar(true); car.remove();
+    }
     return !bad.length || bad.join(' | ');
   });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {

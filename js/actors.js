@@ -137,7 +137,7 @@ class Actor {
       const g0 = W.groundAt(this.x, this.z);
       this.x += tx / hops; this.z += tz / hops; if (hops > 1) W.collideCircle(this, this.r, this.y, tx, tz);
       const dg = W.groundAt(this.x, this.z) - g0;
-      if (dg) this.groundStep(dg, dt / hops, Math.hypot(tx, tz) / hops);
+      if (dg) this.groundStep(dg, dt / hops, Math.hypot(tx, tz) / hops); else if (this.y <= 0.001) this.gvy = 0;
     }
     const kd = Math.exp(-(this.y > 0 && !this.jumping ? 0.8 : 7) * dt); this.kx *= kd; this.kz *= kd;
     const roofs = this.kind === 'player';
