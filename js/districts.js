@@ -363,7 +363,7 @@ const Funland = {
     if (n >= 22) return;
     for (let k = 0; k < 8; k++) {
       const [a, b] = pick(F.links), u = rand(0.1, 0.9), x = a.x + (b.x - a.x) * u, z = a.z + (b.z - a.z) * u, d = dist(x, z, t.x, t.z);
-      if (d < 18 || G.canSee(x, z, 1)) continue; // they walk in from somewhere you aren't looking
+      if (d < 18 || (G.canSee(x, z, 1) && d < 150)) continue; // they walk in from somewhere you aren't looking (or far off)
       const p = spawnPed(x, z, W.nearestBlock(x, z), 1, 1);
       Object.assign(p.ai, { mode: 'park', park: true, node: a, prev: b, waitT: rand(0, 2), speed: rand(1.1, 1.6), tx: a.x, tz: a.z }); // first along this path to its end
       return p;

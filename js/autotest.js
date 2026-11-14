@@ -1158,10 +1158,27 @@ function runAutotest() {
     const b = W.blocks.find((k) => k.type === 'city' && k.cz > 60), hidden = !G.canSee(b.cx, b.cz + 22, 1) || !G.canSee(b.cx + 40, b.cz + 22, 1);
     // spawn a crowd of traffic and pedestrians: none of them where you can see
     G.noSpawn = false; for (let i = 0; i < 40; i++) { spawnTraffic(G.body()); const p = randomSidewalkPoint(P.x, P.z, 35, 150, false, true); if (p) spawnPed(p.x, p.z, p.b, p.sx, p.sz); }
-    const seenCars = G.cars.filter((c) => !c.dead && !c.persistent && c.driver === 'ai' && c.ai && c.ai.mode === 'traffic' && G.canSee(c.x, c.z, 4)).length;
+    const seenCars = G.cars.filter((c) => !c.dead && !c.persistent && c.driver === 'ai' && c.ai && c.ai.mode === 'traffic' && G.canSee(c.x, c.z, 4) && dist(c.x, c.z, P.x, P.z) < 185).length;
     const seenPeds = G.npcs.filter((n) => !n.dead && n.kind === 'ped' && n.ai.mode === 'walk' && dist(n.x, n.z, P.x, P.z) > 34 && G.canSee(n.x, n.z, 1)).length;
     G.camMode = mode; G.cam = cam0; G.frameN++; G.noSpawn = true;
     return (ahead && !behind && !fogged && hidden && seenCars === 0 && seenPeds === 0) || `ahead ${ahead} behind ${behind} fogged ${fogged} behind-a-building ${hidden} spawned in view: cars ${seenCars} peds ${seenPeds}`;
+  });
+  T('open road in the chase camera: traffic still appears ahead of you (far off), not only behind', () => {
+    reset(); const mode = G.camMode, cam0 = G.cam; G.camMode = 'chase'; G.noSpawn = false;
+    for (const c of G.cars) if (!c.persistent && !c.mission) c.remove(); G.cars = G.cars.filter((c) => !c.dead);
+    const car = new Car('sedan', 870, 15, Math.PI / 2); tp(870, 12); G.enterCar(car); car.v = 20;
+    let ahead = 0, near = 0;
+    for (let i = 0; i < 60 * 20; i++) {
+      Input.keys.KeyW = true; G.frameN = (G.frameN || 0) + 1; updateCamera(STEP); step(STEP);
+      if (i % 30 === 0) for (const c of G.cars) if (!c.dead && c !== car && c.driver === 'ai' && c.ai && c.ai.mode === 'traffic') {
+        const dx = c.x - car.x, dz = c.z - car.z, along = dx * Math.sin(car.h) + dz * Math.cos(car.h);
+        if (along > 0 && Math.hypot(dx, dz) < 260) ahead++;
+        if (c.bornT == null) c.bornT = G.time;
+        if (c.bornT === G.time && G.canSee(c.x, c.z, 4) && dist(c.x, c.z, car.x, car.z) < 150) near++;
+      }
+    }
+    Input.keys.KeyW = false; G.exitCar(true); car.remove(); G.camMode = mode; G.cam = cam0; G.frameN++; G.noSpawn = true;
+    return (ahead > 0 && near === 0) || `traffic seen ahead ${ahead} · popped in close and in view ${near}`;
   });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;

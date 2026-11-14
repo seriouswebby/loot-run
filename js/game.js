@@ -1055,14 +1055,15 @@ function carFree(x, z, r) { for (const c of G.cars) if (!c.dead && dist(c.x, c.z
 function spawnTraffic(t) {
   const near = W.edges.filter((e) => { const a = W.nodes[e.a], b = W.nodes[e.b]; return segPointDist(t.x, t.z, a.x, a.z, b.x, b.z) < 230; });
   if (!near.length) return null;
-  for (let k = 0; k < 10; k++) {
+  for (let k = 0; k < 20; k++) {
     const e = pick(near);
     const fwd = chance(0.5), A = W.nodes[fwd ? e.a : e.b], B = W.nodes[fwd ? e.b : e.a];
     const lane = pick(HWY_LANES), L = dist(A.x, A.z, B.x, B.z), dx = (B.x - A.x) / L, dz = (B.z - A.z) / L, lo = (A.hwy && B.hwy) ? lane : 2.5;
     const s = rand(0.25, 0.75) * L;
     const x = A.x + dx * s - dz * lo, z = A.z + dz * s + dx * lo;
     const d = dist(x, z, t.x, t.z);
-    if (d < 70 || d > 230 || !carFree(x, z, 9) || G.canSee(x, z, 4)) continue; // traffic arrives from out of sight
+    // traffic arrives from out of sight; on wide-open roads, failing that, far enough off to be a speck
+    if (d < 70 || d > 240 || !carFree(x, z, 9) || (G.canSee(x, z, 4) && (k < 10 || d < 190))) continue;
     const r = Math.random();
     const type = r < 0.07 ? 'police' : r < 0.15 ? 'taxi' : r < 0.23 ? 'van' : r < 0.31 ? 'pickup' : r < 0.37 ? 'sports' : r < 0.39 ? 'armored' : r < 0.42 ? 'supercar' : r < 0.52 ? 'hatch' : r < 0.61 ? 'suv' : r < 0.66 ? 'muscle' : r < 0.72 ? 'truck' : r < 0.78 ? 'motorbike' : 'sedan';
     const car = new Car(type, x, z, Math.atan2(dx, dz), { driver: 'ai' }); car.lane = lane;
