@@ -316,7 +316,9 @@ function buildAirport(OP) {
    The lake is one round water collider with a sandy shore and a jetty. The river winds from the north fence down to
    the sea; it's a chain of water circles with gaps where roads cross it on bridges (railings keep you on the deck). */
 W.LAKE = { x: -280, z: -830, r: 128 };
-W.RIVER = { w: 34, pts: [[930, -W.OUT - 60], [905, -1060], [945, -760], [902, -470], [940, -170], [912, 120], [928, W.SHORE + 40]] };
+W.RIVER = { w: 34, pts: [[930, -1046], [945, -760], [902, -470], [940, -170], [912, 120], [928, W.SHORE + 40]] }; // from the dam to the sea
+/* the Bay River Dam: a 16 m concrete wall across the canyon, holding back a reservoir at 14 m (js/districts.js) */
+W.DAM = { x: 930, z: -1068, crest: 16, half: 4, water: 14, cx: 930, cz: -1138, rx: 105, rz: 58, x0: 0, x1: 0 };
 W.bridges = [];
 function buildWater(OP) {
   const waterMat = new THREE.MeshLambertMaterial({ color: 0x3b86ad }), L = W.LAKE; W.markWater(waterMat);

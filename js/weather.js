@@ -73,6 +73,7 @@ const Weather = {
     this.prev = instant ? kind : this.cur; this.cur = kind; this.blend = instant ? 1 : 0;
     const d = WEATHER[kind].dur; this.timer = rand(d[0], d[1]);
     if (instant && !WEATHER[kind].snow) this.snowCover = 0;
+    if (instant && this.p) this.apply(); // grip, sight and the rest change now, not at the next frame
     if (!instant && G.state === 'play') G.toast('Weather: ' + WEATHER[kind].label.toLowerCase() + ' — ' + WEATHER[kind].hint.toLowerCase(), kind === 'storm' || kind === 'fog' || kind === 'hail' || kind === 'snow' ? 'warn' : '');
   },
   /* mostly sunny: out of sunshine, weighted odds of something else; after it, usually sunny again or a related turn */

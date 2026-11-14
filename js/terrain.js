@@ -79,6 +79,7 @@ function buildTerrain() {
     const x = x0 + i * C, z = z0 + j * C;
     const m = flatMask(x, z, near.get(key(Math.floor((x - x0) / P), Math.floor((z - z0) / P))) || []);
     H[j * nx + i] = m > 0 ? rawHeight(x, z) * m : 0;
+    if (W.DAM && m > 0) H[j * nx + i] = damShape(x, z, H[j * nx + i], near.get(key(Math.floor((x - x0) / P), Math.floor((z - z0) / P))) || []);
   }
   // no slope steeper than 0.6 m per metre: sweep the grid both ways, capping each point at its neighbours plus that
   // rise (flat zones stay at 0, peaks and mesa sides become climbable, and flat-zone edges ease in)
@@ -97,8 +98,30 @@ function buildTerrain() {
   W.TERRAIN.env = { E, ex, ez, a: env };
 }
 
-/* ground height at a point, on the same two triangles per cell the mesh is drawn with */
-W.groundAt = function (x, z) {
+/* the reservoir behind the dam: a basin below the water, a rim above it all round, and canyon walls either side of
+   the valley below the dam (so the dam spans the canyon and nothing leaks round its ends). Roads stay level. */
+function damShape(x, z, h, near) {
+  const D = W.DAM, e = ((x - D.cx) / D.rx) ** 2 + ((z - D.cz) / D.rz) ** 2;
+  if (e > 2.4 && (z < D.z - 4 || z > D.z + 80 || Math.abs(x - D.x) > 170)) return h;
+  let road = 1; for (const r of near) road = Math.min(road, sstep(20, 60, segPointDist(x, z, r.ax, r.az, r.bx, r.bz)));
+  // under the water: shallows at the shore shelving to 3 m out in the middle, and right up to the dam's face
+  if (e < 1.0 || (Math.abs(x - D.x) < 85 && z > D.z - 40 && z < D.z - 4)) return D.water - 1 - 10 * sstep(0.92, 0.5, e);
+  const wall = D.crest + 1;
+  if (road < 0.02) return h; // roads stay level: the hills grade down to them
+  if (z < D.z - 4) return e < 2.6 ? Math.max(h, wall * (1 - sstep(2.2, 2.6, e))) : h; // the rim
+  const out = Math.abs(x - D.x); // below the dam: canyon walls, fading out downstream
+  if (out > 62) return Math.max(h, wall * sstep(62, 74, out) * (1 - sstep(D.z + 40, D.z + 80, z)) * (1 - sstep(140, 170, out)));
+  return h;
+}
+/* ground height at a point, on the same two triangles per cell the mesh is drawn with (plus ramps, the roundabout
+   island and the dam crest on top) */
+W.groundAt = function (x, z) { return W.terrainAt(x, z) + (W.RAMPS.length ? W.rampAt(x, z) : 0) + W.islandAt(x, z) + W.damAt(x, z); };
+/* the dam's crest: level at 16 m across the canyon, whatever the ground under it */
+W.damAt = function (x, z) {
+  const D = W.DAM; if (!D || !D.x1 || Math.abs(z - D.z) > D.half || x < D.x0 || x > D.x1) return 0;
+  return Math.max(0, D.crest - W.terrainAt(x, z));
+};
+W.terrainAt = function (x, z) {
   let h = 0;
   const T = W.TERRAIN;
   if (T && W.HILLS) {
@@ -108,8 +131,7 @@ W.groundAt = function (x, z) {
       h = u + v <= 1 ? a + (b - a) * u + (c - a) * v : d + (c - d) * (1 - u) + (b - d) * (1 - v);
     }
   }
-  if (W.RAMPS.length) h += W.rampAt(x, z);
-  return h + W.islandAt(x, z);
+  return h;
 };
 /* the roundabout's raised island: a kerb you can bump up and over */
 W.islandAt = function (x, z) {

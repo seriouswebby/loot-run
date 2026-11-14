@@ -523,7 +523,7 @@ function runAutotest() {
   });
   T('water: bridges carry you over the river; the river and Mirror Lake stop cars', () => {
     const bad = [], drive = (x, z, h, sec) => { reset(); G.noSpawn = true; const car = new Car('sedan', x, z, h); tp(x, z); G.enterCar(car); Input.keys.KeyW = true; steps(sec); Input.keys.KeyW = false; const out = { x: car.x, z: car.z }; G.exitCar(true); car.remove(); G.noSpawn = false; return out; };
-    if (W.bridges.length < 3) bad.push('bridges ' + W.bridges.length);
+    if (W.bridges.length < 2 || W.bridges.some((q) => q.name === 'County Line')) bad.push('bridges ' + W.bridges.map((q) => q.name).join(','));
     const b = W.bridges.find((q) => q.name === 'East Road');
     if (!b) bad.push('no East Road bridge'); else {
       const e = W.countyEdges.find((q) => q.name === 'East Road' && segPointDist(b.x, b.z, q.ax, q.az, q.bx, q.bz) < 1), L = dist(e.ax, e.az, e.bx, e.bz), ux = (e.bx - e.ax) / L, uz = (e.bz - e.az) / L;
@@ -535,7 +535,7 @@ function runAutotest() {
       if (rd < W.RIVER.w / 2 - 1 && Math.abs(side.z - b.z) > 7) bad.push('drove off the bridge into the river at ' + side.x.toFixed(0) + ',' + side.z.toFixed(0));
     }
     // straight at the river bank away from any bridge, and at the lake
-    const r = W.RIVER.pts[2], rv = drive(r[0] - 60, r[1], Math.PI / 2, 5); if (rv.x > r[0] - W.RIVER.w / 2 + 1) bad.push('drove into the river, x ' + rv.x.toFixed(0));
+    const r = W.RIVER.pts.find((q) => q[1] === -760), rv = drive(r[0] - 60, r[1], Math.PI / 2, 5); if (rv.x > r[0] - W.RIVER.w / 2 + 1) bad.push('drove into the river, x ' + rv.x.toFixed(0));
     const L = W.LAKE, lk = drive(L.x + L.r + 40, L.z + 30, -Math.PI / 2, 5); if (dist(lk.x, lk.z, L.x, L.z) < L.r - 1) bad.push('drove into the lake');
     return !bad.length || bad.join(' | ');
   });
@@ -792,7 +792,7 @@ function runAutotest() {
     }
     for (const kk of ['KeyW', 'KeyA', 'KeyD']) Input.keys[kk] = false;
     const ok = W.onHighway(car.x, car.z) && car.z > -W.HWY + 60 && minV > 20;
-    G.noSpawn = false; G.exitCar(); return ok || `ended at ${car.x.toFixed(0)},${car.z.toFixed(0)} on hwy ${W.onHighway(car.x, car.z)} min speed ${(minV * 3.6).toFixed(0)} km/h`;
+    G.noSpawn = false; G.exitCar(); return ok || `ended at ${car.x.toFixed(0)},${car.z.toFixed(0)} on hwy ${W.onHighway(car.x, car.z)} min speed ${(minV * 3.6).toFixed(0)} km/h (grip ${Weather.grip().toFixed(2)})`;
   });
   T('no tunneling: full-speed crashes into barriers and walls stay on this side', () => {
     const bad = [], H = W.HWY, k = H - W.RR;
@@ -1257,6 +1257,26 @@ function runAutotest() {
     const m = new THREE.Matrix4(); c.im.getMatrixAt(c.i, m); const flat = m.elements[0] === 0 && m.elements[5] === 0;
     G.exitCar(true); car.remove();
     return (W.cacti.length > 200 && W.rocks.length > 100 && !onRoad && !floating && flat) || `cacti ${W.cacti.length} rocks ${W.rocks.length} on roads ${onRoad} floating ${floating} flattened ${flat}`;
+  });
+  T('the dam: it spans the canyon at 16 m, holds a reservoir, you can walk its crest; its face and the water stop you', () => {
+    reset(); G.noSpawn = true; const D = W.DAM, bad = [];
+    if (!(D.x1 - D.x0 > 60 && W.groundAt(D.x, D.z) > 15.9 && W.groundAt(D.x0 + 3, D.z) > 15.9)) bad.push(`crest ${D.x0}..${D.x1} at ${W.groundAt(D.x, D.z).toFixed(1)}`);
+    // the rim keeps the water in: all round the reservoir's edge the ground is above the water (the dam closes the south)
+    let leaks = 0; for (let a = 0; a < TAU; a += 0.05) { const x = D.cx + Math.cos(a) * D.rx * 1.14, z = D.cz + Math.sin(a) * D.rz * 1.14; const byDam = Math.abs(x - D.x) < 85 && z > D.z - 40; if (!byDam && W.groundAt(x, z) < D.water + 0.3) { leaks++; (G.leakPts = G.leakPts || []).push(Math.round(x) + ',' + Math.round(z) + '=' + W.groundAt(x, z).toFixed(1)); } }
+    // beside the dam's ends the canyon walls hold the water in
+    for (let x = D.x1 + 1; x < D.x + 95; x += 3) if (W.groundAt(x, D.z - 4) < D.water + 0.3) { leaks++; (G.leakPts = G.leakPts || []).push('east wall ' + Math.round(x)); }
+    for (let x = D.x0 - 1; x > D.x - 95; x -= 3) if (W.groundAt(x, D.z - 4) < D.water + 0.3) { leaks++; (G.leakPts = G.leakPts || []).push('west wall ' + Math.round(x)); }
+    if (leaks) bad.push('reservoir edge below the water at ' + leaks + ' points: ' + (G.leakPts || []).slice(0, 12).join(' ')); G.leakPts = [];
+    for (const [x, z] of [[D.x0 - 3, D.z], [D.x1 + 3, D.z]]) if (W.groundAt(x, z) < D.crest - 1) bad.push('dam end open at ' + Math.round(x) + ' (' + W.groundAt(x, z).toFixed(1) + ' m)');
+    // walk along the crest
+    tp(D.x - 20, D.z); P.y = 0; G.inputOverride = { mx: 1, mz: 0 }; steps(4); G.inputOverride = null;
+    if (!(P.x > D.x - 4 && Math.abs(P.z - D.z) < D.half && W.groundAt(P.x, P.z) > 15.9 && P.y < 0.1)) bad.push(`crest walk ended at ${P.x.toFixed(1)},${P.z.toFixed(1)} ground ${W.groundAt(P.x, P.z).toFixed(1)} y ${P.y.toFixed(1)}`);
+    if (W.zoneAt(P.x, P.z) !== 'dam') bad.push('zone ' + W.zoneAt(P.x, P.z));
+    // drive up the valley at the dam's face: it stops you
+    const car = new Car('sedan', D.x - 20, D.z + 60, Math.PI); tp(D.x - 20, D.z + 56); G.enterCar(car); Input.keys.KeyW = true; steps(5); Input.keys.KeyW = false;
+    if (car.z < D.z + D.half - 0.5 || W.groundAt(car.x, car.z) > 2) bad.push(`drove up the dam face: ${car.x.toFixed(0)},${car.z.toFixed(0)} ground ${W.groundAt(car.x, car.z).toFixed(1)}`);
+    G.exitCar(true); car.remove();
+    return !bad.length || bad.join(' | ');
   });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;

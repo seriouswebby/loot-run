@@ -548,6 +548,60 @@ function buildBadlands() {
   rnd = saved;
 }
 
+/* ---------------- the Bay River Dam ----------------
+   Built once the hills exist: the wall spans the canyon wherever the ground is below its crest, so its ends run into
+   the canyon walls. The crest is ground (W.damAt): drive or walk along it between the parapets. The downstream face
+   is solid; the spillway pours down the middle into the river. */
+function buildDam() {
+  const D = W.DAM; if (!D || !W.HILLS) return;
+  let x0 = D.x, x1 = D.x; while (x0 > D.x - 160 && W.terrainAt(x0 - 1, D.z) < D.crest - 0.3) x0--; while (x1 < D.x + 160 && W.terrainAt(x1 + 1, D.z) < D.crest - 0.3) x1++;
+  D.x0 = x0 - 1; D.x1 = x1 + 1;
+  const FP = new PropBatch(), conc = '#bdb8ad', dark = '#a29d92';
+  for (let x = D.x0; x < D.x1; x += 2) {
+    const g = Math.min(W.terrainAt(x, D.z - 4), W.terrainAt(x + 2, D.z - 4), W.terrainAt(x, D.z + 4), W.terrainAt(x + 2, D.z + 4)) - 1.5, h = D.crest - g;
+    if (h <= 0.2) continue;
+    FP.box(x + 1, g + h / 2, D.z, 2.02, h, D.half * 2, x % 8 < 2 ? dark : conc);
+    // a stepped buttress down the downstream face
+    for (let s = 1; s <= 3; s++) { const top = D.crest - s * 4.5; if (top <= g) break; FP.box(x + 1, g + (top - g) / 2, D.z + D.half + s * 2 - 1, 2.02, top - g, 2, conc); }
+  }
+  for (const s of [-1, 1]) {
+    FP.box((D.x0 + D.x1) / 2, D.crest + 0.55, D.z + s * (D.half - 0.2), D.x1 - D.x0, 1.1, 0.4, '#d6d2c8');
+    W.addCollider(D.x0, D.z + s * (D.half - 0.2) - 0.25, D.x1, D.z + s * (D.half - 0.2) + 0.25, 1.1, 'fence');
+  }
+  for (let x = D.x0 + 6; x < D.x1 - 4; x += 16) for (const s of [-1, 1]) { FP.box(x, D.crest + 2.2, D.z + s * (D.half - 0.2), 0.16, 4.4, 0.16, '#5c677d'); FP.box(x, D.crest + 4.4, D.z + s * (D.half - 0.6), 0.5, 0.2, 0.9, '#ffe8a3'); }
+  FP.box(D.x, D.crest + 3.5, D.z + 1.5, 6, 3.5, 3, '#8d99ae'); FP.box(D.x, D.crest + 5.4, D.z + 1.5, 6.6, 0.4, 3.6, '#5c677d'); // the gatehouse
+  // the downstream face is a wall (the crest is reached from the canyon rims)
+  W.addCollider(D.x0, D.z + D.half, D.x1, D.z + D.half + 6.5, D.crest + 1, 'building');
+  // the spillway: a chute of churning white water from the crest down to the river
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128; const g2 = cv.getContext('2d'), rr = mulberry32(17);
+  g2.fillStyle = '#cfe8f2'; g2.fillRect(0, 0, 64, 128); for (let i = 0; i < 260; i++) { g2.fillStyle = rr() < 0.5 ? '#ffffff' : '#9fc9db'; g2.fillRect(rr() * 64, rr() * 128, 2 + rr() * 6, 4 + rr() * 14); }
+  const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1, 3);
+  const run = 18, chute = new THREE.Mesh(new THREE.PlaneGeometry(9, Math.hypot(run, D.crest)), new THREE.MeshBasicMaterial({ map: tex }));
+  chute.position.set(D.x, D.crest / 2 + 0.3, D.z + D.half + run / 2); chute.rotation.x = -Math.PI / 2 + Math.atan2(D.crest, run); S.add(chute);
+  for (const s of [-1, 1]) FP.box(D.x + s * 5, D.crest / 2, D.z + D.half + run / 2, 0.8, 2, Math.hypot(run, D.crest), conc);
+  D.spill = { tex, x: D.x, z: D.z + D.half + run };
+  // the reservoir: water at 14 m filling the basin up to the rim, which hides its edge
+  const wm = new THREE.MeshLambertMaterial({ color: 0x3477a0 }); W.markWater(wm);
+  const res = new THREE.Mesh(new THREE.CircleGeometry(1, 72), wm); res.rotation.x = -Math.PI / 2; res.scale.set(D.rx * 1.14, D.rz * 1.14, 1); res.position.set(D.cx, D.water, D.cz); res.receiveShadow = true; S.add(res);
+  for (let x = D.cx - D.rx; x <= D.cx + D.rx; x += 18) for (let z = D.cz - D.rz; z <= D.cz + D.rz; z += 18) {
+    const r = 13, ex = Math.abs(x - D.cx) + r, ez = Math.abs(z - D.cz) + r; // keep each circle inside the shoreline
+    if ((ex / D.rx) ** 2 + (ez / D.rz) ** 2 < 1.12 || ((x - D.cx) / D.rx) ** 2 + ((z - D.cz) / D.rz) ** 2 < 0.9) W.addCircle(x, z, r, 'water').h = 0.6;
+  }
+  const mesh = FP.build(S); mesh.geometry.computeBoundingSphere(); mesh.frustumCulled = true;
+  W.places.dam = { id: 'dam', name: 'Bay River Dam', x: D.x, z: D.z };
+  W.districtLabels.push({ x: D.x, z: D.cz, text: 'RESERVOIR', col: '#bfe3f2' }, { x: D.x, z: D.z + 30, text: 'BAY RIVER DAM', col: '#e0ddd4' });
+}
+const Dam = {
+  t: 0,
+  update(dt) {
+    const S2 = W.DAM && W.DAM.spill; if (!S2) return;
+    S2.tex.offset.y -= dt * 1.6;
+    const t = G.body(); if (dist(t.x, t.z, S2.x, S2.z) > 260) return;
+    this.t -= dt; if (this.t > 0) return; this.t = 0.08;
+    Puffs.add(S2.x + rand(-4, 4), 0.6, S2.z + rand(-1, 3), rand(-0.8, 0.8), rand(0.6, 1.4), rand(0.5, 1.8), 1.6, 3, 2.2, '#f2f8fb', 0.35, 0.4); // spray where it hits the river
+  },
+};
+
 /* the park on the minimap: lawn, paths, the coaster's loop, the wheel */
 W.drawDistrictsMap = function (g, X, Z, k) {
   const F = W.FUN; if (!F.rides) return;
@@ -569,6 +623,9 @@ W.drawDistrictsMap = function (g, X, Z, k) {
   g.fillStyle = '#6f6d68'; R(mx + 12, M.minZ, mx + 58, -428);
   g.fillStyle = '#b8c0c8'; g.beginPath(); g.arc(X(712), Z(-372), 5 * k, 0, TAU); g.fill();
   g.fillStyle = '#c9ced3'; for (const x of [583, 594]) { g.beginPath(); g.arc(X(x), Z(-440), 4 * k, 0, TAU); g.fill(); }
+  // the reservoir and the dam
+  const D = W.DAM;
+  if (D && D.x1) { g.fillStyle = '#2c6f93'; g.beginPath(); g.ellipse(X(D.cx), Z(D.cz), D.rx * 1.05 * k, D.rz * 1.05 * k, 0, 0, TAU); g.fill(); g.fillStyle = '#d6d2c8'; R(D.x0, D.z - D.half, D.x1, D.z + D.half + 4); }
   // cacti and boulders out in the badlands
   g.fillStyle = '#4c7a3a'; for (const c of W.cacti) g.fillRect(X(c.x) - 1, Z(c.z) - 1, 2, 2);
   g.fillStyle = '#8a4f35'; for (const r of W.rocks) { g.beginPath(); g.arc(X(r.x), Z(r.z), Math.max(1, r.s * k), 0, TAU); g.fill(); }
