@@ -517,6 +517,15 @@ function runAutotest() {
     const L = W.LAKE, lk = drive(L.x + L.r + 40, L.z + 30, -Math.PI / 2, 5); if (dist(lk.x, lk.z, L.x, L.z) < L.r - 1) bad.push('drove into the lake');
     return !bad.length || bad.join(' | ');
   });
+  T('roundabout: GPS and traffic go round the island, cars bounce off it', () => {
+    const R = W.ROUNDABOUT, path = GPS.route(R.x - 80, R.z, R.x + 80, R.z + 10);
+    const inner = path.slice(1, -1).filter((p) => dist(p[0], p[1], R.x, R.z) < 12).length;
+    const ringOk = W.ringNodes.size === 8 && [...W.ringNodes].every((id) => W.nodes[id].adj.length >= 2);
+    reset(); G.noSpawn = true; const car = new Car('sedan', R.x - 45, R.z, Math.PI / 2); tp(R.x - 45, R.z - 3); G.enterCar(car);
+    Input.keys.KeyW = true; let closest = 99; for (let i = 0; i < 240; i++) { step(STEP); closest = Math.min(closest, dist(car.x, car.z, R.x, R.z)); } Input.keys.KeyW = false;
+    G.exitCar(true); car.remove(); G.noSpawn = false;
+    return (inner === 0 && path.length > 2 && ringOk && closest > 9) || `route points inside the island ${inner} (path ${path.length}) ring ok ${ringOk} car got within ${closest.toFixed(1)} m of the centre`;
+  });
   T('county: no trees standing on the country roads', () => {
     const bad = [];
     for (const e of W.countyEdges) {

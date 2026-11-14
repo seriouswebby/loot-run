@@ -80,13 +80,20 @@ function countyRoads() {
     return W.addNode(+x.toFixed(2), +z.toFixed(2), false, j ? 6 : 0);
   };
   const edgeName = new Map();
+  // the roundabout: a ring of nodes round an island; roads meeting there join the ring on their side
+  const RB = W.ROUNDABOUT, RR = 15, ring = [];
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU; ring.push(W.addNode(+(RB.x + Math.cos(a) * RR).toFixed(2), +(RB.z + Math.sin(a) * RR).toFixed(2), false, 0)); }
+  for (let i = 0; i < 8; i++) { W.addEdge(ring[i], ring[(i + 1) % 8]); edgeName.set(Math.min(ring[i], ring[(i + 1) % 8]) + ',' + Math.max(ring[i], ring[(i + 1) % 8]), 'roundabout'); }
+  W.ringNodes = new Set(ring);
+  const atRB = (p) => p[0] === RB.x && p[1] === RB.z;
+  const ringFor = (ox, oz) => ring[(Math.round((Math.atan2(oz - RB.z, ox - RB.x) / TAU) * 8) + 8) % 8];
   for (const r of W.COUNTY_ROADS) {
-    let prev = node(r.pts[0][0], r.pts[0][1], true);
+    let prev = atRB(r.pts[0]) ? ringFor(r.pts[1][0], r.pts[1][1]) : node(r.pts[0][0], r.pts[0][1], true);
     for (let i = 1; i < r.pts.length; i++) {
       const [ax, az] = r.pts[i - 1], [bx, bz] = r.pts[i], L = dist(ax, az, bx, bz), n = Math.max(1, Math.round(L / 40));
       for (let k = 1; k <= n; k++) {
         const x = ax + (bx - ax) * k / n, z = az + (bz - az) * k / n;
-        const id = k === n ? node(bx, bz, junction.has(key(r.pts[i]))) : node(x, z, false);
+        const id = k === n ? (atRB(r.pts[i]) ? ringFor(ax, az) : node(bx, bz, junction.has(key(r.pts[i])))) : node(x, z, false);
         W.addEdge(prev, id); edgeName.set(Math.min(prev, id) + ',' + Math.max(prev, id), r.name); prev = id;
       }
     }
@@ -98,12 +105,24 @@ function countyRoads() {
     if (!W.inCounty(a.x, a.z) && !W.inCounty(b.x, b.z) && !(a.hwy || b.hwy)) continue;
     const L = dist(a.x, a.z, b.x, b.z), dx = (b.x - a.x) / L, dz = (b.z - a.z) / L;
     const ax = a.x + dx * a.half, az = a.z + dz * a.half, bx = b.x - dx * b.half, bz = b.z - dz * b.half;
-    GB.road.strip(ax, az, bx, bz, 6, 0.04, 6);
+    if (!(W.ringNodes.has(e.a) && W.ringNodes.has(e.b))) GB.road.strip(ax, az, bx, bz, 6, 0.04, 6);
     W.countyEdges.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, e, name: edgeName.get(Math.min(e.a, e.b) + ',' + Math.max(e.a, e.b)) });
+  }
+  // the roundabout: an asphalt ring, a kerbed grass island with a statue in the middle
+  {
+    const N = 40, ri = 9, ro = 21.5, P1 = (a, r) => [RB.x + Math.cos(a) * r, RB.z + Math.sin(a) * r];
+    for (let i = 0; i < N; i++) { const a1 = (i / N) * TAU, a2 = ((i + 1) / N) * TAU; GB.asphalt.quad([P1(a1, ri), P1(a1, ro), P1(a2, ro), P1(a2, ri)], [[0, 0], [1, 0], [1, 1], [0, 1]], 0.043); }
+    const isl = new THREE.Mesh(new THREE.CylinderGeometry(ri, ri, 0.35, 40), new THREE.MeshLambertMaterial({ color: 0x5d9a43 })); isl.position.set(RB.x, 0.17, RB.z); isl.receiveShadow = true; S.add(isl);
+    const kerb = new THREE.Mesh(new THREE.TorusGeometry(ri, 0.3, 6, 40), new THREE.MeshLambertMaterial({ color: 0xd8d4c8 })); kerb.rotation.x = Math.PI / 2; kerb.position.set(RB.x, 0.2, RB.z); S.add(kerb);
+    const st = new THREE.Group(); st.position.set(RB.x, 0.35, RB.z); S.add(st);
+    const stone = (w, h, d, y, c) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(c)); m.position.y = y; m.castShadow = true; st.add(m); };
+    stone(3.2, 1.2, 3.2, 0.6, '#b8b2a4'); stone(2.2, 1.0, 2.2, 1.7, '#cfc9bb'); stone(0.9, 3.2, 0.9, 3.8, '#8f7a52'); stone(2.6, 0.4, 0.5, 5.2, '#8f7a52');
+    W.addCircle(RB.x, RB.z, ri, 'island').h = 1.2;
+    W.places.roundabout = { id: 'roundabout', name: 'Founders Circle', x: RB.x, z: RB.z };
   }
   // round pads where county roads bend or meet, so corners don't leave notches
   for (const n of W.nodes) {
-    if (n.hwy || !W.inCounty(n.x, n.z) || n.adj.length < 2) continue;
+    if (n.hwy || !W.inCounty(n.x, n.z) || n.adj.length < 2 || W.ringNodes.has(n.id)) continue;
     if (n.half > 0) { GB.asphalt.rect(n.x - n.half, n.z - n.half, n.x + n.half, n.z + n.half, 0.045, 12); continue; }
     const [p, q] = n.adj.map((i) => W.nodes[i]), a1 = Math.atan2(p.z - n.z, p.x - n.x), a2 = Math.atan2(q.z - n.z, q.x - n.x);
     if (Math.abs(Math.abs(angDiff(a1, a2)) - Math.PI) < 0.02) continue; // straight through
