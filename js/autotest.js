@@ -944,8 +944,9 @@ function runAutotest() {
       G.exitCar(); const left = b.leftT;
       explosion(b.x + 1, b.z, 7, 120, null); steps(1);
       const survived = !b.wreck && !b.dead && b.burning <= 0 && b.fallen;
-      b.leftT = 0.5; steps(1);
-      if (!(thrown && back && left > 100 && survived && b.dead)) bad.push(`${type}: thrown ${thrown} back on ${back} timer ${left && left.toFixed(0)} survived blast ${survived} despawned ${b.dead}`);
+      const cam0 = G.cam; G.frameN = (G.frameN || 0) + 1; updateCamera(1); G.frameN++; b.leftT = 0.5; steps(1); const stays = !b.dead; // in view: it waits
+      G.cam = null; steps(3.5); G.cam = cam0; G.frameN++; // out of sight: gone
+      if (!(thrown && back && left > 100 && survived && stays && b.dead)) bad.push(`${type}: thrown ${thrown} back on ${back} timer ${left && left.toFixed(0)} survived blast ${survived} waited while seen ${stays} despawned ${b.dead}`);
       G.god = false; if (P.inCar) G.exitCar(true); if (!b.dead) b.remove(); G.noSpawn = false;
     }
     reset(); tp(0, 25); const mb = new Car('motorbike', 1.5, 25, 0); mb.damage(9999, 0, 0, null); steps(7.5);

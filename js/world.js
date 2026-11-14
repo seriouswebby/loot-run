@@ -221,10 +221,10 @@ function segAABB(ax, az, bx, bz, c) {
   return t0;
 }
 W.segAABB = segAABB;
-W.segBlocked = function (ax, az, bx, bz, y) {
+W.segBlocked = function (ax, az, bx, bz, y, noTerrain) {
   const list = W.queryBox(Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
   for (const c of list) { if (c.noLos || (y > 0 && c.h <= y)) continue; if (segAABB(ax, az, bx, bz, c) >= 0) return true; }
-  return !!(W.terrainBlocks && W.terrainBlocks(ax, az, bx, bz));
+  return !noTerrain && !!(W.terrainBlocks && W.terrainBlocks(ax, az, bx, bz));
 };
 /* the roof you'd be standing on at height y (0 = street level) */
 W.floorAt = function (x, z, y) {
@@ -266,7 +266,7 @@ W.zoneAt = function (x, z) {
   if (Math.abs(x) <= W.HALF + 6 && Math.abs(z) <= W.HALF + 6) return 'street';
   if (W.inFunland && W.inFunland(x, z)) return 'funland';
   if (W.damAt && W.damAt(x, z) > 0.5) return 'dam';
-  if (W.inMillbrook && W.inMillbrook(x, z)) return W.nearCountyRoad(x, z, 6.5) ? 'country' : 'village';
+  if (W.inMillbrook && W.inMillbrook(x, z)) return 'village';
   if (W.inAirport && W.inAirport(x, z)) return 'airport';
   if (W.inTunnel && W.inTunnel(x, z)) return 'tunnel';
   if (W.inCounty && W.inCounty(x, z)) return W.nearCountyRoad(x, z, 6.5) ? 'country' : 'outskirts';

@@ -364,7 +364,8 @@ function copAI(c, dt) {
   a.shootCd -= dt; a.punchCd -= dt;
   const canShoot = Heat.level >= 2 && a.sees;
   if (a.mode === 'guard') {
-    c.vx = c.vz = 0;
+    c.vx = c.vz = 0; a.guardT = (a.guardT || 0) + dt;
+    if (a.guardT > 25 && !a.sees) { a.mode = 'chase'; return; }
     if (a.sees) c.facing = turnTo(c.facing, Math.atan2(tx - c.x, tz - c.z), dt * 6);
     if (canShoot && d < 38 && a.shootCd <= 0) copShoot(c, tx, tz, car);
     if (!car && d < 14) a.mode = 'chase';

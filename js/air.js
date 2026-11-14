@@ -134,7 +134,7 @@ const Choppers = {
       const taken = !p.heli || p.heli.dead || p.heli.pilot || dist(p.heli.x, p.heli.z, p.x, p.z) > 12;
       if (!taken) { p.t = 0; continue; }
       p.t += dt;
-      if (p.t > 90 && dist(P.x, P.z, p.x, p.z) > 60 && !this.list.some((h) => !h.dead && dist(h.x, h.z, p.x, p.z) < 8)) { p.heli = new Chopper(p.kind, p.x, p.z, p.yaw, { pad: p }); p.t = 0; }
+      if (p.t > 90 && dist(P.x, P.z, p.x, p.z) > 60 && !G.canSee(p.x, p.z, 10) && !this.list.some((h) => !h.dead && dist(h.x, h.z, p.x, p.z) < 8)) { p.heli = new Chopper(p.kind, p.x, p.z, p.yaw, { pad: p }); p.t = 0; }
     }
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i]; t.life -= dt; t.m.material.opacity = Math.max(0, t.life / 0.09);
@@ -152,8 +152,9 @@ const Choppers = {
     this.tracers.push({ m, life: 0.09 });
   },
   spawnAI() {
-    const t = G.body(), a = rand(0, TAU);
-    const h = new Chopper('police', t.x + Math.cos(a) * 140, t.z + Math.sin(a) * 140, a + Math.PI, { y: 30, pilot: 'ai' });
+    const t = G.body(); let a = rand(0, TAU);
+    for (let k = 0; k < 8 && G.canSee(t.x + Math.cos(a) * 160, t.z + Math.sin(a) * 160, 8, 30); k++) a += TAU / 8; // from behind you if it can
+    const h = new Chopper('police', t.x + Math.cos(a) * 160, t.z + Math.sin(a) * 160, a + Math.PI, { y: 30, pilot: 'ai' });
     h.ai = { sees: false, checkT: 0, lostT: 99, lastX: Heat.lastX, lastZ: Heat.lastZ, searchT: 0, orbit: rand(0, TAU), cd: 2.5, burst: 0, burstT: 0 };
     h.spotX = Heat.lastX; h.spotZ = Heat.lastZ;
     if (!this.announced) { this.announced = true; G.toast('Police helicopter inbound! Hide under the Forest Park trees or in an alley.', 'warn'); Sfx.sting('chopper'); Voice.radio([Voice.unit('air_inbound')], true); }

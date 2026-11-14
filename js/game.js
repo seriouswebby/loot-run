@@ -176,19 +176,19 @@ function spawnPolice() {
   const t = G.body(), L = Heat.level;
   const footT = [0, 1, 2, 3, 4, 5][L], carT = [0, 1, 1, 2, 3, 4][L];
   let foot = 0, cars = 0;
-  for (const n of G.npcs) if (n.kind === 'cop' && !n.down && n.ai.mode !== 'walk' && dist(n.x, n.z, t.x, t.z) < 140) foot++;
+  for (const n of G.npcs) if (n.kind === 'cop' && !n.down && n.ai.mode !== 'walk' && n.ai.mode !== 'guard' && dist(n.x, n.z, t.x, t.z) < 140) foot++;
   for (const c of G.cars) if (c.police && !c.wreck && c.ai && (c.ai.mode === 'pursuit' || c.ai.mode === 'perimeter' || c.ai.mode === 'parked') && dist(c.x, c.z, t.x, t.z) < 160) cars++;
   if (cars < carT) {
-    const cands = W.nodes.filter((n) => { const d = dist(n.x, n.z, t.x, t.z); return d > 60 && d < 130; }), hid = cands.filter((n) => !G.canSee(n.x, n.z, 4));
+    const cands = W.nodes.filter((n) => { const d = dist(n.x, n.z, t.x, t.z); return d > 60 && d < 130 && carFree(n.x, n.z, 6); }), hid = cands.filter((n) => !G.canSee(n.x, n.z, 4));
     if (cands.length) {
-      const n = pick(hid.length ? hid : cands), nb = W.nodes[pick(n.adj)];
+      const n = hid.length ? pick(hid) : cands.reduce((a, b) => (dist(a.x, a.z, t.x, t.z) > dist(b.x, b.z, t.x, t.z) ? a : b)), nb = W.nodes[pick(n.adj)];
       const car = new Car('police', n.x, n.z, Math.atan2(t.x - n.x, t.z - n.z));
       car.driver = 'ai'; car.ai = { mode: 'pursuit', stuckT: 0, revT: 0 }; car.siren = true; car.v = 10;
       if (nb) car.ai.node = nb.id;
     }
   }
   if (foot < footT && G.playerZone !== 'highway' && G.playerZone !== 'air' && G.npcs.filter((n) => n.kind === 'cop').length < 12) {
-    const p = randomSidewalkPoint(t.x, t.z, 38, 75, true, true) || randomSidewalkPoint(t.x, t.z, 38, 65, true);
+    const p = randomSidewalkPoint(t.x, t.z, 38, 80, true, true);
     if (p) spawnCop(p.x, p.z, 'chase');
   }
 }
@@ -201,10 +201,11 @@ function onZoneChange(prev, now) {
   let exits = [];
   if (now === 'alley' && G.curAlley) exits = G.curAlley.exits;
   if (now === 'forest') exits = W.forestExits.map((e) => ({ x: e.out[0], z: e.out[1] }));
-  if (!exits.length) return;
+  if (!exits.length || G.time < (Heat.perimT || 0)) return;
+  Heat.perimT = G.time + 20;
   let n = 0;
   for (const e of exits) {
-    if (dist(e.x, e.z, t.x, t.z) < 14) continue;
+    if (dist(e.x, e.z, t.x, t.z) < 14 || G.canSee(e.x, e.z, 2)) continue; // they come round the corner, not out of thin air
     if (G.npcs.filter((c) => c.kind === 'cop').length >= 12) break;
     for (let k = 0; k < (Heat.level >= 3 ? 2 : 1); k++) spawnCop(e.x + rand(-2, 2), e.z + rand(-2, 2), 'chase');
     if (!n) Voice.radio(['dispatch/perimeter', Voice.placeKey(t.x, t.z)], true);
@@ -819,6 +820,7 @@ const Story = {
     if (s.t === 'spawnTruck') {
       const p = W.places.bankLot;
       if (a.car && !a.car.dead) a.car.remove();
+      for (const c of G.cars) if (!c.dead && c !== G.player.inCar && dist(c.x, c.z, p.x, p.z) < 6) c.remove(); // a car parked in its bay
       const car = new Car('armored', p.x, p.z, -Math.PI / 2, { parked: true, mission: true, persistent: true });
       car.locked = true; a.car = car;
       this.advance(); return;
@@ -897,7 +899,7 @@ const Story = {
   },
   fail(reason, quiet) {
     const a = this.active; if (!a) return;
-    if (a.car && !a.car.dead && G.player.inCar !== a.car) a.car.remove();
+    if (a.car && !a.car.dead && G.player.inCar !== a.car) { if (a.car.wreck || a.car.burning > 0) { a.car.mission = false; a.car.persistent = false; } else a.car.remove(); }
     if (a.target && !a.target.dead) a.target.remove();
     this.clearRings();
     this.active = null;
@@ -1019,7 +1021,7 @@ function updatePopulation(dt) {
     const d = dist(n.x, n.z, t.x, t.z);
     const unseen = () => !G.canSee(n.x, n.z, 1) || d > 340;
     if (n.kind === 'ped' && n.ai.mode !== 'vera') {
-      const keep = n.ai.park ? Strollers.keep(n, t) : d <= 170;
+      const keep = n.ai.park ? Strollers.keep(n, t) && !n.ai.lost : d <= 170;
       if (!keep && unseen()) n.remove(); else if (!n.ai.park) peds++;
     }
     if (n.kind === 'cop') {

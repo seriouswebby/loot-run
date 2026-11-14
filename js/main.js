@@ -392,7 +392,7 @@ G.canSee = function (x, z, r, y) {
   const cp = cam.position, d = Math.hypot(x - cp.x, z - cp.z);
   if (G.scene.fog && d > G.scene.fog.far) return false;
   if (cp.y - W.groundAt(cp.x, cp.z) > 30) return true; // from high up you see over the rooftops
-  return !W.segBlocked(cp.x, cp.z, x, z, 3);
+  return !W.segBlocked(cp.x, cp.z, x, z, 3, true) && !W.terrainBlocks(cp.x, cp.z, x, z, cp.y - W.groundAt(cp.x, cp.z), (y || 1) + 0.5); // hills, from the camera's own height
 };
 
 /* ---------------- camera ---------------- */

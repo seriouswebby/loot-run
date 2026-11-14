@@ -27,8 +27,8 @@ W.inCounty = (x, z) => Math.abs(x) > W.BOUND + 0.5 || z < -W.BOUND - 0.5;
     { name: 'Orchard Road', pts: [[R.x, -460], [650, -460], [780, -460], [1050, -460], [E, -460]] },
     { name: 'Harbor Lane', pts: [[R.x, R.z], [R.x, 180], [R.x + 40, 300]] },
     { name: 'Coast Road', pts: [[E, 0], [E, 300]] },
-    { name: 'Funland Drive', pts: [[700, 18], [735, 46], [735, 82]] },
-    { name: 'Main Street', pts: [[650, -460], [650, -345]] },
+    { name: 'Funland Drive', pts: [[700, 18], [735, 46], [735, 77]] },
+    { name: 'Main Street', pts: [[650, -460], [650, -352]] },
   ];
   // land kept clear for things built on top of the county later
   W.RESERVE = [

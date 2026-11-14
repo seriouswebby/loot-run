@@ -265,7 +265,7 @@ class Car {
     if (this.hp <= 0 && this.burning <= 0) {
       this.hp = 0; this.burning = 6.5;
       if (this.driver === 'player') G.toast('Your car is on fire — get out!', 'warn');
-      if (this.driver === 'ai' && this.ai) { this.ai.mode = 'dead'; G.ejectDriver(this); }
+      if (this.driver === 'ai' && this.ai) { const empty = this.ai.mode === 'roadblock' || this.ai.mode === 'parked'; this.ai.mode = 'dead'; if (!empty) G.ejectDriver(this); this.driver = null; }
     }
   }
   /* push panel vertices in around the impact, crack the glass, maybe knock a bumper off */
@@ -354,7 +354,7 @@ class Car {
     }
     if (this.wreck) { this.wreckT -= dt; if (Math.random() < 0.25) Puffs.add(this.x + rand(-0.6, 0.6), 1.2, this.z + rand(-0.6, 0.6), rand(-0.3, 0.3), rand(1, 1.8), rand(-0.3, 0.3), 1.2, 4, 3.5, pick(['#2b2b2b', '#454545']), 0.6, 1); }
     // pedal bikes left lying around (or abandoned) vanish after 2 minutes
-    if (this.T.pedal && this.leftT > 0 && !this.driver) { this.leftT -= dt; if (this.leftT <= 0) { this.remove(); return; } }
+    if (this.T.pedal && this.leftT > 0 && !this.driver) { this.leftT -= dt; if (this.leftT <= 0) { if (G.canSee(this.x, this.z, 2)) this.leftT = 3; else { this.remove(); return; } } }
     if (this.alarmT > 0) { this.alarmT -= dt; this.honkT -= dt; if (this.honkT <= 0) { this.honkT = 0.6; Sfx.honk(this.x, this.z); } }
     if (this.bar) {
       const on = this.siren && !this.wreck, ph = Math.floor(G.time * 6) % 2;
@@ -702,7 +702,7 @@ const Roadblocks = {
     for (let i = this.list.length - 1; i >= 0; i--) {
       const rb = this.list[i];
       const d = dist(rb.x, rb.z, P.x, P.z);
-      if ((Heat.level === 0 && d > 70) || d > 260) { this.removeRB(rb); this.list.splice(i, 1); }
+      if (((Heat.level === 0 && d > 70) || d > 260) && (!G.canSee(rb.x, rb.z, 16) || d > 420)) { this.removeRB(rb); this.list.splice(i, 1); }
     }
     if (Heat.level < 2 || !P.inCar || G.playerZone !== 'highway') { this.timer = Math.max(this.timer, 4); return; }
     this.timer -= dt;
@@ -715,7 +715,9 @@ const Roadblocks = {
     if (Math.abs(vt) < 6) return false;
     const sg = Math.sign(vt);
     let s = s0 + sg * 150, rp = W.ringPoint(s), tries = 0;
-    while (rp.arc && tries++ < 20) { s += sg * 20; rp = W.ringPoint(s); }
+    while ((rp.arc || G.canSee(rp.x, rp.z, 16)) && tries++ < 8) { s += sg * 25; rp = W.ringPoint(s); }
+    if (rp.arc || G.canSee(rp.x, rp.z, 16)) return false; // nowhere out of sight ahead: try again in a moment
+    for (const c of G.cars) if (!c.dead && c !== car && !c.mission && !c.persistent && dist(c.x, c.z, rp.x, rp.z) < 18) c.remove(); // clear the traffic out of the way
     const nx = -rp.tz, nz = rp.tx;
     const rb = { x: rp.x, z: rp.z, cars: [], cops: [], props: [] };
     const slots = [-12.5, -7.5, -2.5, 2.5, 7.5, 12.5], gap = randi(0, 5);
@@ -747,7 +749,7 @@ const Roadblocks = {
     for (const c of rb.cars) if (G.player.inCar !== c) c.remove();
     for (const p of rb.props) G.scene.remove(p);
     if (rb.spike) rb.spike.life = 0;
-    for (const c of rb.cops) if (!c.dead) c.remove();
+    for (const c of rb.cops) if (!c.dead && c.ai.mode === 'guard') c.remove(); // cops who left their post to chase you stay in the chase
   },
   clear() { for (const rb of this.list) this.removeRB(rb); this.list.length = 0; },
 };

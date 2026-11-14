@@ -399,6 +399,7 @@ const Strollers = {
     const a = p.ai, list = (a.area && a.area.list) || []; let best = null, bd = 1e9;
     for (const nd of list) { const d = dist(p.x, p.z, nd.x, nd.z); if (d < bd) { bd = d; best = nd; } }
     if (!best) { a.park = false; a.mode = 'walk'; a.block = W.nearestBlock(p.x, p.z); pedTarget(p); return; }
+    if (bd > 25) { a.lost = true; a.mode = 'park'; a.node = best; a.tx = p.x; a.tz = p.z; a.waitT = 999; return; } // too far to find the way back
     a.mode = 'park'; a.node = best; a.prev = null; a.tx = best.x; a.tz = best.z; a.waitT = 0;
   },
 };
@@ -491,10 +492,10 @@ function buildMillbrook(trees) {
   // the sidewalks people stroll, crossing Main Street twice, and the square
   const nodes = {}, N = (k, x, z, w) => (nodes[k] = { k, x, z, links: [], w: w || 1.2 });
   for (const [s, x] of [['w', mx - 9], ['e', mx + 9]]) for (const z of [-448, -420, -392, -368, -349]) N(s + z, x, z);
-  N('sqW', mx - 14, -340, 2); N('sqE', mx + 14, -340, 2);
+  N('sqW', mx - 14, -340, 2); N('sqE', mx + 14, -340, 2); N('sqS', mx, -334.6, 1);
   const links = [], link = (a, b) => { nodes[a].links.push(nodes[b]); nodes[b].links.push(nodes[a]); links.push([nodes[a], nodes[b]]); };
   for (const s of ['w', 'e']) { link(s + -448, s + -420); link(s + -420, s + -392); link(s + -392, s + -368); link(s + -368, s + -349); }
-  link('w-420', 'e-420'); link('w-368', 'e-368'); link('w-349', 'sqW'); link('e-349', 'sqE'); link('sqW', 'sqE');
+  link('w-420', 'e-420'); link('w-368', 'e-368'); link('w-349', 'sqW'); link('e-349', 'sqE'); link('sqW', 'sqS'); link('sqS', 'sqE');
   M.area = Strollers.add({ name: 'millbrook', cx: mx, cz: (M.minZ + M.maxZ) / 2, R: 90, cap: 12, nodes, links });
   W.places.millbrook = { id: 'millbrook', name: 'Millbrook', x: mx, z: -470 };
   W.districtLabels.push({ x: mx, z: M.maxZ + 18, text: 'MILLBROOK', col: '#f1e3c4' });
