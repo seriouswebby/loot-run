@@ -140,7 +140,10 @@ class PVeh {
       // (a tank's tracks resist the hull sliding sideways, not it turning: it skid-steers)
       const yw = c.T.tank ? 0 : 1, vx = lv.x + (av.y * rz - av.z * ry) * yw, vy = lv.y + (av.z * rx - av.x * rz) * yw, vz = lv.z + (av.x * ry - av.y * rx) * yw;
       const vLong = vx * wf.x + vy * wf.y + vz * wf.z, vLat = vx * wr.x + vy * wr.y + vz * wr.z;
-      const mu = mu0 * (hb && !w.front ? 0.5 : 1), N = Fs, cap = mu * N, stopF = Math.abs(vLong) * (m / nW) / dt; // no more than it takes to stop the wheel's share
+      // (on the throttle a bike's weight shifts onto its driven back wheel, so that tyre can put the power down; its tyres
+      // don't pitch it, and the front keeps its grip so you can still steer on the gas)
+      const xfer = this.bike && !w.front && thr > 0 && vF > -0.6 ? 0.85 * thr * clamp((maxV - vF) / 2.5, 0, 1) : 0;
+      const mu = mu0 * (hb && !w.front ? 0.5 : 1), N = Fs * (1 + xfer), cap = mu * N, stopF = Math.abs(vLong) * (m / nW) / dt; // no more than it takes to stop the wheel's share
       // drive (40/60 front/rear; a bike's back wheel), brakes (a bike's split evenly), reverse, rolling resistance, handbrake lock
       let Fx = 0;
       const share = this.bike ? (w.front ? 0 : 1) : (w.front ? 0.4 : 0.6) / 2, bshare = this.bike ? 0.5 : share;

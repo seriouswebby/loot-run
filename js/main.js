@@ -849,7 +849,7 @@ function poseRider(P, bike, dt) {
   rg.root.visible = true;
   rg.root.position.set(bike.x - fx * 0.2, seat + (bike.y || 0) + W.groundAt(bike.x, bike.z), bike.z - fz * 0.2);
   rg.root.rotation.set(0, bike.h, 0);
-  rg.body.rotation.set(0.3, 0, bike.mesh.rotation.z); rg.body.position.set(0, 0, 0);
+  rg.body.rotation.set(0.3, 0, bike.phys ? bike.lean || 0 : bike.mesh.rotation.z); rg.body.position.set(0, 0, 0); // (a physics bike's mesh carries the body's whole rotation: its lean is kept apart)
   const pedal = bike.T.pedal ? (G.time * Math.abs(bike.v) * 1.2) : 0;
   rg.legL.rotation.x = -1.25 + Math.sin(pedal) * 0.45; rg.legR.rotation.x = -1.25 - Math.sin(pedal) * 0.45;
   rg.armL.rotation.x = rg.armR.rotation.x = -1.15;

@@ -1120,6 +1120,9 @@ function updatePopulation(dt) {
     if (c.persistent || mine || c.mission) continue;
     if (c.ai && c.ai.mode === 'roadblock') continue;
     if (d > 250 && unseen) { c.remove(); continue; }
+    // a driver that keeps wedging itself at the same spot (slid off the road behind a barrier, say) is quietly
+    // replaced once you can't see it, as traffic is anyway
+    if (c.driver === 'ai' && c.ai && (c.ai.revN || 0) >= 3 && G.time - c.ai.revAt < 10 && unseen) { c.remove(); continue; }
     if (c.driver === 'ai' && c.ai && (c.ai.mode === 'traffic' || c.ai.mode === 'patrol')) traffic++;
     else if (c.parked && d < 170) parked++;
   }

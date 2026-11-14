@@ -774,6 +774,7 @@ function runAutotest() {
       else { veh = new Car(type, 0, -W.HWY + 7.5, Math.PI / 2); tp(0, -W.HWY - 5); G.enterCar(veh); Input.keys.KeyW = true; Input.keys.KeyD = true; for (let i = 0; i < 90; i++) frame(); Input.keys.KeyW = false; for (let i = 0; i < 60; i++) frame(); Input.keys.KeyD = false; G.remount = null; for (let i = 0; i < 400 && P.tumble; i++) frame(); G.remount = null; G.exitCar(); }
       for (const c of G.cars) if (c !== veh && !c.persistent) c.remove(); G.cars = G.cars.filter((c) => !c.dead);
       Input.keys.KeyW = true; for (let i = 0; i < 60; i++) frame(); Input.keys.KeyW = false;
+      for (let i = 0; i < 30 && (P.y > 0 || P.vault); i++) frame(); for (let i = 0; i < 30; i++) frame(); // (a walk that ends stepping onto the median settles first)
       if (!upright()) { const rg = P.rig; bad.push(`${type}: root ${rg.root.rotation.x.toFixed(2)},${rg.root.rotation.z.toFixed(2)} body ${rg.body.rotation.x.toFixed(2)},${rg.body.rotation.y.toFixed(2)},${rg.body.rotation.z.toFixed(2)} pos ${rg.body.position.y.toFixed(2)},${rg.body.position.z.toFixed(2)} y ${rg.root.position.y.toFixed(2)} [P.y ${P.y.toFixed(2)} inCar ${!!P.inCar} ragdoll ${!!P.ragdoll} tumble ${!!P.tumble} jumping ${P.jumping} vault ${!!P.vault} hurt ${(G.hurtLog || []).join(',')}]`); }
       if (veh.remove) veh.remove();
     }
@@ -1459,7 +1460,8 @@ function runAutotest() {
       const r = soak(0, -W.HWY - 22, 120); Weather.set = realReset; Weather.set('clear', true);
       if (r.hurt || r.stuck > 1 || r.offroad > 2) out.push(kind + ' ' + JSON.stringify(r));
     }
-    return !out.length || out.join(' | ');
+    const log = (G.stuckLog || []).join(' ; '); G.stuckLog = [];
+    return !out.length || out.join(' | ') + ' :: ' + log.slice(0, 1500);
   });
   T('physics police: on the same route a physics cruiser keeps about as close as an arcade one, without wrecking itself', () => {
     if (!Phys.ready) return 'SKIP';
@@ -1517,7 +1519,7 @@ function runAutotest() {
       let minUp = 1, t100 = -1; Input.keys.KeyW = true;
       const vCap = Math.min(20, bk.T.maxV * 0.8); // (0-72 km/h, or 80% of a pedal bike's best)
       for (let i = 0; i < 60 * 4 && t100 < 0; i++) { step(STEP); minUp = Math.min(minUp, upOf(bk)); if (bk.v > vCap) t100 = i / 60; }
-      const vTop = bk.v;
+      const vTop = bk.v; Input.keys.KeyW = false; // (off the gas for the turn: flat out it would cross the highway into the barrier)
       // weave: it turns, leans the way it turns, and stays up
       const h0 = bk.h; Input.keys.KeyA = true; let lean = 0; for (let i = 0; i < 40; i++) { step(STEP); minUp = Math.min(minUp, upOf(bk)); lean = Math.max(lean, Math.abs(bk.lean || 0)); } Input.keys.KeyA = false;
       const turned = Math.abs(angDiff(h0, bk.h));
@@ -1538,6 +1540,12 @@ function runAutotest() {
       if (upAgain < 0.95 || !rides) bad.push(type + ': picked up, up ' + upAgain.toFixed(2) + ' rides off ' + rides + ' (' + bk.v.toFixed(1) + ' m/s, riding ' + (P.inCar === bk) + ', wheels ' + (bk.phys ? bk.phys.contacts : '-') + ', up ' + upOf(bk).toFixed(2) + ', h ' + bk.h.toFixed(2) + ')');
       if (P.inCar) G.exitCar(true); bk.remove(); G.noSpawn = false;
     }
+    // the rider leans with the bike whichever way it's heading (the mesh's own Euler angles carry its heading too)
+    { reset(); G.noSpawn = true; const sx = W.rp(3) + 2.5, sz = W.rp(5) - 6; for (const c of G.cars.slice()) if (!c.persistent && dist(c.x, c.z, sx, sz) < 60) c.remove();
+      // (heading south down a city street: the mesh's Euler angles read about pi here)
+      const bk = new Car('motorbike', sx, sz, Math.PI); tp(sx + 1.5, sz); G.enterCar(bk); steps(0.3); Input.keys.KeyW = true; steps(0.6); const hg = bk.h; Input.keys.KeyA = true; steps(0.4); Input.keys.KeyW = Input.keys.KeyA = false; poseRider(P, bk, STEP);
+      const rl = P.rig.body.rotation.z, gasTurn = Math.abs(angDiff(hg, bk.h)); if (Math.abs(rl - (bk.lean || 0)) > 0.05) bad.push('rider leans ' + rl.toFixed(2) + ' on a bike leaning ' + (bk.lean || 0).toFixed(2));
+      info.push('on the gas it turned ' + gasTurn.toFixed(2) + ' rad in 0.4 s at ' + bk.v.toFixed(0) + ' m/s'); if (gasTurn < 0.3) bad.push('barely steers with the throttle open'); G.exitCar(true); bk.remove(); G.noSpawn = false; }
     for (const k of ['KeyW', 'KeyA', 'KeyS']) Input.keys[k] = false;
     return !bad.length || bad.join(' | ') + ' || ' + info.join(' | ');
   });
