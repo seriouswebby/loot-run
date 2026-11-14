@@ -7,8 +7,8 @@
 
 function buildHeliMesh(kind) {
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-  const police = kind === 'police';
-  const main = police ? '#1d3557' : '#f4f1ea', trim = police ? '#f1f1ee' : '#0b6e99';
+  const police = kind === 'police', attack = kind === 'attack';
+  const [main, trim] = { police: ['#1d3557', '#f1f1ee'], news: ['#c1121f', '#fdf0d5'], attack: ['#4b5320', '#2f3518'] }[kind] || ['#f4f1ea', '#0b6e99'];
   const add = (w, h, d, x, y, z, c, par) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(c)); m.position.set(x, y, z); m.castShadow = true; (par || body).add(m); return m; };
   add(2.3, 1.9, 4.2, 0, 1.75, 0, main);
   add(2.1, 1.3, 1.3, 0, 1.85, 2.55, '#22303c');
@@ -18,6 +18,8 @@ function buildHeliMesh(kind) {
   for (const sx of [-1, 1]) { add(0.16, 0.16, 4.2, sx * 1.05, 0.1, 0.2, '#2b2b2e'); add(0.12, 0.75, 0.12, sx * 1.05, 0.45, 1.2, '#2b2b2e'); add(0.12, 0.75, 0.12, sx * 1.05, 0.45, -0.8, '#2b2b2e'); }
   add(0.5, 0.35, 0.5, 0, 2.85, 0, '#2b2b2e');
   add(0.42, 0.3, 0.42, 0, 0.72, 2.4, '#dddddd');
+  if (police || attack) add(0.14, 0.14, 1.3, 0, 0.75, 3.1, '#1b1b1e'); // nose gun
+  if (attack) { add(4.4, 0.16, 1.0, 0, 1.55, 0.3, trim); for (const sx of [-1, 1]) { add(0.45, 0.45, 1.6, sx * 2.1, 1.25, 0.4, '#2b2b2e'); add(0.1, 0.1, 0.9, sx * 2.1, 1.25, 1.5, '#1b1b1e'); } }
   const rotor = new THREE.Group(); rotor.position.set(0, 3.0, 0); body.add(rotor);
   const b1 = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.07, 0.38), lam('#1b1b1e')); b1.castShadow = true; rotor.add(b1);
   const b2 = b1.clone(); b2.rotation.y = Math.PI / 2; rotor.add(b2);
@@ -48,9 +50,9 @@ class Chopper {
   constructor(kind, x, z, yaw, o) {
     o = o || {};
     this.kind = kind; this.police = kind === 'police';
-    this.armed = this.police || !!o.armed; this.ammo = this.armed ? 500 : 0; // police choppers carry a nose gun
+    this.armed = this.police || kind === 'attack' || !!o.armed; this.ammo = kind === 'attack' ? 900 : this.armed ? 500 : 0; // police choppers and gunships carry a nose gun
     this.x = x; this.z = z; this.y = o.y || 0; this.vx = 0; this.vz = 0; this.vy = 0; this.yaw = yaw || 0;
-    this.maxHp = this.police ? 320 : 240; this.hp = this.maxHp;
+    this.maxHp = kind === 'attack' ? 440 : this.police ? 320 : 240; this.hp = this.maxHp; this.top = kind === 'attack' ? 44 : 36;
     this.rotor = this.y > 0 ? 1 : 0; this.spin = 0; this.pilot = o.pilot || null; this.pad = o.pad || null;
     this.falling = 0; this.dead = false; this.tilt = 0; this.roll = 0; this.leaving = false; this.lastHit = null;
     this.m = buildHeliMesh(kind); G.scene.add(this.m.root);
@@ -307,7 +309,7 @@ function flyHeli(h, dt, fw, st, up, down) {
     const fx = Math.sin(h.yaw), fz = Math.cos(h.yaw);
     h.vx += fx * fw * 26 * dt; h.vz += fz * fw * 26 * dt;
     const k = Math.exp(-0.75 * dt); h.vx *= k; h.vz *= k;
-    const sp = Math.hypot(h.vx, h.vz); if (sp > 36) { h.vx *= 36 / sp; h.vz *= 36 / sp; }
+    const sp = Math.hypot(h.vx, h.vz), top = h.top || 36; if (sp > top) { h.vx *= top / sp; h.vz *= top / sp; }
   } else { h.vx = damp(h.vx, 0, 6, dt); h.vz = damp(h.vz, 0, 6, dt); }
   h.x += h.vx * dt; h.z += h.vz * dt;
   const lim = W.OUT + 30; h.x = clamp(h.x, -lim, lim); h.z = clamp(h.z, -lim, W.SHORE + 120);
@@ -343,6 +345,7 @@ G.enterHeli = function (h) {
   const P = G.player;
   if (h.dead || h.falling > 0 || h.pilot) return false;
   if (h.police) G.crime('copHeli', h.x, h.z, {});
+  else if (h.kind === 'attack') G.crime('milHeli', h.x, h.z, {});
   else G.crime('carTheft', h.x, h.z, {});
   h.pilot = 'player'; h.pad = null;
   P.inHeli = h; P.rig.root.visible = false; P.vx = P.vz = 0;

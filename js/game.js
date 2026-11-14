@@ -230,6 +230,7 @@ const CRIMES = {
   carjack: { n: 1, cap: 2, label: 'Carjacking' }, carTheft: { n: 1, cap: 2, label: 'Car theft' }, atm: { n: 1, cap: 2, label: 'ATM break-in' },
   assaultCop: { n: 1, cap: 2, label: 'Assaulting an officer' }, copKO: { n: 1, cap: 5, label: 'Officer down' },
   copCar: { n: 1, cap: 5, label: 'Stole a police cruiser' }, copHeli: { n: 2, cap: 5, label: 'Stole a police helicopter' },
+  milHeli: { n: 2, cap: 5, label: 'Stole a military gunship' },
   explosion: { n: 1, cap: 3, hear: 70, label: 'Explosion' }, atmBlast: { n: 1, cap: 3, hear: 60, label: 'Blew open an ATM' },
 };
 /* The police only hear about a crime if someone reports it: a cop who sees or hears it, a security camera,

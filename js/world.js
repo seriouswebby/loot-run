@@ -91,6 +91,7 @@ W.ZONES = {
   forest: { label: 'FOREST PARK', hint: 'Hidden · slow · 4 exits · trees block choppers', sight: 16, evade: 0.5, car: 0.75 },
   rooftop: { label: 'ROOFTOP', hint: 'Cops on the street can\'t reach or see you · choppers can', sight: 8, evade: 0.8, car: 1 },
   outskirts: { label: 'OUTSKIRTS', hint: 'Open ground', sight: 60, evade: 1.1, car: 0.95 },
+  airport: { label: 'AIRPORT', hint: 'Wide open · aircraft to steal · runway = drag strip', sight: 85, evade: 1.25, car: 1.45 },
   country: { label: 'COUNTRY ROAD', hint: 'Open road · fast · cops see you coming', sight: 75, evade: 1.15, car: 1.35 },
   beach: { label: 'BEACH', hint: 'Open sand · no cover', sight: 70, evade: 1.2, car: 0.8 },
   air: { label: 'AIRBORNE', hint: 'Fast · every cop can see you', sight: 90, evade: 1.5, car: 1 },
@@ -239,6 +240,7 @@ W.zoneAt = function (x, z) {
   if (W.onHighway(x, z)) return 'highway';
   if (z > W.HWY + W.HWH + 0.5) return 'beach';
   if (Math.abs(x) <= W.HALF + 6 && Math.abs(z) <= W.HALF + 6) return 'street';
+  if (W.inAirport && W.inAirport(x, z)) return 'airport';
   if (W.inCounty && W.inCounty(x, z)) return W.nearCountyRoad(x, z, 6.5) ? 'country' : 'outskirts';
   for (const e of W.edges) if (!e.hwy && segPointDist(x, z, W.nodes[e.a].x, W.nodes[e.a].z, W.nodes[e.b].x, W.nodes[e.b].z) <= 6.5) return 'street';
   return 'outskirts';
@@ -970,6 +972,13 @@ function buildMinimap() {
   g.fillStyle = '#41583a'; g.fillRect(0, 0, SZ, SZ);
   g.fillStyle = '#d9c58f'; g.fillRect(0, Z(W.HWY + W.HWH + 0.6), SZ, (W.SHORE - W.HWY - W.HWH - 0.6) * k);
   g.fillStyle = '#2c6f93'; g.fillRect(0, Z(W.SHORE), SZ, SZ);
+  // the airport: tarmac, runway paint, fence
+  if (W.AIRPORT) {
+    const A = W.AIRPORT, R = (q, col) => { g.fillStyle = col; g.fillRect(X(q.minX), Z(q.minZ), (q.maxX - q.minX) * k, (q.maxZ - q.minZ) * k); };
+    R(A.fence, '#4d6347'); R(A.lot, '#6f6d68'); R(A.apron, '#7a7873'); R(A.milApron, '#6d7065'); for (const t of A.taxi) R(t, '#7a7873'); R(A.runway, '#55575c');
+    g.fillStyle = '#f1f1ee'; for (let x = A.runway.minX + 70; x < A.runway.maxX - 70; x += 50) g.fillRect(X(x), Z(300) - 1, 30 * k, 2);
+    g.strokeStyle = '#9aa0a6'; g.lineWidth = 1.5; g.strokeRect(X(A.fence.minX), Z(A.fence.minZ), (A.fence.maxX - A.fence.minX) * k, (A.fence.maxZ - A.fence.minZ) * k);
+  }
   // the county: fields and woods
   for (const f of W.fields || []) { g.fillStyle = '#8a7350'; g.fillRect(X(f.x0), Z(f.z0), (f.x1 - f.x0) * k, (f.z1 - f.z0) * k); g.fillStyle = f.crop; for (let r = f.z0 + 3; r < f.z1 - 2; r += 6) g.fillRect(X(f.x0 + 3), Z(r), (f.x1 - f.x0 - 6) * k, 1.6 * k); }
   g.fillStyle = '#2f4a2a'; for (const t of W.trees) if (W.inCounty && W.inCounty(t.x, t.z)) { g.beginPath(); g.arc(X(t.x), Z(t.z), 2.2 * k, 0, TAU); g.fill(); }

@@ -16,7 +16,8 @@ W.inCounty = (x, z) => Math.abs(x) > W.BOUND + 0.5 || z < -W.BOUND - 0.5;
   const H = W.HWY, B = W.BOUND, E = W.OUT - 45, R = { x: B + 120, z: 0 };
   W.ROUNDABOUT = R;
   W.COUNTY_ROADS = [
-    { name: 'Airport Road', pts: [[-H, 0], [-B - 60, 0], [-560, -25], [-700, -25], [-820, 0], [-E, 0]] },
+    { name: 'Airport Road', pts: [[-H, 0], [-B - 60, 0], [-560, -25], [-650, -25], [-700, -25], [-820, 0], [-E, 0]] },
+    { name: 'Terminal Drive', pts: [[-650, -25], [-650, 66]] },
     { name: 'Lakeside Drive', pts: [[-100, -H], [-100, -B - 60], [-60, -560], [-40, -700], [-90, -900], [-100, -1050], [-100, -E]] },
     { name: 'East Road', pts: [[H, 0], [R.x, R.z], [700, 18], [850, 18], [1000, 0], [E, 0]] },
     { name: 'County Line', pts: [[-E, 0], [-E, -E], [-820, -E], [-100, -E], [R.x, -E], [E, -E], [E, -460], [E, 0]] },
@@ -57,11 +58,12 @@ function buildCounty() {
   const free = (x, z, pad) => W.inCounty(x, z) && Math.abs(x) < W.OUT - 6 && z > -W.OUT + 6 && z < W.HWY - 30
     && !W.inReserve(x, z, pad || 0) && !W.nearCountyRoad(x, z, 12 + (pad || 0))
     && !W.buildings.some((b) => x > b.minX - 4 - (pad || 0) && x < b.maxX + 4 + (pad || 0) && z > b.minZ - 4 - (pad || 0) && z < b.maxZ + 4 + (pad || 0));
+  buildAirport(OP);
   countyFarms(OP, free);
   const trees = countyWoods(free);
   countyTreeMeshes(trees);
   OP.build(S);
-  W.benchSpots = [['county', W.ROUNDABOUT.x + 40, W.ROUNDABOUT.z - 6.5], ['woods', -500, -520]];
+  W.benchSpots = [['county', W.ROUNDABOUT.x + 40, W.ROUNDABOUT.z - 6.5], ['woods', -500, -520], ['airport', -650, 140]];
   rnd = saved;
 }
 
@@ -189,4 +191,80 @@ function countyTreeMeshes(trees) {
       m.castShadow = true; m.receiveShadow = true; S.add(m);
     }
   }
+}
+
+/* ---------------- the airport ----------------
+   North gate off Airport Road → parking → terminal (with a currency exchange to rob) → apron with helipads →
+   taxiways → a 710 m east-west runway along the coast. The military side to the west has hangars and gunships. */
+W.AIRPORT = {
+  fence: { minX: -1275, maxX: -476, minZ: 42, maxZ: 368 }, gate: -650,
+  runway: { minX: -1250, maxX: -540, minZ: 277, maxZ: 323 },
+  apron: { minX: -900, maxX: -500, minZ: 134, maxZ: 216 },
+  milApron: { minX: -1268, maxX: -960, minZ: 150, maxZ: 238 },
+  taxi: [{ minX: -572, maxX: -548, minZ: 214, maxZ: 279 }, { minX: -892, maxX: -868, minZ: 214, maxZ: 279 }, { minX: -1032, maxX: -1008, minZ: 236, maxZ: 279 }],
+  lot: { minX: -760, maxX: -540, minZ: 50, maxZ: 86 },
+};
+W.inAirport = (x, z) => { const f = W.AIRPORT.fence; return x > f.minX && x < f.maxX && z > f.minZ && z < f.maxZ; };
+function buildAirport(OP) {
+  const A = W.AIRPORT, f = A.fence, r = A.runway;
+  const pave = (q, y) => GB.asphalt.rect(q.minX, q.minZ, q.maxX, q.maxZ, y || 0.035, 12);
+  // tarmac
+  pave(A.lot); pave(A.apron); pave(A.milApron); for (const t of A.taxi) pave(t, 0.036);
+  GB.asphalt.rect(r.minX, r.minZ, r.maxX, r.maxZ, 0.037, 12);
+  GB.asphalt.rect(-560, 86, -540, 134, 0.035, 12); // service road from the lot round to the apron
+  // runway paint: edge lines, dashed centre line, threshold bars and touchdown blocks at both ends
+  const cz = (r.minZ + r.maxZ) / 2, wl = (x0, z0, x1, z1) => GB.white.rect(x0, z0, x1, z1, 0.05, 1);
+  wl(r.minX, r.minZ + 1, r.maxX, r.minZ + 2); wl(r.minX, r.maxZ - 2, r.maxX, r.maxZ - 1);
+  for (let x = r.minX + 70; x < r.maxX - 70; x += 50) wl(x, cz - 0.5, x + 30, cz + 0.5);
+  for (const [x0, dir] of [[r.minX + 6, 1], [r.maxX - 6, -1]]) {
+    for (let k = -3.5; k <= 3.5; k++) { const z = cz + k * 5; wl(Math.min(x0, x0 + dir * 30), z - 0.9, Math.max(x0, x0 + dir * 30), z + 0.9); }
+    for (const s of [-1, 1]) for (let i = 0; i < 3; i++) { const x = x0 + dir * (90 + i * 60); wl(Math.min(x, x + dir * 22), cz + s * 9 - 1.2, Math.max(x, x + dir * 22), cz + s * 9 + 1.2); }
+  }
+  // taxiway centre lines (yellow) and edge lights along the runway
+  for (const t of A.taxi) { const x = (t.minX + t.maxX) / 2; OP.box(x, 0.06, (t.minZ + t.maxZ) / 2, 0.5, 0.02, t.maxZ - t.minZ, '#f2c230'); }
+  for (let x = r.minX; x <= r.maxX; x += 30) for (const z of [r.minZ - 1.5, r.maxZ + 1.5]) OP.box(x, 0.25, z, 0.35, 0.5, 0.35, x === r.minX || x >= r.maxX - 29 ? '#ff4040' : '#fff6c0');
+  // fence, with the gate on Airport Road and a gap where the road comes in
+  const post = (x, z) => OP.box(x, 1.2, z, 0.15, 2.4, 0.15, '#7a7f84');
+  const fenceLine = (x0, z0, x1, z1) => {
+    const L = dist(x0, z0, x1, z1), n = Math.ceil(L / 5);
+    for (let i = 0; i <= n; i++) post(x0 + (x1 - x0) * i / n, z0 + (z1 - z0) * i / n);
+    OP.box((x0 + x1) / 2, 2.3, (z0 + z1) / 2, Math.max(0.06, Math.abs(x1 - x0)), 0.08, Math.max(0.06, Math.abs(z1 - z0)), '#8d9297');
+    OP.box((x0 + x1) / 2, 1.2, (z0 + z1) / 2, Math.max(0.03, Math.abs(x1 - x0)), 2.2, Math.max(0.03, Math.abs(z1 - z0)), '#b8bec4');
+    W.addCollider(Math.min(x0, x1) - 0.15, Math.min(z0, z1) - 0.15, Math.max(x0, x1) + 0.15, Math.max(z0, z1) + 0.15, 2.4, 'fence', true);
+  };
+  fenceLine(f.minX, f.minZ, A.gate - 9, f.minZ); fenceLine(A.gate + 9, f.minZ, f.maxX, f.minZ);
+  fenceLine(f.minX, f.maxZ, f.maxX, f.maxZ); fenceLine(f.minX, f.minZ, f.minX, f.maxZ); fenceLine(f.maxX, f.minZ, f.maxX, f.maxZ);
+  OP.box(A.gate - 9, 1.6, f.minZ, 1.2, 3.2, 1.2, '#d9d4c7'); OP.box(A.gate + 9, 1.6, f.minZ, 1.2, 3.2, 1.2, '#d9d4c7');
+  addSign(A.gate, 4.2, f.minZ - 0.7, 'n', 'CITY AIRPORT', '#1d3557', '#ffffff', 10, 1.8, 'TERMINAL · CARGO · AIR BASE');
+  OP.box(A.gate, 4.2, f.minZ, 10.4, 2.1, 0.3, '#1d3557');
+  // parking lot bays (cars park here like they do on city streets)
+  for (let x = A.lot.minX + 8; x < A.lot.maxX - 8; x += 4) for (const [z, h] of [[A.lot.minZ + 5, 0], [A.lot.maxZ - 5, Math.PI]]) { GB.white.rect(x - 0.08, z - 2.6, x + 0.08, z + 2.6, 0.05, 1); if (Math.abs(x - A.gate) > 12 && rnd() < 0.5) W.curbSpots.push({ x: x + 2, z, h }); }
+  // the terminal: a long glass hall with an entrance canopy and a currency exchange desk out front
+  const T = addBuilding(-650, 110, 140, 34, 12, 'glass');
+  OP.box(-650, 6.5, 90, 40, 0.5, 8, '#e8ecef'); for (const x of [-668, -632]) OP.box(x, 3.25, 87, 0.5, 6.5, 0.5, '#c9d1d6');
+  addSign(-650, 9.2, 92.9, 'n', 'CITY AIRPORT', '#f1f3f5', '#1d3557', 18, 2.6, 'DEPARTURES · ARRIVALS');
+  P.box(-610, 1.6, 92.95, 10, 2.4, 0.12, '#a9d6e5'); addSign(-610, 3.6, 92.85, 'n', 'SKYCASH EXCHANGE', '#0b3d2e', '#7cf7a8', 9, 1.4);
+  const fx = makeRob('fxdesk', 'store', 'SkyCash Exchange', -610, 89.5, { hold: 5, cash: [1100, 1900], base: 1, cool: 220 });
+  addAlarm(fx, -603.5, 92.8, 'n'); addCam(fx, -620, 92.6, 'n', 0.3, 15); addCam(fx, -600, 92.6, 'n', -0.3, 15);
+  W.places.airport = { id: 'airport', name: 'City Airport', x: -650, z: 72 };
+  void T;
+  // control tower: a shaft with a glass cab and a roof
+  addBuilding(-520, 110, 8, 8, 26, 'concrete');
+  OP.box(-520, 28, 110, 12, 4, 12, '#8fc1d6'); OP.box(-520, 30.4, 110, 13, 0.8, 13, '#3c4655'); OP.box(-520, 31.6, 110, 0.3, 2.4, 0.3, '#cccccc');
+  W.addCollider(-526, 104, -514, 116, 31, 'building');
+  // windsock
+  OP.box(-500, 4, 250, 0.2, 8, 0.2, '#dddddd'); OP.box(-500, 7.8, 251.5, 0.9, 0.9, 3, '#ff7b00');
+  // civil helipads on the apron, military side to the west: hangars, gunship pads, a guard hut
+  helipad(-525, 150, 'news', Math.PI); helipad(-525, 178, 'tour', Math.PI);
+  for (const [x, w] of [[-1220, 56], [-1150, 56], [-1080, 56]]) {
+    addBuilding(x, 125, w, 40, 14, 'metal');
+    OP.box(x, 6, 145.15, w - 8, 11, 0.3, '#2b2f33'); OP.box(x, 13.2, 145.2, w - 6, 1.2, 0.4, '#5f676b');
+  }
+  addSign(-1150, 16, 145.4, 's', 'AIR BASE 7', '#2f3518', '#e9edc9', 12, 2.2, 'RESTRICTED AREA');
+  helipad(-990, 175, 'attack', -Math.PI / 2); helipad(-990, 210, 'attack', -Math.PI / 2);
+  addBuilding(-950, 140, 6, 5, 3.2, 'concrete');
+  // inner fence between the civil apron and the air base (with a gap on the taxiway)
+  const mx = -930; for (let z = 150; z < 236; z += 5) post(mx, z);
+  OP.box(mx, 1.2, 193, 0.03, 2.2, 86, '#b8bec4'); W.addCollider(mx - 0.15, 150, mx + 0.15, 236, 2.4, 'fence', true);
+  W.zoneRects = (W.zoneRects || []).concat([{ zone: 'airport', ...f }]);
 }

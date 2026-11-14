@@ -37,8 +37,9 @@ function runAutotest() {
   T('world built', () => {
     const a = W.alleys[0], ac = W.zoneAt((a.minX + a.maxX) / 2, (a.minZ + a.maxZ) / 2);
     const ok = W.N === 8 && W.blocks.length >= 55 && W.nodes.length > 80 && W.robs.length >= 25 && W.cams.length >= 12 && W.alarms.length >= 11 && W.alleys.length >= 20
-      && W.places.shops.length === 3 && W.places.helipads.length === 2
-      && W.zoneAt(W.FOREST_C.x, W.FOREST_C.z) === 'forest' && W.zoneAt(0, -W.HWY) === 'highway' && ac === 'alley' && W.zoneAt(-25, -5) === 'street' && W.zoneAt(60, W.SHORE - 6) === 'beach';
+      && W.places.shops.length === 3 && W.places.helipads.length === 6 && W.places.helipads.filter((p) => p.kind === 'attack').length === 2
+      && W.zoneAt(W.FOREST_C.x, W.FOREST_C.z) === 'forest' && W.zoneAt(0, -W.HWY) === 'highway' && ac === 'alley' && W.zoneAt(-25, -5) === 'street' && W.zoneAt(60, W.SHORE - 6) === 'beach'
+      && W.zoneAt(-650, 160) === 'airport' && !!W.places.fxdesk;
     return ok || `blocks ${W.blocks.length} nodes ${W.nodes.length} robs ${W.robs.length} cams ${W.cams.length} alarms ${W.alarms.length} alleys ${W.alleys.length} shops ${W.places.shops.length} pads ${W.places.helipads.length} alleyZone ${ac}`;
   });
   T('player cannot walk through a building', () => {
@@ -438,6 +439,24 @@ function runAutotest() {
     let near = 0; for (let i = 0; i < 1500 && !near; i++) { step(STEP); near = G.cars.filter((c) => c.police && !c.wreck && dist(c.x, c.z, P.x, P.z) < 90).length; }
     G.god = false;
     return (routed && near > 0) || `routed ${routed} (path ${path.length}) police cars nearby ${near}`;
+  });
+  T('airport: drive in through the gate, rob the exchange, steal a gunship and fire its gun', () => {
+    reset(); G.noSpawn = true; const A = W.AIRPORT;
+    const car = new Car('sedan', A.gate + 2.5, -20, 0); tp(A.gate + 2.5, -16); G.enterCar(car);
+    Input.keys.KeyW = true; let inside = false; for (let i = 0; i < 300 && !inside; i++) { step(STEP); inside = W.zoneAt(car.x, car.z) === 'airport'; }
+    Input.keys.KeyW = false; G.exitCar(true); car.remove();
+    // the currency exchange is a normal hold-E robbery
+    const fx = W.places.fxdesk; tp(fx.x, fx.z - 1.2); const cash0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(fx) + 0.6);
+    const robbed = G.S.cash > cash0 + 900;
+    Heat.clear(); clearPolice();
+    // a gunship on the air base pad: steal it, take off, fire the nose gun
+    const pad = W.places.helipads.find((p) => p.kind === 'attack'), h = pad.heli; tp(pad.x + 4, pad.z);
+    const stole = G.enterHeli(h) && h.armed && h.kind === 'attack';
+    Input.keys.Space = true; steps(2.5); Input.keys.Space = false;
+    const ammo0 = h.ammo; Input.mdown = true; G.aimX = h.x + 10; G.aimZ = h.z; steps(0.5); Input.mdown = false;
+    const fired = h.ammo < ammo0 && h.y > 3;
+    G.exitHeli(true); Heat.clear(); clearPolice(); G.noSpawn = false;
+    return (inside && robbed && stole && fired) || `drove in ${inside} robbed ${robbed} (cash +${G.S.cash - cash0}) stole gunship ${stole} fired ${fired} (alt ${h.y.toFixed(1)})`;
   });
   T('county: no trees standing on the country roads', () => {
     const bad = [];

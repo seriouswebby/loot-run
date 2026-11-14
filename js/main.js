@@ -91,7 +91,7 @@ const UI = {
     // weapon + items
     const w = WEAPONS[P.weapon], car = P.inCar, heli = P.inHeli, items = [];
     if (heli) {
-      this.set('weapon', heli.police ? 'POLICE CHOPPER' : 'TOUR CHOPPER');
+      this.set('weapon', ({ police: 'POLICE CHOPPER', tour: 'TOUR CHOPPER', news: 'NEWS CHOPPER', attack: 'GUNSHIP' })[heli.kind] || 'CHOPPER');
       this.set('ammo', (heli.armed ? 'GUN ' + heli.ammo + (G.heliAim ? ' · LOCKED · ' : ' · ') : '') + 'HULL ' + Math.round(clamp(heli.hp / heli.maxHp, 0, 1) * 100) + '% · ALT ' + Math.round(heli.y) + ' M');
       items.push('SPACE climb', '⇧ descend', G.S.parachute ? 'F bail out (chute ×' + G.S.parachute + ')' : 'F land & exit');
       if (heli.armed) items.unshift('CLICK fire');
@@ -177,6 +177,7 @@ function drawMap(ctx, size, cx, cz, span, full) {
   label(pl.chop.x, pl.chop.z, 'R', '#ff7b29');
   label(pl.hospital.x, pl.hospital.z, '+', '#ff5a5f');
   label(pl.police.x, pl.police.z, 'P', '#6fa8ff');
+  if (pl.airport) label(pl.airport.x, pl.airport.z - (full ? 24 : 10), '✈', '#ffffff');
   if (Story.available()) label(pl.hideout.x, pl.hideout.z, 'V', '#ffd23f'); else label(pl.hideout.x, pl.hideout.z, 'K', '#d9c9a8');
   // cameras nearby
   if (!full) for (const c of W.cams) if (c.deadT <= 0 && inView(c.x, c.z) && dist(c.x, c.z, t.x, t.z) < 70) {
@@ -1054,6 +1055,9 @@ function demoSetup(kind) {
   }
   else if (kind === 'county') { G.camMode = 'chase'; P.x = W.ROUNDABOUT.x + 60; P.z = W.ROUNDABOUT.z - 3; P.facing = CAM.yaw = Math.PI / 2; CAM.pitch = 0.3; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'countyiso') { P.x = -560; P.z = -560; CAM.zoomIso = 90; CAM.curIso = 90; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'airport') { G.camMode = 'chase'; P.x = -650; P.z = 62; P.facing = CAM.yaw = 0; CAM.pitch = 0.18; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'airbase') { G.camMode = 'chase'; P.x = -960; P.z = 192; P.facing = CAM.yaw = -Math.PI / 2 - 0.3; CAM.pitch = 0.2; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'airportiso') { P.x = -760; P.z = 210; CAM.zoomIso = 230; CAM.curIso = 230; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }
