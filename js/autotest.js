@@ -144,9 +144,10 @@ function runAutotest() {
   });
   T('alley: cops cover the exits', () => {
     reset(); Heat.add(2, 5, 'test'); const a = W.alleys.find((k) => !k.dead);
-    const before = G.npcs.filter((n) => n.kind === 'cop').length;
-    G.playerZone = 'street'; tp((a.minX + a.maxX) / 2, (a.minZ + a.maxZ) / 2); steps(0.3);
-    const after = G.npcs.filter((n) => n.kind === 'cop').length;
+    const ax = (a.minX + a.maxX) / 2, az = (a.minZ + a.maxZ) / 2, near = () => G.npcs.filter((n) => n.kind === 'cop' && !n.dead && dist(n.x, n.z, ax, az) < 60).length;
+    const before = near(); // count only cops around this alley: ones elsewhere may despawn meanwhile
+    G.playerZone = 'street'; tp(ax, az); steps(0.3);
+    const after = near();
     return (G.playerZone === 'alley' && after > before) || `zone ${G.playerZone} cops ${before}->${after}`;
   });
   T('lose heat hiding in Forest Park', () => {
@@ -368,9 +369,21 @@ function runAutotest() {
     reset(); tp(0, -W.HWY - 3); Heat.add(2, 5, 'test');
     const car = new Car('sedan', 0, -W.HWY + 7.5, Math.PI / 2); G.enterCar(car); car.v = 25; car.vx = 25;
     const cop = spawnCop(9, -W.HWY + 7.5, 'chase'); cop.hp = 20; G.god = true;
+    const partner = spawnCop(14, -W.HWY - 6, 'idle'); partner.ai.mode = 'idle'; // a witness: crimes only count when someone reports them
     for (let i = 0; i < 60; i++) step(STEP);
     G.god = false;
     return (cop.down && Heat.level >= 3) || `cop down ${cop.down} heat ${Heat.level}`;
+  });
+  T('crimes need a witness: nobody around, nobody calls it in', () => {
+    reset(); G.noSpawn = true; const x = -235, z = -W.HWY - 4;
+    for (const n of G.npcs.slice()) if (dist(n.x, n.z, x, z) < 70) n.remove();
+    tp(x, z); const car = new Car('sedan', x + 3, z, 0, { parked: true }); car.locked = true;
+    G.enterCar(car); const quiet = Heat.level === 0; G.exitCar(true); car.remove();
+    const sedan = new Car('sedan', x + 3, z + 5, 0, { parked: true }); sedan.locked = true;
+    const p = spawnPed(x - 5, z + 5, W.nearestBlock(x, z), 1, 1); p.ai.mode = 'idle'; G.crimeCd = {}; tp(x, z + 5);
+    G.enterCar(sedan); const seen = Heat.level >= 1;
+    if (P.inCar) G.exitCar(true); sedan.remove(); p.remove(); Heat.clear(); G.noSpawn = false;
+    return (quiet && seen) || `unwitnessed theft heat ${quiet ? 'none' : 'added'}; witnessed theft reported ${seen}`;
   });
   T('rampage: small crimes keep pushing heat past 2', () => {
     reset(); tp(0, 25); Heat.add(2, 5, 'test'); spawnCop(P.x + 8, P.z, 'chase');

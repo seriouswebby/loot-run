@@ -307,7 +307,7 @@ G.heliLanded = (h) => h.y - roofAt(h.x, h.z, 1.5) < 0.6;
 G.enterHeli = function (h) {
   const P = G.player;
   if (h.dead || h.falling > 0 || h.pilot) return false;
-  if (h.police) Heat.add(2, 5, 'Stole a police helicopter');
+  if (h.police) G.crime('copHeli', h.x, h.z, {});
   else G.crime('carTheft', h.x, h.z, {});
   h.pilot = 'player'; h.pad = null;
   P.inHeli = h; P.rig.root.visible = false; P.vx = P.vz = 0;

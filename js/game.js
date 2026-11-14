@@ -221,15 +221,19 @@ function witness(x, z, hearR) {
     if (n.kind !== 'ped' || n.down || n.dead || n.ai.mode === 'vera') continue;
     const d = dist(n.x, n.z, x, z);
     if (d > 1 && d < 22 && !W.segBlocked(n.x, n.z, x, z)) return 'A witness called it in';
+    if (hearR && d > 1 && d < hearR * 0.6) return 'Someone heard it and called the cops';
   }
   return null;
 }
 const CRIMES = {
   assault: { n: 1, cap: 2, label: 'Assault' }, mug: { n: 1, cap: 2, label: 'Mugging' }, gunfire: { n: 1, cap: 2, hear: 40, label: 'Shots fired' },
   carjack: { n: 1, cap: 2, label: 'Carjacking' }, carTheft: { n: 1, cap: 2, label: 'Car theft' }, atm: { n: 1, cap: 2, label: 'ATM break-in' },
-  assaultCop: { n: 1, cap: 2, force: true, label: 'Assaulting an officer' }, copKO: { n: 1, cap: 5, force: true, label: 'Officer down' },
-  copCar: { n: 1, cap: 5, force: true, label: 'Stole a police cruiser' }, explosion: { n: 1, cap: 3, force: true, label: 'Explosion' },
+  assaultCop: { n: 1, cap: 2, label: 'Assaulting an officer' }, copKO: { n: 1, cap: 5, label: 'Officer down' },
+  copCar: { n: 1, cap: 5, label: 'Stole a police cruiser' }, copHeli: { n: 2, cap: 5, label: 'Stole a police helicopter' },
+  explosion: { n: 1, cap: 3, hear: 70, label: 'Explosion' }, atmBlast: { n: 1, cap: 3, hear: 60, label: 'Blew open an ATM' },
 };
+/* The police only hear about a crime if someone reports it: a cop who sees or hears it, a security camera,
+   a passer-by in sight (or in earshot of gunfire and explosions), or a conscious officer you just attacked. */
 G.crime = function (type, x, z, o) {
   if (type === 'assaultCop' && o && o.ko) type = 'copKO';
   const c = CRIMES[type]; if (!c) return;
@@ -237,11 +241,15 @@ G.crime = function (type, x, z, o) {
   if (type === 'gunfire') panic(x, z, 30);
   const now = G.time;
   if (G.crimeCd[type] && now - G.crimeCd[type] < (type === 'copKO' ? 0.2 : 3)) return;
-  const why = c.force ? 'Police' : witness(x, z, c.hear);
-  if (!why) return;
+  const victimSaw = o && (o.radio || (o.victim && o.victim.kind === 'cop' && !o.victim.down && !o.victim.dead));
+  const why = victimSaw ? 'The officer radioed it in' : witness(x, z, c.hear);
+  if (!why) {
+    if (!(G.quietT > now) && Heat.level === 0) { G.quietT = now + 10; G.toast('No witnesses — nobody called that in.', 'good'); }
+    return;
+  }
   G.crimeCd[type] = now;
   const before = Heat.level;
-  Heat.add(c.n, c.cap, c.label + (c.force ? '' : ' — ' + why.toLowerCase()));
+  Heat.add(c.n, c.cap, c.label + ' — ' + why.toLowerCase());
   if (c.cap <= 2 && Heat.level === before && before >= c.cap) {
     G.rampage = (G.rampage || 0) + 1; G.rampageT = 15;
     if (G.rampage >= 3) { G.rampage = 0; Heat.add(1, 4, 'Rampage'); }
@@ -804,10 +812,11 @@ G.blastLoot = function (x, z, r) {
   for (const rb of W.robs) {
     if (rb.cd > 0) continue;
     const d = dist(rb.x, rb.z, x, z);
-    if (rb.kind === 'atm' && d < r) { Heat.add(1, 3, 'Blew open an ATM'); G.completeRob(rb); }
+    if (rb.kind === 'atm' && d < r) { G.crime('atmBlast', rb.x, rb.z, {}); G.completeRob(rb); }
     if (rb.kind === 'bank' && d < 5) { Heat.add(5, 5, 'Blew the vault door'); G.completeRob(rb); }
   }
-  for (const al of W.alarms) if (al.cutT <= 0 && dist(al.wx, al.wz, x, z) < r) { al.cutT = 200; Heat.add(1, 2, 'Alarm box blown up'); }
+  // a blown-up alarm box is destroyed before it can ring (the bang itself may still be reported)
+  for (const al of W.alarms) if (al.cutT <= 0 && dist(al.wx, al.wz, x, z) < r) al.cutT = 200;
   for (const c of W.cams) if (c.deadT <= 0 && dist(c.x, c.z, x, z) < r + 3) G.destroyCam(c);
 };
 G.throwGrenade = function () {
