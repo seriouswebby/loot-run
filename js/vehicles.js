@@ -397,7 +397,7 @@ class Car {
       this.bar[0].material.color.set(on && ph ? 0xff2020 : 0x551111);
       this.bar[1].material.color.set(on && !ph ? 0x2050ff : 0x111155);
     }
-    if (this.phys) { this.phys.pose(); if (this.rider) this.rider.visible = false; return; }
+    if (this.phys) { this.phys.pose(); if (this.rider) this.rider.visible = this.driver === 'ai'; return; }
     // airborne (or the ground just rose up to meet a falling car): fall, and land properly either way
     if (this.y > 0 || this.yv !== 0) {
       this.yv -= 22 * dt; this.y += this.yv * dt; this.airT = (this.airT || 0) + dt;

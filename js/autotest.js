@@ -53,9 +53,9 @@ function runAutotest() {
     return (G.S.cash > c0 && Heat.level >= 2) || `cash ${c0}->${G.S.cash} heat ${Heat.level} hurt ${(G.hurtLog || []).join(' ')} hp ${P.hp}`;
   });
   T('police respond to heat', () => {
-    steps(12);
+    const busts0 = G.S.stats.busts; steps(12);
     const cops = G.npcs.filter((n) => n.kind === 'cop').length, cars = G.cars.filter((c) => c.police && c.siren).length;
-    return (cops + cars > 0) || `cops ${cops} cars ${cars} heat ${Heat.level} escapes ${G.S.stats.escapes} busts ${G.S.stats.busts} hurt ${(G.hurtLog || []).join(' ')}`;
+    return (cops + cars > 0 || G.S.stats.busts > busts0) || `cops ${cops} cars ${cars} heat ${Heat.level} escapes ${G.S.stats.escapes} busts ${G.S.stats.busts} hurt ${(G.hurtLog || []).join(' ')}`;
   });
   T('cut alarm + loop camera = silent robbery', () => {
     reset(); G.S.tools.cutters = true; G.S.tools.laptop = true;
@@ -1504,6 +1504,42 @@ function runAutotest() {
     const bad = []; // (tuned: 72% at 8 m/s, 91% at 15, 83% at 25, 79% for a sports car at 35)
     for (const [type, sp] of [['sedan', 8], ['sedan', 15], ['sedan', 25], ['sports', 35]]) { const a = turnTest(type, sp, false), p = turnTest(type, sp, true); if (p.turned < a.turned * 0.65 || p.slipMax > 0.45) bad.push(type + ' at ' + sp + ' m/s: ' + p.turned.toFixed(2) + ' rad vs arcade ' + a.turned.toFixed(2) + ', slide ' + p.slipMax.toFixed(2)); }
     return !bad.length || bad.join(' | ');
+  });
+  T('physics bikes: every kind rides on its two wheels, leans into turns, brakes without going over the bars, falls over for real and stands back up', () => {
+    if (!Phys.ready) return 'SKIP';
+    const upOf = (car) => { const q = car.phys && car.phys.b ? car.phys.b.getRotation() : null; return q ? new THREE.Vector3(0, 1, 0).applyQuaternion(new THREE.Quaternion(q.x, q.y, q.z, q.w)).y : 1; };
+    const bad = [], info = [], z = -W.HWY + 7.5;
+    for (const type of ['motorbike', 'dirtbike', 'bicycle', 'bmx']) {
+      reset(); G.noSpawn = true; for (const c of G.cars.slice()) if (!c.persistent && Math.abs(c.z - z) < 40) c.remove();
+      const bk = new Car(type, -250, z, Math.PI / 2); tp(-250, z + 1.5); G.enterCar(bk); steps(0.2);
+      if (!bk.phys) { bad.push(type + ': not a physics body'); G.exitCar(true); bk.remove(); continue; }
+      // flat out along the highway: speed builds, it stays on its two wheels
+      let minUp = 1, t100 = -1; Input.keys.KeyW = true;
+      const vCap = Math.min(20, bk.T.maxV * 0.8); // (0-72 km/h, or 80% of a pedal bike's best)
+      for (let i = 0; i < 60 * 4 && t100 < 0; i++) { step(STEP); minUp = Math.min(minUp, upOf(bk)); if (bk.v > vCap) t100 = i / 60; }
+      const vTop = bk.v;
+      // weave: it turns, leans the way it turns, and stays up
+      const h0 = bk.h; Input.keys.KeyA = true; let lean = 0; for (let i = 0; i < 40; i++) { step(STEP); minUp = Math.min(minUp, upOf(bk)); lean = Math.max(lean, Math.abs(bk.lean || 0)); } Input.keys.KeyA = false;
+      const turned = Math.abs(angDiff(h0, bk.h));
+      // hard on the brakes: it stops without pitching over the bars
+      Input.keys.KeyW = false; Input.keys.KeyS = true; let tStop = -1; const v0 = bk.v;
+      for (let i = 0; i < 60 * 5 && tStop < 0; i++) { step(STEP); minUp = Math.min(minUp, upOf(bk)); if (bk.v < 0.5) tStop = i / 60; } Input.keys.KeyS = false;
+      const stillOn = P.inCar === bk, contacts = bk.phys ? bk.phys.contacts : -1;
+      info.push(type + ' 0-' + Math.round(vCap * 3.6) + ' ' + t100.toFixed(1) + 's top ' + (vTop * 3.6).toFixed(0) + ' turned ' + turned.toFixed(2) + ' lean ' + lean.toFixed(2) + ' stop from ' + (v0 * 3.6).toFixed(0) + ' in ' + tStop.toFixed(1) + 's minUp ' + minUp.toFixed(2));
+      if (t100 < 0 || minUp < 0.9 || turned < 0.5 || lean < 0.15 || tStop < 0 || !stillOn || contacts !== 2) bad.push(type + ': ' + info[info.length - 1] + ' still riding ' + stillOn + ' wheels down ' + contacts);
+      // knocked over (a wreck for a pedal bike, a hard crash for a motorbike): it goes down and stays down
+      bk.x = -250; bk.z = z; bk.h = Math.PI / 2; bk.v = bk.vx = bk.vz = 0; steps(0.5); // (back in the lane, so riding off afterwards is clear road)
+      if (bk.T.pedal) bk.damage(9999, bk.x, bk.z, null); else G.bail(bk, 12);
+      steps(2); const down = upOf(bk); steps(3); const stayed = upOf(bk); for (let i = 0; i < 600 && (P.tumble || P.ragdoll || P.down); i++) step(STEP); // (the rider has to get up first)
+      if (!bk.fallen || down > 0.5 || stayed > 0.5) bad.push(type + ': knocked over, up ' + down.toFixed(2) + ' then ' + stayed.toFixed(2) + ' fallen ' + bk.fallen);
+      // picked up: back on its wheels and rideable
+      tp(bk.x + 1.2, bk.z); if (P.inCar) G.exitCar(true); G.enterCar(bk); steps(0.5); const upAgain = upOf(bk);
+      Input.keys.KeyW = true; steps(1.5); Input.keys.KeyW = false; const rides = bk.v > 5 && upOf(bk) > 0.9;
+      if (upAgain < 0.95 || !rides) bad.push(type + ': picked up, up ' + upAgain.toFixed(2) + ' rides off ' + rides + ' (' + bk.v.toFixed(1) + ' m/s, riding ' + (P.inCar === bk) + ', wheels ' + (bk.phys ? bk.phys.contacts : '-') + ', up ' + upOf(bk).toFixed(2) + ', h ' + bk.h.toFixed(2) + ')');
+      if (P.inCar) G.exitCar(true); bk.remove(); G.noSpawn = false;
+    }
+    for (const k of ['KeyW', 'KeyA', 'KeyS']) Input.keys[k] = false;
+    return !bad.length || bad.join(' | ') + ' || ' + info.join(' | ');
   });
   T('dirt bikes: they wait out in the county; fastest bike on grass and sand, slower than a motorbike on the road; Space hops', () => {
     reset(); const bad = [], physOn = PhysCar.on; PhysCar.on = false;

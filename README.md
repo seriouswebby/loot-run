@@ -32,7 +32,7 @@ Progress saves in your browser after every story job.
 | Click | | Tank: fire the main gun (the turret follows your aim) | |
 | K | | Physics traffic on/off (every car in play as a physics body; turn off if frames suffer) | |
 
-Cars drive on realistic handling when the physics engine has loaded (it comes from the internet): a Box3D body on sprung wheels with tyre grip, so they pitch, roll, ride up kerbs and slide. Every parked car, traffic car and police cruiser in play is a physics car too (at any range), so crashes are real collisions. Press L for the arcade handling for your own car, and K to turn the physics traffic off (both are remembered; offline, everything is arcade). Bikes always use the arcade handling.
+Cars drive on realistic handling when the physics engine has loaded (it comes from the internet): a Box3D body on sprung wheels with tyre grip, so they pitch, roll, ride up kerbs and slide. Every parked car, traffic car and police cruiser in play is a physics car too (at any range), so crashes are real collisions. Press L for the arcade handling for your own car, and K to turn the physics traffic off (both are remembered; offline, everything is arcade). Bikes (motorbikes, dirt bikes, pedal bikes and BMXs) are physics bodies too: two sprung wheels in line with the back one driven, leaning into turns; hit something hard and you go over the bars, and the bike falls over until someone picks it up.
 
 Planes and jets: W/S throttle, build speed on the runway, Space to pull up, Shift to dive, A/D to bank; land and brake (S) to get out. Click fires the gun on police choppers, gunships and fighter jets. Next to the county train, E climbs on; Space jumps off.
 

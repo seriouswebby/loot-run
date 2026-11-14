@@ -381,7 +381,7 @@ G.ejectDriver = function (car) {
 G.enterCar = function (car) {
   const P = G.player;
   if (car.wreck || car.dead || car.burning > 0) return false;
-  if (car.fallen) { car.fallen = false; car.hp = car.maxHp; car.v = 0; car.vx = car.vz = 0; }
+  if (car.fallen) { car.fallen = false; if (car.T.pedal) car.hp = car.maxHp; car.v = 0; car.vx = car.vz = 0; }
   car.leftT = 0; P.vault = null; P.chute = false; P.jumping = false; P.top = null;
   let msg = null;
   car.wasParked = car.parked || car.wasParked;
@@ -437,7 +437,7 @@ G.sellCar = function () {
 /* thrown off a bike in a hard crash. vx/vz = the bike's velocity just before the hit:
    the rider keeps most of it and goes over the bars, as a ragdoll when physics is running. */
 G.bail = function (car, impact, vx, vz) {
-  if (car.T.pedal) car.fallen = true;
+  if (car.T.pedal || car.phys) car.fallen = true; // (a riderless physics bike goes down for real; you pick it back up)
   if (vx == null) { vx = car.vx; vz = car.vz; }
   const sp = Math.hypot(vx, vz), dx = sp > 0.5 ? vx / sp : Math.sin(car.h), dz = sp > 0.5 ? vz / sp : Math.cos(car.h);
   const fly = sp * 0.72 + 1.5, lift = 3.5 + Math.min(6, impact * 0.2);

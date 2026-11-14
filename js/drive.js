@@ -13,19 +13,22 @@
 
    PhysCar manages them: the car you drive, and every parked car, traffic car and police cruiser in play (up to 80;
    parked ones sleep until something touches them). L switches your own car to the arcade handling; K turns the
-   physics traffic off. Bikes stay on the arcade model (balance, hops, bails). Without Box3D (offline, ?nophys) or with
-   ?arcade, every car uses the arcade model. */
+   physics traffic off. Bikes ride on two sprung wheels in line, the rear one driven; the rider (or the stand) holds
+   them upright and the lean you see is drawn on top, until one falls over for real. Without Box3D (offline, ?nophys)
+   or with ?arcade, every car and bike uses the arcade model. */
 
 class PVeh {
   constructor(car) {
-    const T = car.T, m = 1200 * T.mass, R = PhysCar.RIDE;
+    const T = car.T, m = 1200 * T.mass, R = PhysCar.RIDE, bike = !!T.bike;
     // the body's box runs from just above the wheels' bottoms to the top of the roof, so it lies right on its roof or side
-    const mesh = car.mesh, p0 = mesh.position.clone(), q0 = mesh.quaternion.clone();
+    // (a bike's box is the bike: its rider is thrown clear in a crash)
+    const mesh = car.mesh, p0 = mesh.position.clone(), q0 = mesh.quaternion.clone(), rider = car.rider && car.rider.parent === mesh ? car.rider : null;
+    if (rider) mesh.remove(rider);
     mesh.position.set(0, 0, 0); mesh.quaternion.identity(); mesh.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(mesh);
-    mesh.position.copy(p0); mesh.quaternion.copy(q0); mesh.updateMatrixWorld(true);
+    mesh.position.copy(p0); mesh.quaternion.copy(q0); if (rider) mesh.add(rider); mesh.updateMatrixWorld(true);
     const top = clamp(bb.max.y, 1.1, 3.4), hx = T.w / 2 * 0.9, hy = (top - 0.45) / 2, hz = T.len / 2 * 0.92, oy = 0.45 + hy - R;
     this.Q = new THREE.Quaternion(); this.V = new THREE.Vector3();
-    this.up = new THREE.Vector3(); this.fw = new THREE.Vector3(); this.rt = new THREE.Vector3(); this.wf = new THREE.Vector3(); this.wr = new THREE.Vector3();
+    this.up = new THREE.Vector3(); this.fw = new THREE.Vector3(); this.rt = new THREE.Vector3(); this.wf = new THREE.Vector3(); this.wr = new THREE.Vector3(); this.Q2 = new THREE.Quaternion();
     const b = Phys.body({ type: 'dynamic', position: { x: car.x, y: R + (car.y || 0), z: car.z }, rotation: this.yawQ(car.h),
       linearVelocity: { x: car.vx, y: Math.max(0, car.yv || 0), z: car.vz }, angularDamping: 0.35, linearDamping: 0.01 });
     // not the kinematic stand-ins for arcade cars (those contacts are the arcade's), nor the physics world's flat floor
@@ -37,10 +40,11 @@ class PVeh {
     for (const s of [-1, 1]) b.createSphere({ radius: 0.12, center: { x: 0, y: -0.16, z: s * hz * 0.75 }, density: (mass * 0.25) / (4.19 * 0.12 ** 3), friction: 0.3, filter });
     this.b = b; this.car = car; this.m = b.getMass(); this.dims = { hx, hy, hz, oy }; this.floorHit = false;
     const track = T.w / 2 * 0.86, base = T.len / 2 * 0.66;
-    this.wheels = [[-track, base, true], [track, base, true], [-track, -base, false], [track, -base, false]].map(([lx, lz, front]) => ({ lx, lz, front, l: PhysCar.L0 - 0.16, on: false, slip: 0 }));
+    this.wheels = (bike ? [[0, base, true], [0, -base, false]] : [[-track, base, true], [track, base, true], [-track, -base, false], [track, -base, false]]).map(([lx, lz, front]) => ({ lx, lz, front, l: PhysCar.L0 - 0.16, on: false, slip: 0 }));
+    this.bike = bike; this.full = bike ? 2 : 3; this.lean = 0; // (wheels down for "sitting on its wheels")
     this.inp = { thr: 0, steer: 0, hb: true, boost: false };
     this.g0 = W.groundAt(car.x, car.z); this.gvy = 0; this.airT = 0; this.wasAir = false; this.landing = null; this.upsideT = 0; this.steerA = 0; this.launch = null; this.restT = 0;
-    this.statX = this.statZ = 1e9; this.contacts = 4; this.sp = 0; this.last = null;
+    this.statX = this.statZ = 1e9; this.contacts = this.wheels.length; this.sp = 0; this.last = null;
     car.phys = this; PhysCar.list.add(this);
     this.ensureStatics(car.x, car.z, 0);
     if (Phys.kin.has(car)) { Phys.kill(Phys.kin.get(car)); Phys.kin.delete(car); }
@@ -77,12 +81,29 @@ class PVeh {
     this.water();
     this.oneWayWalls();
     const pos = b.getPosition(), q = b.getRotation(), lv = b.getLinearVelocity(), av = b.getAngularVelocity(), m = this.m, Gr = PhysCar.G;
-    if (!c.driver && this.contacts >= 3 && Math.hypot(lv.x, lv.y, lv.z) < 0.06 && Math.hypot(av.x, av.y, av.z) < 0.05 && !(c.burning > 0) && !this.onRamp) {
+    if (!c.driver && (this.bike && c.fallen ? this.floorHit : this.contacts >= this.full) && Math.hypot(lv.x, lv.y, lv.z) < 0.06 && Math.hypot(av.x, av.y, av.z) < 0.05 && !(c.burning > 0) && !this.onRamp) {
       this.idleT = (this.idleT || 0) + dt;
       if (this.idleT > 1) { b.setLinearVelocity({ x: 0, y: 0, z: 0 }); b.setAngularVelocity({ x: 0, y: 0, z: 0 }); b.setAwake(false); this.sleeping = true; this.write(); return; }
     } else this.idleT = 0;
     const Q = this.Q.set(q.x, q.y, q.z, q.w);
     const up = this.up.set(0, 1, 0).applyQuaternion(Q), fw = this.fw.set(0, 0, 1).applyQuaternion(Q), rt = this.rt.set(1, 0, 0).applyQuaternion(Q);
+    if (this.bike) {
+      // picked back up (or ridden off) while it lies on its side: stand it on its wheels
+      if (!c.fallen && Math.abs(rt.y) > 0.6 && Math.hypot(lv.x, lv.z) < 2) {
+        b.setTransform({ x: pos.x, y: PhysCar.RIDE + 0.05, z: pos.z }, this.yawQ(c.h)); b.setLinearVelocity({ x: 0, y: 0, z: 0 }); b.setAngularVelocity({ x: 0, y: 0, z: 0 });
+        this.write(); return;
+      }
+      // the rider (or the stand) holds it upright: the roll rate is steered back towards level (set directly, as a tank's
+      // yaw is: a spring stiff enough for a bike's small roll inertia would be unstable at 60 Hz). Knocked over, it goes down
+      // onto its side the same way, coming to rest at about 83 degrees on its bars and pedals (the box alone would roll on over)
+      const rr = av.x * fw.x + av.y * fw.y + av.z * fw.z, side = (this.fallSide = this.fallSide || (rt.y < 0 ? -1 : 1));
+      const rrWant = c.fallen ? side * 3.5 * (up.y - 0.12) : -rt.y * 10, d = (rrWant - rr) * (c.fallen ? 0.35 : 1);
+      if (!c.fallen) { this.fallSide = 0; b.setAngularVelocity({ x: av.x + fw.x * d, y: av.y + fw.y * d, z: av.z + fw.z * d }); }
+      else { // going down it only rolls (no spin on the spot); on its side it scrapes to a stop
+        const r2 = rr + d; b.setAngularVelocity({ x: fw.x * r2, y: fw.y * r2, z: fw.z * r2 });
+        if (this.floorHit) { const s = Math.hypot(lv.x, lv.z), k = s > 0 ? Math.max(0, 1 - 8 * dt / s) : 0; b.setLinearVelocity({ x: lv.x * k, y: lv.y, z: lv.z * k }); }
+      }
+    }
     // the tyres pull with the car's own acceleration; nitro is extra thrust on top (it isn't limited by grip)
     const lim = c.limits(this.inp.boost), maxV = lim.maxV, accel = c.limits(false).accel, thrust = this.inp.boost ? lim.accel - accel : 0;
     const fh = Math.hypot(fw.x, fw.z) || 1, vF = (lv.x * fw.x + lv.z * fw.z) / fh, sp = Math.hypot(lv.x, lv.z);
@@ -99,9 +120,11 @@ class PVeh {
     const zone = W.zoneAt(c.x, c.z), off = OFFROAD_ZONES.includes(zone);
     const mu0 = PhysCar.grip(c) * (chasing ? 1.15 : 1) * Weather.grip() * (off ? ((OFFROAD[c.type] || 0) > 1 ? 0.95 : 0.78) : 1) * (c.popped ? 0.75 : 1);
     let contacts = 0;
-    const kS = (m * Gr / 4) / 0.17, cS = 2 * 0.5 * Math.sqrt(kS * m / 4); // static sag 0.17 m, damping ratio 0.5
+    const nW = this.wheels.length, kS = (m * Gr / nW) / 0.17, cS = 2 * 0.5 * Math.sqrt(kS * m / nW); // static sag 0.17 m, damping ratio 0.5
+    const brk = this.bike ? 16 : 26; // (a bike braking as hard as a car would go over its bars)
     const ca = Math.cos(this.steerA), sa = Math.sin(this.steerA), L0 = PhysCar.L0;
-    for (const w of this.wheels) {
+    const down = this.bike && c.fallen; if (down) for (const w of this.wheels) { w.on = false; w.l = L0; w.slip = 0; } // (a fallen bike is off its wheels)
+    for (const w of down ? [] : this.wheels) {
       const Mx = pos.x + rt.x * w.lx + fw.x * w.lz - up.x * 0.12, My = pos.y + rt.y * w.lx + fw.y * w.lz - up.y * 0.12, Mz = pos.z + rt.z * w.lx + fw.z * w.lz - up.z * 0.12;
       const S = W.groundAt(Mx, Mz) - this.g0, d = (My - S) / Math.max(0.35, up.y), l = d - PhysCar.R;
       if (l >= L0) { w.on = false; w.l = L0; w.slip = 0; continue; }
@@ -111,36 +134,38 @@ class PVeh {
       // the wheel's heading: the fronts steer
       const wf = w.front ? this.wf.set(fw.x * ca + rt.x * sa, fw.y * ca + rt.y * sa, fw.z * ca + rt.z * sa) : this.wf.copy(fw);
       const wr = this.wr.crossVectors(up, wf).normalize(); // across the wheel
-      // contact patch velocity: v + w x r
-      const rx = Mx - pos.x, ry = My - d * up.y - pos.y, rz = Mz - pos.z;
+      // contact patch velocity: v + w x r (a bike's from its yaw alone: it balances by leaning, which is drawn, so its roll
+      // and pitch mustn't scrub the tyres; a narrow bike's small roll inertia would make that feedback unstable at 60 Hz)
+      const rx = this.bike ? fw.x * w.lz : Mx - pos.x, ry = this.bike ? fw.y * w.lz : My - d * up.y - pos.y, rz = this.bike ? fw.z * w.lz : Mz - pos.z;
       // (a tank's tracks resist the hull sliding sideways, not it turning: it skid-steers)
       const yw = c.T.tank ? 0 : 1, vx = lv.x + (av.y * rz - av.z * ry) * yw, vy = lv.y + (av.z * rx - av.x * rz) * yw, vz = lv.z + (av.x * ry - av.y * rx) * yw;
       const vLong = vx * wf.x + vy * wf.y + vz * wf.z, vLat = vx * wr.x + vy * wr.y + vz * wr.z;
-      const mu = mu0 * (hb && !w.front ? 0.5 : 1), N = Fs, cap = mu * N, stopF = Math.abs(vLong) * (m / 4) / dt; // no more than it takes to stop the wheel's share
-      // drive (40/60 front/rear), brakes, reverse, rolling resistance, handbrake lock
+      const mu = mu0 * (hb && !w.front ? 0.5 : 1), N = Fs, cap = mu * N, stopF = Math.abs(vLong) * (m / nW) / dt; // no more than it takes to stop the wheel's share
+      // drive (40/60 front/rear; a bike's back wheel), brakes (a bike's split evenly), reverse, rolling resistance, handbrake lock
       let Fx = 0;
-      const share = (w.front ? 0.4 : 0.6) / 2;
+      const share = this.bike ? (w.front ? 0 : 1) : (w.front ? 0.4 : 0.6) / 2, bshare = this.bike ? 0.5 : share;
       if (thr > 0) {
-        if (vF < -0.6) Fx = m * 26 * share;
+        if (vF < -0.6) Fx = m * brk * bshare;
         else Fx = m * accel * thr * share * clamp((maxV - vF) / 2.5, 0, 1);
       } else if (thr < 0) {
-        if (vF > 0.6) Fx = -m * 26 * share * -thr;
+        if (vF > 0.6) Fx = -m * brk * bshare * -thr;
         else Fx = -m * accel * 0.6 * share * -thr * clamp((maxV * 0.4 + vF) / 2, 0, 1);
-      } else Fx = -Math.sign(vLong) * Math.min(Math.abs(vLong) * m * 0.5, m * 4) / 4;
+      } else Fx = -Math.sign(vLong) * Math.min(Math.abs(vLong) * m * 0.5, m * 4) / nW;
       if (hb && !w.front) Fx = -Math.sign(vLong) * Math.min(cap * 0.85, stopF);
       if (c.burning > 0 || c.wreck) Fx = -Math.sign(vLong) * Math.min(cap, stopF);
       let Fy = -vLat * (cap / 1.0) * (c.T.tank && steer ? (Math.abs(vF) < 3 ? 0.12 : 0.28) : 1); // full grip at 1 m/s of sideways slip (a turning tank's tracks skid: a lot on the spot, some on the move)
       // the friction circle: what's left of the grip after driving or braking goes to cornering
       const tot = Math.hypot(Fx, Fy); if (tot > cap) { Fx *= cap / tot; Fy *= cap / tot; }
       w.slip = Math.abs(vLat) + (hb && !w.front ? Math.abs(vLong) * 0.3 : 0);
-      // tyre forces act a little below the centre of mass (a roll centre), suspension at the wheel
-      const ax = pos.x + rt.x * w.lx + fw.x * w.lz - up.x * 0.3, ay = pos.y + rt.y * w.lx + fw.y * w.lz - up.y * 0.3, az = pos.z + rt.z * w.lx + fw.z * w.lz - up.z * 0.3;
+      // tyre forces act a little below the centre of mass (a roll centre; a bike's level with it, so they steer it without
+      // rolling or pitching it), suspension at the wheel
+      const rc = this.bike ? 0 : 0.3, ax = pos.x + rt.x * w.lx + fw.x * w.lz - up.x * rc, ay = pos.y + rt.y * w.lx + fw.y * w.lz - up.y * rc, az = pos.z + rt.z * w.lx + fw.z * w.lz - up.z * rc;
       b.applyForce({ x: wf.x * Fx + wr.x * Fy, y: wf.y * Fx + wr.y * Fy, z: wf.z * Fx + wr.z * Fy }, { x: ax, y: ay, z: az }, true);
       b.applyForce({ x: up.x * Fs, y: up.y * Fs, z: up.z * Fs }, { x: Mx, y: My, z: Mz }, true);
     }
     // stability assist (keyboard steering is all-or-nothing): nudge the yaw towards what the steering asks for, within
     // what the tyres could give; off with the handbrake, so you can still throw it into a slide
-    if (contacts >= 3 && !hb && Math.abs(vF) > 3 && !c.T.tank) {
+    if (contacts >= this.full && !hb && Math.abs(vF) > 3 && !c.T.tank) {
       const wb = 2 * this.wheels[0].lz, rMax = mu0 * Gr * 1.6 / Math.abs(vF), rDes = clamp(vF * Math.tan(this.steerA) / wb, -rMax, rMax);
       const r = av.x * up.x + av.y * up.y + av.z * up.z, I = m * (c.T.len * c.T.len + c.T.w * c.T.w) / 12 * 0.8, tq = clamp((rDes - r) * I * 5, -m * 9, m * 9);
       b.applyTorque({ x: up.x * tq, y: up.y * tq, z: up.z * tq }, true);
@@ -151,16 +176,16 @@ class PVeh {
       b.setAngularVelocity({ x: av.x + up.x * d, y: av.y + up.y * d, z: av.z + up.z * d });
     }
     // downforce: the faster you go the harder the air presses the car onto its tyres (about double the grip flat out)
-    if (contacts) { const df = m * 0.0065 * vF * vF; b.applyForceToCenter({ x: -up.x * df, y: -up.y * df, z: -up.z * df }, true); }
+    if (contacts) { const df = m * (this.bike ? 0.0022 : 0.0065) * vF * vF; b.applyForceToCenter({ x: -up.x * df, y: -up.y * df, z: -up.z * df }, true); } // (a bike has little aero to speak of)
     if (thrust > 0 && thr > 0 && vF < maxV) b.applyForceToCenter({ x: fw.x * m * thrust, y: 0, z: fw.z * m * thrust }, true);
     // over the speed limit (it changes with the zone): ease back to it
     if (vF > maxV + 0.3 && contacts) { const k = m * Math.min(12, (vF - maxV) * 3); b.applyForceToCenter({ x: -fw.x * k, y: 0, z: -fw.z * k }, true); }
     // in the air: settle the spin and drift back level, so jumps land on the wheels more often than not
-    if (!contacts) {
+    if (!contacts && !(this.bike && c.fallen)) { // (a bike lying on its side has no wheels down either)
       b.applyTorque({ x: -av.x * m * 0.9 - up.z * m * 2.5, y: -av.y * m * 0.3, z: -av.z * m * 0.9 + up.x * m * 2.5 }, true); // up x worldUp, toward level
     }
     // standing still: don't creep down slopes
-    if (contacts >= 3 && thr === 0 && sp < 0.35 && (!hb || !c.driver)) b.setLinearVelocity({ x: lv.x * 0.6, y: lv.y, z: lv.z * 0.6 });
+    if (contacts >= this.full && thr === 0 && sp < 0.35 && (!hb || !c.driver)) b.setLinearVelocity({ x: lv.x * 0.6, y: lv.y, z: lv.z * 0.6 });
     this.contacts = contacts; this.sp = sp;
     // on a stunt ramp the car rides the wedge like a rail (springs can't lift a car up a steep ramp at 40 m/s in a
     // third of a second): pitched to the slope, rising with it; at the lip physics takes over with that climb
@@ -228,7 +253,7 @@ class PVeh {
     }
     if (!this.b) return; // the knock wrecked it
     // stuck on its roof or side: after a moment it rights itself
-    if (upY < 0.35 && this.sp < 3) this.upsideT += dt; else this.upsideT = 0;
+    if (upY < 0.35 && this.sp < 3 && !(this.bike && c.fallen)) this.upsideT += dt; else this.upsideT = 0; // (a fallen bike waits to be picked up)
     if (this.upsideT > 1.6) {
       const f = this.V.set(0, 0, 1).applyQuaternion(this.Q);
       b.setTransform({ x: pos.x, y: PhysCar.RIDE + 0.4, z: pos.z }, this.yawQ(Math.atan2(f.x, f.z) || c.h)); b.setAngularVelocity({ x: 0, y: 0, z: 0 }); b.setLinearVelocity({ x: 0, y: 0, z: 0 });
@@ -247,7 +272,7 @@ class PVeh {
     c.vx = lv.x; c.vz = lv.z; c.v = fh > 0.05 ? (lv.x * f.x + lv.z * f.z) / fh : 0;
     c.y = Math.max(0, p.y - PhysCar.RIDE - 0.05); c.yv = 0; c.kx = c.kz = 0;
     c.physY = p.y - PhysCar.RIDE; c.physQ = { x: q.x, y: q.y, z: q.z, w: q.w }; c.physP = { x: p.x, y: p.y, z: p.z };
-    this.last = { x: c.x, z: c.z, h: c.h, vx: c.vx, vz: c.vz, v: c.v };
+    this.last = { x: c.x, z: c.z, h: c.h, vx: c.vx, vz: c.vz, v: c.v, y: c.y };
   }
   /* someone else moved the car since we last wrote it (a teleport, a shunt, a test): the body follows */
   sync() {
@@ -259,6 +284,7 @@ class PVeh {
       b.setTransform({ x: nx, y: far ? PhysCar.RIDE + (c.y || 0) : p.y - (g - this.g0), z: nz }, turned || far ? this.yawQ(c.h) : q);
       this.g0 = g; if (far) { b.setAngularVelocity({ x: 0, y: 0, z: 0 }); this.statX = 1e9; }
     }
+    if (c.y > L.y + 0.05 && !(dist(c.x, c.z, L.x, L.z) > 15)) { const p = b.getPosition(); b.setTransform({ x: p.x, y: p.y + (c.y - L.y), z: p.z }, b.getRotation()); } // lifted (a bike's hop clearing a kerb)
     const lv = b.getLinearVelocity();
     if (c.vx !== L.vx || c.vz !== L.vz) b.setLinearVelocity({ x: lv.x + (c.vx - L.vx), y: lv.y, z: lv.z + (c.vz - L.vz) });
     else if (c.v !== L.v) { const d = c.v - L.v; b.setLinearVelocity({ x: lv.x + Math.sin(c.h) * d, y: lv.y, z: lv.z + Math.cos(c.h) * d }); }
@@ -267,7 +293,7 @@ class PVeh {
   }
   smash() {
     // only something the car is about to drive into: inside its width, just ahead of its nose (as the arcade's actual contact)
-    const c = this.car, sp = Math.hypot(c.vx, c.vz); if (sp < 3) return;
+    const c = this.car, sp = Math.hypot(c.vx, c.vz); if (sp < 3 || c.T.bike) return; // (a bike stops dead against them instead)
     const hx = Math.sin(c.h), hz = Math.cos(c.h), fwd = c.vx * hx + c.vz * hz; if (fwd < 1) return;
     const len = c.T.len / 2 + sp * STEP + 0.1, half = c.T.w / 2, reach = len + 1;
     for (const col of W.queryBox(c.x - reach, c.z - reach, c.x + reach, c.z + reach)) {
@@ -314,6 +340,10 @@ class PVeh {
     const car = this.car, q = car.physQ, p = car.physP; if (!q || !p) return;
     const Qp = this.Q.set(q.x, q.y, q.z, q.w), off = this.V.set(0, -PhysCar.RIDE, 0).applyQuaternion(Qp); // the mesh's origin sits RIDE below the body's centre, in the body's frame
     car.mesh.position.set(p.x + off.x, p.y + off.y + W.groundAt(p.x, p.z), p.z + off.z); car.mesh.quaternion.copy(Qp);
+    if (this.bike) { // a bike leans into its turns (and on its stand when parked), about the line its wheels touch
+      const want = car.fallen ? 0 : car.parked && !car.driver ? 0.18 : clamp((car.steerV || 0) * Math.min(Math.abs(car.v) / 8, 1) * 0.45, -0.5, 0.5);
+      this.lean = damp(this.lean, want, 8, STEP); car.lean = this.lean; car.mesh.quaternion.multiply(this.Q2.setFromAxisAngle(this.V.set(0, 0, 1), this.lean));
+    }
   }
 }
 
@@ -321,7 +351,7 @@ const PhysCar = {
   on: true, world: true, list: new Set(), mT: 0,
   RIDE: 0.83, R: 0.36, L0: 0.52, G: 20,
   MAX: 80, RON: 1e9, ROFF: 1e9, // every car in play (up to 80) is a physics car; K turns the others back to the arcade model
-  classes: { parked: true, traffic: true, police: true }, // which kinds of car become physics bodies
+  classes: { parked: true, traffic: true, police: true, bikes: true }, // which kinds of car become physics bodies (bikes: those you aren't riding)
 
   init() {
     let pref = null, world = null; try { pref = localStorage.getItem('lootrun.handling'); world = localStorage.getItem('lootrun.physWorld'); } catch (e) { /* private window */ }
@@ -329,12 +359,12 @@ const PhysCar = {
     this.on = !q.has('arcade') && pref !== 'arcade';
     this.world = !q.has('arcade') && !q.has('arcadeworld') && world !== 'off';
   },
-  usable(car) { return !!(Phys.ready && car && !car.T.bike && !car.dead && !car.wreck && (car.driver === 'player' ? this.on : this.world)); },
+  usable(car) { return !!(Phys.ready && car && !car.dead && !car.wreck && (car.driver === 'player' ? this.on : this.world)); },
   /* which cars become physics bodies (the K key turns the others off, in case they cost too much) */
   eligible(car) {
-    if (!car || car.dead || car.T.bike || car.wreck) return false;
+    if (!car || car.dead || car.wreck) return false;
     if (car.driver === 'player') return true;
-    if (!this.world) return false;
+    if (!this.world || (car.T.bike && !this.classes.bikes)) return false;
     if (!car.driver || car.parked || (car.ai && (car.ai.mode === 'parked' || car.ai.mode === 'dead'))) return this.classes.parked;
     if (car.police) return this.classes.police;
     return car.driver === 'ai' && this.classes.traffic;
@@ -348,7 +378,7 @@ const PhysCar = {
     if (this.eligible(car) && d < this.ROFF) return true;
     return !this.settled(car) && d < 220;
   },
-  settled(car) { const v = car.phys; return !v || (v.contacts >= 3 && v.upsideT === 0 && !v.wasAir && Math.abs(car.physY || 0) < 0.3); },
+  settled(car) { const v = car.phys; return !v || (v.contacts >= v.full && v.upsideT === 0 && !v.wasAir && Math.abs(car.physY || 0) < 0.3); },
   overlaps(c) {
     for (const v of this.list) {
       const o = v.car; if (dist(o.x, o.z, c.x, c.z) > (o.T.len + c.T.len) / 2 + 0.5) continue;
@@ -388,10 +418,12 @@ const PhysCar = {
     const c = v.car, ix = c.x + nx * 1.5, iz = c.z + nz * 1.5;
     // what hit it? another physics car just over there, if any
     let other = null, bd = 1e9; for (const o of this.list) { if (o === v) continue; const d = dist(o.car.x, o.car.z, c.x, c.z); if (d < (o.car.T.len + c.T.len) / 2 + 1.2 && d < bd) { bd = d; other = o.car; } }
+    if (c.T.bike && c.driver && dv > 8) G.bail(c, dv, v.preV.x, v.preV.z); // a hard knock throws a bike's rider over the bars
+    else if (c.T.bike && !c.driver && dv > 5) c.knockOver(); // and knocks a bike with nobody on it off its stand
     const thr = other ? 4.5 : 7; if (dv <= thr) return; // another car (each takes about half the closing speed) or a wall
     const byPlayer = other && other.driver === 'player';
     c.damage((dv - thr) * 1.8, ix, iz, byPlayer ? G.player : null);
-    if (c.parked && !c.wreck && c.alarmT <= 0 && dv > 9) c.alarmT = 5;
+    if (c.parked && !c.wreck && c.alarmT <= 0 && dv > 9 && !c.T.bike) c.alarmT = 5;
     if (!(c.crashT > G.time)) { Sfx.crash(dv / 30, c.x, c.z); c.crashT = G.time + 0.25; if (other) other.crashT = G.time + 0.25; }
     if (v.player || byPlayer) G.shake(dv * 0.03);
   },
