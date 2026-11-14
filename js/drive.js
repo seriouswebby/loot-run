@@ -11,8 +11,10 @@
    Like ragdolls and props, each body lives in "height above the local ground": the ground under the car's centre is
    y = 0, and the frame is shifted as that ground rises and falls (keeping the car's height in the world).
 
-   PhysCar manages them: the car you drive is one (L switches you to the arcade handling). Bikes stay on the arcade
-   model (balance, hops, bails). Without Box3D (offline, ?nophys) or with ?arcade, every car uses the arcade model. */
+   PhysCar manages them: the car you drive, and the parked cars, traffic and police within 55 m of you (up to 16), which
+   go back to the arcade model further off. L switches your own car to the arcade handling; K turns the physics
+   traffic off. Bikes stay on the arcade model (balance, hops, bails). Without Box3D (offline, ?nophys) or with
+   ?arcade, every car uses the arcade model. */
 
 class PVeh {
   constructor(car) {
@@ -30,7 +32,7 @@ class PVeh {
     // (it rides the real ground), nor the player's body on foot (people are hit by the arcade's car-hits-people)
     const filter = { categoryBits: 1, maskBits: 0xffff & ~4 & ~8 & ~16 };
     // half the mass in the shell, half as ballast low down at the front and back (a low centre of mass that still turns like a long car)
-    const mass = m * (car.massMul || 1);
+    const mass = m * (car.ai && car.ai.mode === 'roadblock' ? 5 : 1); // a roadblock is a wall of heavy cruisers (as in the arcade)
     b.createBox({ halfExtents: { x: hx, y: hy, z: hz }, offset: { x: 0, y: oy, z: 0 }, density: (mass * 0.5) / (8 * hx * hy * hz), friction: 0.3, restitution: 0.12, filter });
     for (const s of [-1, 1]) b.createSphere({ radius: 0.12, center: { x: 0, y: -0.16, z: s * hz * 0.75 }, density: (mass * 0.25) / (4.19 * 0.12 ** 3), friction: 0.3, filter });
     this.b = b; this.car = car; this.m = b.getMass(); this.dims = { hx, hy, hz, oy }; this.floorHit = false;
@@ -300,7 +302,7 @@ const PhysCar = {
   on: true, world: true, list: new Set(), mT: 0,
   RIDE: 0.83, R: 0.36, L0: 0.52, G: 20,
   MAX: 16, RON: 55, ROFF: 80, // up to 16 physics cars, within 55 m of you; past 80 m they go back to the arcade model
-  classes: { parked: true, traffic: true, police: false }, // which kinds of car near you become physics bodies
+  classes: { parked: true, traffic: true, police: true }, // which kinds of car near you become physics bodies
 
   init() {
     let pref = null, world = null; try { pref = localStorage.getItem('lootrun.handling'); world = localStorage.getItem('lootrun.physWorld'); } catch (e) { /* private window */ }

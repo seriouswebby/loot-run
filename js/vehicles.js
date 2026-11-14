@@ -525,6 +525,7 @@ function steerTo(car, tx, tz, want, dt) {
   let steer = clamp(-d * 2.6, -1, 1);
   let thr = 0;
   if (Math.abs(d) > 0.6) want = Math.min(want, 8);
+  if (car.phys && Math.abs(d) > 0.3) want = Math.min(want, 9 + 23 * Math.max(0, 1 - (Math.abs(d) - 0.3) / 0.6)); // tyres, not rails
   if (car.phys) thr = clamp((want - car.v) / 3, -1, 1); // a physics car gets smooth pedals
   else if (car.v < want - 0.8) thr = 1; else if (car.v > want + 1.5) thr = -1;
   if (want <= 0.1 && car.v < 0.6) { thr = 0; if (!car.phys) car.v = Math.max(0, car.v); }
@@ -644,7 +645,7 @@ function aiPolice(car, dt) {
       return;
     }
     if (de < 30 && !W.segBlocked(car.x, car.z, a.ex, a.ez)) { gx = a.ex; gz = a.ez; want = Math.min(want, 16); }
-    else ({ gx, gz } = graphStep(car, a.ex, a.ez));
+    else { const g = graphStep(car, a.ex, a.ez); gx = g.gx; gz = g.gz; if (car.phys && g.turn > 0.3) want = Math.min(want, 12 + 24 * (1 - Math.min(1, g.turn / 1.57))); }
     if (pz !== 'alley' && pz !== 'forest') a.mode = 'pursuit';
   } else {
     const direct = d < 34 && pz !== 'alley' && pz !== 'forest' && !W.segBlocked(car.x, car.z, tx, tz);
@@ -656,7 +657,7 @@ function aiPolice(car, dt) {
         want = 0;
         if (!a.dropped && Math.abs(car.v) < 4) { a.dropped = true; a.mode = 'parked'; Heat.dropCops(car, 2, 'chase'); return; }
       }
-    } else ({ gx, gz } = graphStep(car, tx, tz));
+    } else { const g = graphStep(car, tx, tz); gx = g.gx; gz = g.gz; if (car.phys && g.turn > 0.3) want = Math.min(want, 12 + 24 * (1 - Math.min(1, g.turn / 1.57))); } // brake for the turn
   }
   steerTo(car, gx, gz, want, dt);
   unstick(car, dt, want);
@@ -668,10 +669,16 @@ function graphStep(car, tx, tz) {
   if (dist(car.x, car.z, n.x, n.z) < 7) {
     let best = n.adj[0], bd = 1e9;
     for (const id of n.adj) { const m = W.nodes[id], dd = dist(m.x, m.z, tx, tz); if (dd < bd) { bd = dd; best = id; } }
-    if (dist(n.x, n.z, tx, tz) < bd - 5) return { gx: tx, gz: tz };
+    if (dist(n.x, n.z, tx, tz) < bd - 5) return { gx: tx, gz: tz, turn: 0, dn: 0 };
     a.node = best; n = W.nodes[best];
   }
-  return { gx: n.x, gz: n.z };
+  // the junction ahead: which way from there, and how sharp a turn that is
+  const dn = dist(car.x, car.z, n.x, n.z); let turn = 0;
+  if (dn < 12 + Math.abs(car.v) * 0.9) {
+    let nb = null, bd = 1e9; for (const id of n.adj) { const m = W.nodes[id], dd = dist(m.x, m.z, tx, tz); if (dd < bd) { bd = dd; nb = m; } }
+    if (nb && dist(n.x, n.z, tx, tz) >= bd - 5) turn = Math.abs(angDiff(Math.atan2(n.x - car.x, n.z - car.z), Math.atan2(nb.x - n.x, nb.z - n.z)));
+  }
+  return { gx: n.x, gz: n.z, turn, dn };
 }
 
 /* ---------------- roadblocks + spike strips ---------------- */

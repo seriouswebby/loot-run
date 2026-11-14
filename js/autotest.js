@@ -1431,6 +1431,28 @@ function runAutotest() {
     const ok = (r) => r.smashed === 0 && r.hits <= 6 && r.stuck <= 1 && r.offroad <= 2 && r.hurt === 0 && r.maxPhys >= 3;
     return (ok(city) && ok(ring)) || 'city ' + JSON.stringify(city) + ' ring ' + JSON.stringify(ring);
   });
+  const pursuit = (physPolice) => {
+    // drive a fixed loop round four city blocks at heat 2 and see how close the nearest cruiser keeps
+    PhysCar.classes.police = physPolice; reset(); G.noSpawn = false; for (const c of G.cars.slice()) if (!c.persistent) c.remove(); G.cars = G.cars.filter((c) => !c.dead);
+    const k = W.rp(3) + 25, kk = W.rp(5) + 25, route = [[k, k], [kk, k], [kk, kk], [k, kk]];
+    const car = new Car('sedan', k, k, Math.PI / 2); tp(k, k - 3); G.enterCar(car); G.god = true; Heat.add(2, 5, 'test'); Heat.spotted();
+    let wi = 1, sum = 0, n = 0, crashed = 0;
+    for (let i = 0; i < 60 * 50; i++) {
+      const [wx, wz] = route[wi]; if (dist(car.x, car.z, wx, wz) < 6) wi = (wi + 1) % 4;
+      const d = angDiff(car.h, Math.atan2(wx - car.x, wz - car.z)); Input.keys.KeyW = Math.abs(d) < 0.5 || car.v < 6; Input.keys.KeyA = d > 0.06; Input.keys.KeyD = d < -0.06; Input.keys.Space = Math.abs(d) > 0.8 && car.v > 10;
+      step(STEP); Heat.spotted();
+      if (i > 60 * 10 && i % 30 === 0) { let best = 1e9; for (const c of G.cars) if (c.police && !c.dead && c !== car) best = Math.min(best, dist(c.x, c.z, car.x, car.z)); if (best < 1e9) { sum += Math.min(best, 150); n++; } }
+    }
+    for (const kk2 of ['KeyW', 'KeyA', 'KeyD', 'Space']) Input.keys[kk2] = false;
+    for (const c of G.cars) if (c.police && (c.wreck || c.hp < c.maxHp * 0.4)) crashed++;
+    G.god = false; G.exitCar(true); car.remove(); Heat.clear(); clearPolice(); PhysCar.classes.police = true;
+    return { gap: n ? sum / n : 999, crashed, phys: physPolice };
+  };
+  T('physics police: on the same route a physics cruiser keeps about as close as an arcade one, without wrecking itself', () => {
+    if (!Phys.ready) return 'SKIP';
+    const a = pursuit(false), b = pursuit(true); // (tuning runs: arcade 19.2 / 19.3 m, physics 21.7 / 21.2 m)
+    return (b.gap < a.gap * 1.4 && b.gap < 40 && b.crashed === 0) || 'arcade ' + a.gap.toFixed(1) + ' m · physics ' + b.gap.toFixed(1) + ' m, crashed ' + b.crashed;
+  });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;
     const top = (type, x, z) => { const c = new Car(type, x, z, 0, {}); c.driver = 'player'; for (let i = 0; i < 600; i++) { c.x = x; c.z = z; c.y = 0; c.drive(STEP, 1, 0, false, false); } const v = c.v; c.remove(); return v; };
