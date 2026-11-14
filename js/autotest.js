@@ -787,7 +787,7 @@ function runAutotest() {
     let minV = 99, steerSum = 0;
     for (let i = 0; i < 360; i++) {
       const s = W.ringParam(car.x, car.z), ahead = W.ringPoint(s + 18), want = Math.atan2(ahead.x - ahead.tz * 7.5 - car.x, ahead.z + ahead.tx * 7.5 - car.z);
-      Input.keys.KeyW = true; const d = angDiff(car.h, want); Input.keys.KeyA = d > 0.05; Input.keys.KeyD = d < -0.05; steerSum += Math.abs(d);
+      const d = angDiff(car.h, want); Input.keys.KeyW = Math.abs(d) < 0.3; Input.keys.KeyA = d > 0.05; Input.keys.KeyD = d < -0.05; steerSum += Math.abs(d); // lift off when it's running wide, as a driver would
       step(STEP); if (i > 30) minV = Math.min(minV, car.v);
     }
     for (const kk of ['KeyW', 'KeyA', 'KeyD']) Input.keys[kk] = false;
@@ -1144,7 +1144,7 @@ function runAutotest() {
   });
   T('Funland visitors stroll the paths, scatter when scared, then go back to strolling', () => {
     reset(); for (const n of G.npcs) if (n.kind === 'ped') n.remove(); G.npcs = G.npcs.filter((n) => !n.dead);
-    const F = W.FUN; tp(F.gate, 191); for (let i = 0; i < 40; i++) Funland.populate(P);
+    const F = W.FUN; tp(F.gate, 191); for (let i = 0; i < 40; i++) Strollers.populate(P, F.area);
     const vis = G.npcs.filter((n) => n.ai && n.ai.park && !n.dead), at0 = vis.map((n) => [n.x, n.z]);
     steps(8);
     const offPath = (n) => Math.min(...F.links.map(([a, b]) => segPointDist(n.x, n.z, a.x, a.z, b.x, b.z))) > 5;
@@ -1169,16 +1169,16 @@ function runAutotest() {
     reset(); const mode = G.camMode, cam0 = G.cam; G.camMode = 'chase'; G.noSpawn = false;
     for (const c of G.cars) if (!c.persistent && !c.mission) c.remove(); G.cars = G.cars.filter((c) => !c.dead);
     const car = new Car('sedan', 870, 15, Math.PI / 2); tp(870, 12); G.enterCar(car); car.v = 20;
-    let ahead = 0, near = 0;
+    let ahead = 0, near = 0; const realSpawn = spawnTraffic;
+    spawnTraffic = (t) => { const c = realSpawn(t); if (c && G.canSee(c.x, c.z, 4) && dist(c.x, c.z, car.x, car.z) < 150) near++; return c; }; // judged at the moment it appears
     for (let i = 0; i < 60 * 20; i++) {
       Input.keys.KeyW = true; G.frameN = (G.frameN || 0) + 1; updateCamera(STEP); step(STEP);
       if (i % 30 === 0) for (const c of G.cars) if (!c.dead && c !== car && c.driver === 'ai' && c.ai && c.ai.mode === 'traffic') {
         const dx = c.x - car.x, dz = c.z - car.z, along = dx * Math.sin(car.h) + dz * Math.cos(car.h);
         if (along > 0 && Math.hypot(dx, dz) < 260) ahead++;
-        if (c.bornT == null) c.bornT = G.time;
-        if (c.bornT === G.time && G.canSee(c.x, c.z, 4) && dist(c.x, c.z, car.x, car.z) < 150) near++;
       }
     }
+    spawnTraffic = realSpawn;
     Input.keys.KeyW = false; G.exitCar(true); car.remove(); G.camMode = mode; G.cam = cam0; G.frameN++; G.noSpawn = true;
     return (ahead > 0 && near === 0) || `traffic seen ahead ${ahead} · popped in close and in view ${near}`;
   });
@@ -1234,6 +1234,19 @@ function runAutotest() {
     for (let k = 0; k <= 22; k++) { G.teleport(-1100 + k * 100, -1100 + k * 70); steps(1.1); peak = Math.max(peak, Phys.statics.size); }
     const ms = (performance.now() - t0) / (23 * 66), end = Phys.statics.size; G.exitCar(true); car.remove();
     return (peak < 4000 && end < peak && ms < 8) || `statics peak ${peak} at the end ${end} · ${ms.toFixed(2)} ms per step`;
+  });
+  T('Millbrook: a flat village on Main Street; rob the diner, the Mercantile and the gas station; villagers stroll the sidewalks', () => {
+    reset(); G.noSpawn = true; const M = W.MILL;
+    let bumps = 0; for (let x = M.minX; x <= M.maxX; x += 6) for (let z = M.minZ; z <= M.maxZ; z += 6) if (W.groundAt(x, z) !== 0) bumps++;
+    const road = W.countyEdges.some((e) => e.name === 'Main Street'), zone = W.zoneAt(M.x - 9, -400);
+    const fields = W.fields.filter((f) => f.x1 > M.minX && f.x0 < M.maxX && f.z1 > M.minZ && f.z0 < M.maxZ).length;
+    const robbed = [];
+    for (const id of ['diner', 'mercantile', 'millfuel']) { const r = W.places[id]; r.cd = 0; r.robbing = false; tp(r.x, r.z); const c0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(r) + 0.6); if (G.S.cash > c0 + 150) robbed.push(id); Heat.clear(); clearPolice(); }
+    for (const n of G.npcs) if (n.kind === 'ped') n.remove(); G.npcs = G.npcs.filter((n) => !n.dead);
+    tp(M.x, -400); for (let i = 0; i < 30; i++) Strollers.populate(P, M.area);
+    const folk = G.npcs.filter((n) => n.ai && n.ai.area === M.area); steps(6);
+    const onWalks = folk.filter((n) => !n.dead && Math.min(...M.area.links.map(([a, b]) => segPointDist(n.x, n.z, a.x, a.z, b.x, b.z))) < 3.5).length;
+    return (!bumps && road && zone === 'village' && !fields && robbed.length === 3 && folk.length >= 8 && onWalks === folk.length) || `bumps ${bumps} road ${road} zone ${zone} fields ${fields} robbed ${robbed.join(',')} villagers ${folk.length} on the sidewalks ${onWalks}`;
   });
   T('off-road: cars keep their pace on grass, dirt trails and sand; SUVs are quicker still', () => {
     reset(); G.noSpawn = true;

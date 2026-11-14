@@ -113,6 +113,7 @@ W.ZONES = {
   tunnel: { label: 'PINE RIDGE TUNNEL', hint: 'Covered · choppers can\'t see you · no way out but the ends', sight: 30, evade: 0.6, car: 1.25 },
   airport: { label: 'AIRPORT', hint: 'Wide open · aircraft to steal · runway = drag strip', sight: 85, evade: 1.25, car: 1.45 },
   country: { label: 'COUNTRY ROAD', hint: 'Open road · fast · cops see you coming', sight: 75, evade: 1.15, car: 1.35 },
+  village: { label: 'MILLBROOK', hint: 'Small-town streets · not many cops · everyone notices you', sight: 50, evade: 1, car: 1 },
   funland: { label: 'FUNLAND', hint: 'Crowds · rides · lose the cops in the crowd', sight: 38, evade: 0.85, car: 0.9 },
   beach: { label: 'BEACH', hint: 'Open sand · no cover', sight: 70, evade: 1.2, car: 1.0 },
   air: { label: 'AIRBORNE', hint: 'Fast · every cop can see you', sight: 90, evade: 1.5, car: 1 },
@@ -263,6 +264,7 @@ W.zoneAt = function (x, z) {
   if (z > W.HWY + W.HWH + 0.5) return 'beach';
   if (Math.abs(x) <= W.HALF + 6 && Math.abs(z) <= W.HALF + 6) return 'street';
   if (W.inFunland && W.inFunland(x, z)) return 'funland';
+  if (W.inMillbrook && W.inMillbrook(x, z)) return W.nearCountyRoad(x, z, 6.5) ? 'country' : 'village';
   if (W.inAirport && W.inAirport(x, z)) return 'airport';
   if (W.inTunnel && W.inTunnel(x, z)) return 'tunnel';
   if (W.inCounty && W.inCounty(x, z)) return W.nearCountyRoad(x, z, 6.5) ? 'country' : 'outskirts';

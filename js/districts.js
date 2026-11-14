@@ -11,12 +11,16 @@ W.RESERVE.push(
   { kind: 'dam', minX: 800, maxX: 1070, minZ: -1240, maxZ: -1010 },
 );
 W.inFunland = (x, z) => { const f = W.FUN; return x > f.minX && x < f.maxX && z > f.minZ && z < f.maxZ; };
+W.MILL = { minX: 540, maxX: 765, minZ: -452, maxZ: -333, x: 650 }; // Millbrook village; x = Main Street
+W.inMillbrook = (x, z) => { const m = W.MILL; return x > m.minX && x < m.maxX && z > m.minZ && z < m.maxZ; };
+W.districtLabels = [];
 W.tallProps = []; // tall open structures (the big wheel, the drop tower) that aircraft have to fly round
 
 function buildDistricts() {
   const saved = rnd; rnd = mulberry32(31337); // the districts' own random stream
   const trees = [];
   buildFunland(trees);
+  buildMillbrook(trees);
   rnd = saved;
   return trees;
 }
@@ -47,6 +51,9 @@ function buildFunland(trees) {
   F.nodes = {}; for (const k in N) F.nodes[k] = { k, x: N[k][0], z: N[k][1], links: [] };
   for (const [a, b] of L) { F.nodes[a].links.push(F.nodes[b]); F.nodes[b].links.push(F.nodes[a]); }
   F.links = L.map(([a, b]) => [F.nodes[a], F.nodes[b]]);
+  for (const k of ['gate', 'hub', 'plazaW', 'plazaE']) F.nodes[k].w = 3;
+  F.area = Strollers.add({ name: 'funland', cx: (F.minX + F.maxX) / 2, cz: (F.minZ + F.maxZ) / 2, R: 140, cap: 22, nodes: F.nodes, links: F.links });
+  W.districtLabels.push({ x: gx, z: F.minZ - 40, text: 'FUNLAND', col: '#ff8fb8' });
 
   // fence round the park: candy-striped rails, with the main gate north, a back gate south and a side gate west
   const fence = (x0, z0, x1, z1) => {
@@ -356,35 +363,143 @@ const Funland = {
     }
     c.cars.instanceMatrix.needsUpdate = true;
   },
-  /* visitors: spawned on the paths when you're near, wandering from node to node and stopping to look */
-  populate(t) {
-    const F = W.FUN; if (!F.links || dist(t.x, t.z, (F.minX + F.maxX) / 2, (F.minZ + F.maxZ) / 2) > 420) return;
-    let n = 0; for (const p of G.npcs) if (!p.dead && p.ai && p.ai.park) n++;
-    if (n >= 22) return;
-    for (let k = 0; k < 8; k++) {
-      const [a, b] = pick(F.links), u = rand(0.1, 0.9), x = a.x + (b.x - a.x) * u, z = a.z + (b.z - a.z) * u, d = dist(x, z, t.x, t.z);
-      if (d < 18 || (G.canSee(x, z, 1) && d < 150)) continue; // they walk in from somewhere you aren't looking (or far off)
-      const p = spawnPed(x, z, W.nearestBlock(x, z), 1, 1);
-      Object.assign(p.ai, { mode: 'park', park: true, node: a, prev: b, waitT: rand(0, 2), speed: rand(1.1, 1.6), tx: a.x, tz: a.z }); // first along this path to its end
-      return p;
+};
+
+/* People strolling a district's paths (Funland's avenues, Millbrook's sidewalks): spawned out of sight when you're
+   near, wandering from node to node, stopping now and then; after a scare they head back to the nearest path. */
+const Strollers = {
+  areas: [],
+  add(A) { A.list = Object.values(A.nodes); this.areas.push(A); return A; },
+  populate(t, only) {
+    let made = null;
+    for (const A of this.areas) {
+      if ((only && A !== only) || !A.links.length || dist(t.x, t.z, A.cx, A.cz) > A.R + 280) continue;
+      let n = 0; for (const p of G.npcs) if (!p.dead && p.ai && p.ai.area === A) n++;
+      if (n >= A.cap) continue;
+      for (let k = 0; k < 8; k++) {
+        const [a, b] = pick(A.links), u = rand(0.1, 0.9), x = a.x + (b.x - a.x) * u, z = a.z + (b.z - a.z) * u, d = dist(x, z, t.x, t.z);
+        if (d < 18 || (G.canSee(x, z, 1) && d < 150)) continue; // they walk in from somewhere you aren't looking (or far off)
+        const p = spawnPed(x, z, W.nearestBlock(x, z), 1, 1);
+        Object.assign(p.ai, { mode: 'park', park: true, area: A, node: a, prev: b, waitT: rand(0, 2), speed: rand(1.1, 1.6), tx: a.x, tz: a.z }); // first along this path to its end
+        made = p; break;
+      }
     }
-    return null;
+    return made;
   },
-  keepVisitor(p, t) { const F = W.FUN; return dist(t.x, t.z, (F.minX + F.maxX) / 2, (F.minZ + F.maxZ) / 2) < 460; },
+  keep(p, t) { const A = p.ai.area; return !!A && dist(t.x, t.z, A.cx, A.cz) < A.R + 320; },
   nextTarget(p) {
-    const a = p.ai, at = a.node, opts = at.links.length > 1 ? at.links.filter((l) => l !== a.prev) : at.links, nb = pick(opts);
+    const a = p.ai, at = a.node; if (!at) return this.resume(p);
+    const opts = at.links.length > 1 ? at.links.filter((l) => l !== a.prev) : at.links, nb = pick(opts);
     a.prev = at; a.node = nb;
-    const horiz = Math.abs(nb.z - at.z) < 1, j = rand(-1, 1) * (nb.k === 'gate' || at.k === 'gate' || at.k === 'hub' || nb.k === 'hub' ? 3 : 1.6);
+    const horiz = Math.abs(nb.z - at.z) < 1, j = rand(-1, 1) * Math.min(nb.w || 1.6, at.w || 1.6);
     a.tx = nb.x + (horiz ? 0 : j); a.tz = nb.z + (horiz ? j : 0);
     if (chance(0.45)) a.waitT = rand(1, 6);
   },
-  /* after a scare: back to the nearest path node and carry on */
   resume(p) {
-    const a = p.ai; let best = null, bd = 1e9;
-    for (const k in W.FUN.nodes) { const nd = W.FUN.nodes[k], d = dist(p.x, p.z, nd.x, nd.z); if (d < bd) { bd = d; best = nd; } }
+    const a = p.ai, list = (a.area && a.area.list) || []; let best = null, bd = 1e9;
+    for (const nd of list) { const d = dist(p.x, p.z, nd.x, nd.z); if (d < bd) { bd = d; best = nd; } }
+    if (!best) { a.park = false; a.mode = 'walk'; a.block = W.nearestBlock(p.x, p.z); pedTarget(p); return; }
     a.mode = 'park'; a.node = best; a.prev = null; a.tx = best.x; a.tz = best.z; a.waitT = 0;
   },
 };
+
+/* ---------------- Millbrook: a farm village on Orchard Road ----------------
+   Main Street runs south off Orchard Road: Dot's Diner, the Mercantile and a gas station to rob, a post office, a
+   white church with a steeple, houses behind picket fences, a water tower, grain silos and a red barn. */
+function buildMillbrook(trees) {
+  const M = W.MILL, mx = M.x, FP = new PropBatch(), wf = mx - 12, ef = mx + 12; // west and east building fronts
+  W.FLAT.push({ minX: M.minX - 5, maxX: M.maxX + 5, minZ: M.minZ - 12, maxZ: M.maxZ + 5, pad: 8 });
+  GB.sidewalk.rect(wf, M.minZ, mx - 6, -347, 0.05, 6); GB.sidewalk.rect(mx + 6, M.minZ, ef, -347, 0.05, 6);
+  GB.plaza.rect(mx - 22, -347, mx + 22, M.maxZ, 0.05, 8);
+  const sign = (x, y, z, face, text, bg, fg, w, h, sub) => { const [nx, nz] = FACE_N[face]; FP.box(x - nx * 0.1, y, z - nz * 0.1, nx ? 0.2 : w + 0.4, h + 0.3, nz ? 0.2 : w + 0.4, bg); addSign(x + nx * 0.02, y, z + nz * 0.02, face, text, bg, fg, w, h, sub); };
+  // --- west side, fronts on x = wf, facing east ---
+  addBuilding(wf - 9, -432, 18, 12, 4.6, 'stucco', { color: '#eef4f2' }); // Dot's Diner
+  FP.box(wf + 0.05, 3.5, -432, 0.1, 0.45, 12, '#d62828'); FP.box(wf + 0.05, 1.9, -432, 0.1, 1.3, 9, '#a9d6e5'); FP.box(wf + 0.06, 1.2, -427.8, 0.12, 2.3, 1.2, '#7a2f1f');
+  sign(wf + 0.1, 5.5, -432, 'e', "DOT'S DINER", '#d62828', '#fff8e7', 9, 1.5, 'EATS · PIE · COFFEE');
+  const diner = makeRob('diner', 'store', "Dot's Diner", wf + 2, -429, { hold: 4, cash: [260, 520], base: 0, cool: 160 });
+  addAlarm(diner, wf - 9, -438.05, 'n'); addCam(diner, wf + 0.1, -437, 'e', 0.35, 13);
+  addBuilding(wf - 10, -405, 20, 16, 6.5, 'brick'); // the Mercantile
+  FP.box(wf + 0.9, 3.3, -405, 1.8, 0.18, 12, '#2a6f4f'); FP.box(wf + 0.05, 1.7, -405, 0.1, 1.6, 10, '#a9d6e5');
+  sign(wf + 0.1, 5.2, -405, 'e', 'MERCANTILE', '#2a6f4f', '#fdf0d5', 11, 1.4, 'MILLBROOK GENERAL STORE · EST. 1891');
+  const merc = makeRob('mercantile', 'store', 'Millbrook Mercantile', wf + 2, -402, { hold: 4.5, cash: [380, 700], base: 1, cool: 180 });
+  addAlarm(merc, wf - 10, -413.05, 'n'); addCam(merc, wf + 0.1, -412, 'e', 0.3, 13); addCam(merc, wf + 0.1, -398, 'e', -0.3, 13);
+  addBuilding(wf - 9, -380, 18, 12, 5, 'stucco'); // post office
+  sign(wf + 0.1, 3.8, -380, 'e', 'POST OFFICE', '#1d3557', '#ffffff', 7, 1.1); FP.box(wf + 2.5, 4, -373, 0.12, 8, 0.12, '#cfd4d9'); FP.box(wf + 2.5, 7.3, -372.2, 0.05, 1, 1.5, '#c1121f');
+  addBuilding(wf - 12, -358, 18, 14, 8, 'stucco', { color: '#f4f1ea' }); // the church, its steeple at the front
+  const sx = wf - 4.5;
+  FP.box(sx, 11, -358, 4, 6, 4, '#f4f1ea'); FP.box(sx, 14.4, -358, 4.4, 0.8, 4.4, '#8d99ae'); FP.box(sx, 16.5, -358, 2.6, 3.4, 2.6, '#f4f1ea');
+  for (let i = 0; i < 4; i++) FP.box(sx, 18.6 + i * 1.3, -358, 2.2 - i * 0.5, 1.3, 2.2 - i * 0.5, '#5c677d'); FP.box(sx, 24.4, -358, 0.15, 1.6, 0.15, '#d4af37'); FP.box(sx, 24.6, -358, 0.15, 0.15, 0.8, '#d4af37');
+  FP.box(wf - 2.95, 2, -358, 0.1, 4, 2.4, '#6b4226');
+  W.tallProps.push({ minX: sx - 2.5, maxX: sx + 2.5, minZ: -360.5, maxZ: -355.5, h: 25 });
+  // --- east side, fronts on x = ef, facing west ---
+  // the gas station on the corner: a canopy over two pumps (they explode), the shop behind
+  GB.asphalt.rect(ef, M.minZ, ef + 46, -428, 0.04, 12);
+  FP.box(ef + 15, 5.2, -442, 24, 0.5, 16, '#e8e8e8'); FP.box(ef + 15, 5.55, -442, 24.2, 0.25, 16.2, '#bc4749');
+  for (const [dx, dz] of [[5, -448], [25, -448], [5, -436], [25, -436]]) { FP.box(ef + dx, 2.5, dz, 0.5, 5, 0.5, '#cfcfcf'); W.addCircle(ef + dx, dz, 0.4, 'pillar'); }
+  for (const dx of [10, 20]) {
+    const pm = new THREE.Mesh(new THREE.BoxGeometry(1, 1.6, 0.8), lam('#bc4749')); pm.position.set(ef + dx, 0.8, -442); pm.castShadow = true; S.add(pm);
+    const c = W.addCollider(ef + dx - 0.5, -442.4, ef + dx + 0.5, -441.6, 1.6, 'prop', true); c.destructible = { kind: 'pump', ref: pm, x: ef + dx, z: -442 };
+  }
+  addBuilding(ef + 38, -440, 12, 12, 4.5, 'stucco', { color: '#d9d2c3' });
+  sign(ef + 31.9, 3.9, -440, 'w', 'MILLBROOK FUEL', '#bc4749', '#ffffff', 7, 1.2); FP.box(ef + 31.95, 1.7, -440, 0.1, 1.5, 6, '#a9d6e5');
+  const fuel = makeRob('millfuel', 'store', 'Millbrook Fuel', ef + 30, -438, { hold: 3.5, cash: [220, 420], base: 0, cool: 150 });
+  addAlarm(fuel, ef + 38, -446.05, 'n'); addCam(fuel, ef + 31.9, -445, 'w', -0.3, 13);
+  // houses behind white picket fences
+  const house = (x, z, face, style, col) => {
+    const [nx, nz] = FACE_N[face], w = nx ? 9 : 10, d = nx ? 10 : 9;
+    addBuilding(x, z, w, d, 5, style, col ? { color: col } : undefined);
+    FP.box(x + nx * (w / 2 + 1.2), 2.6, z + nz * (d / 2 + 1.2), nx ? 2.4 : w, 0.2, nz ? 2.4 : d, '#6b4226'); // porch roof
+    for (const s of [-1, 1]) FP.box(x + nx * (w / 2 + 2.3) + (nx ? 0 : s * (w / 2 - 0.3)), 1.3, z + nz * (d / 2 + 2.3) + (nz ? 0 : s * (d / 2 - 0.3)), 0.2, 2.6, 0.2, '#f1faee');
+    const fx = x + nx * (w / 2 + 5), fz = z + nz * (d / 2 + 5), half = (nx ? d : w) / 2 + 2;
+    for (const s of [-1, 1]) {
+      const a0 = s * 1.4, a1 = s * half, x0 = nx ? fx : x + a0, x1 = nx ? fx : x + a1, z0 = nx ? z + a0 : fz, z1 = nx ? z + a1 : fz;
+      FP.box((x0 + x1) / 2, 0.45, (z0 + z1) / 2, Math.max(0.1, Math.abs(x1 - x0)), 0.9, Math.max(0.1, Math.abs(z1 - z0)), '#f1faee');
+      W.addCollider(Math.min(x0, x1) - 0.1, Math.min(z0, z1) - 0.1, Math.max(x0, x1) + 0.1, Math.max(z0, z1) + 0.1, 0.9, 'fence', true);
+    }
+  };
+  house(ef + 8, -408, 'w', 'cabin'); house(ef + 8, -384, 'w', 'stucco', '#e9d8a6'); house(ef + 30, -398, 'w', 'brick');
+  house(585, -385, 's', 'stucco', '#cde7d8'); house(605, -360, 'e', 'cabin'); house(565, -362, 's', 'stucco');
+  // the water tower (MILLBROOK on the tank)
+  const tx = 712, tz = -372;
+  for (const [ax, az] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) { FP.beam(tx + ax, 0, tz + az, tx + ax * 0.6, 18, tz + az * 0.6, 0.5, '#8d99ae'); W.addCollider(tx + ax - 0.4, tz + az - 0.4, tx + ax + 0.4, tz + az + 0.4, 18, 'pillar', true); }
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 7, 20), lam(0xb8c0c8)); tank.position.set(tx, 21.5, tz); tank.castShadow = true; S.add(tank);
+  const tcap = new THREE.Mesh(new THREE.ConeGeometry(5.3, 2.4, 20), lam(0x8d99ae)); tcap.position.set(tx, 26.2, tz); S.add(tcap);
+  addSign(tx - 5.05, 21.5, tz, 'w', 'MILLBROOK', '#b8c0c8', '#1d3557', 7, 1.6);
+  W.tallProps.push({ minX: tx - 5.5, maxX: tx + 5.5, minZ: tz - 5.5, maxZ: tz + 5.5, h: 28 });
+  // grain silos and a red barn on the farm side
+  for (const x of [583, 594]) {
+    const si = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 15, 18), lam(0xc9ced3)); si.position.set(x, 7.5, -440); si.castShadow = true; S.add(si);
+    const sc = new THREE.Mesh(new THREE.ConeGeometry(4.2, 2.5, 18), lam(0x9aa3a8)); sc.position.set(x, 16.2, -440); S.add(sc);
+    W.addCircle(x, -440, 4, 'column').h = 15;
+  }
+  W.tallProps.push({ minX: 578, maxX: 599, minZ: -445, maxZ: -435, h: 17 });
+  addBuilding(565, -412, 16, 20, 9, 'cabin', { color: '#a4302a' }); FP.box(565, 9.6, -412, 16.4, 1.2, 20.4, '#5a4636'); FP.box(573.1, 3.5, -412, 0.1, 6, 6, '#f1faee');
+  // lamps and trees along Main Street, benches by the square, a gazebo in it
+  for (let z = M.minZ + 8; z < -350; z += 20) for (const s of [-1, 1]) { const x = mx + s * 6.6; FP.box(x, 2.2, z, 0.16, 4.4, 0.16, '#343a40'); FP.box(x, 4.45, z, 0.6, 0.25, 0.6, '#ffe8a3'); W.addCollider(x - 0.15, z - 0.15, x + 0.15, z + 0.15, 4.4, 'pillar', true); }
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU; FP.box(mx + Math.cos(a) * 3, 1.4, -340 + Math.sin(a) * 3, 0.2, 2.8, 0.2, '#f1faee'); }
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU; FP.box(mx + Math.cos(a) * 2.2, 3, -340 + Math.sin(a) * 2.2, 2.6, 0.25, 1.2, '#2a6f4f', -a + Math.PI / 2); }
+  FP.box(mx, 3.4, -340, 1.2, 0.8, 1.2, '#2a6f4f'); W.addCircle(mx, -340, 3.2, 'column').h = 3;
+  for (const s of [-1, 1]) FP.box(mx + s * 12, 0.45, -340, 0.6, 0.12, 2.2, '#9c6644');
+  for (let k = 0, n = 0; k < 400 && n < 34; k++) {
+    const x = M.minX + 4 + rnd() * (M.maxX - M.minX - 8), z = M.minZ + 4 + rnd() * (M.maxZ - M.minZ - 8);
+    if (Math.abs(x - mx) < 15 || (z > -350) || W.queryBox(x - 4, z - 4, x + 4, z + 4).length || W.buildings.some((b) => x > b.minX - 4 && x < b.maxX + 4 && z > b.minZ - 4 && z < b.maxZ + 4)) continue;
+    if (x > ef - 2 && x < ef + 48 && z < -426) continue; // the gas station forecourt
+    const t = { x, z, type: rnd() < 0.3 ? 'pine' : 'round', s: 0.8 + rnd() * 0.4, park: true };
+    t.col = W.addCircle(x, z, 0.45, 'tree'); t.col.destructible = { kind: 'tree', ref: t };
+    W.trees.push(t); trees.push(t); n++;
+  }
+  // the sidewalks people stroll, crossing Main Street twice, and the square
+  const nodes = {}, N = (k, x, z, w) => (nodes[k] = { k, x, z, links: [], w: w || 1.2 });
+  for (const [s, x] of [['w', mx - 9], ['e', mx + 9]]) for (const z of [-448, -420, -392, -368, -349]) N(s + z, x, z);
+  N('sqW', mx - 14, -340, 2); N('sqE', mx + 14, -340, 2);
+  const links = [], link = (a, b) => { nodes[a].links.push(nodes[b]); nodes[b].links.push(nodes[a]); links.push([nodes[a], nodes[b]]); };
+  for (const s of ['w', 'e']) { link(s + -448, s + -420); link(s + -420, s + -392); link(s + -392, s + -368); link(s + -368, s + -349); }
+  link('w-420', 'e-420'); link('w-368', 'e-368'); link('w-349', 'sqW'); link('e-349', 'sqE'); link('sqW', 'sqE');
+  M.area = Strollers.add({ name: 'millbrook', cx: mx, cz: (M.minZ + M.maxZ) / 2, R: 90, cap: 12, nodes, links });
+  W.places.millbrook = { id: 'millbrook', name: 'Millbrook', x: mx, z: -470 };
+  W.districtLabels.push({ x: mx, z: M.maxZ + 18, text: 'MILLBROOK', col: '#f1e3c4' });
+  const mesh = FP.build(S); mesh.geometry.computeBoundingSphere(); mesh.frustumCulled = true;
+}
 
 /* the park on the minimap: lawn, paths, the coaster's loop, the wheel */
 W.drawDistrictsMap = function (g, X, Z, k) {
@@ -401,4 +516,10 @@ W.drawDistrictsMap = function (g, X, Z, k) {
   g.fillStyle = '#ff5d8f'; g.fillRect(X(805), Z(121), 6 * k, 38 * k); g.fillStyle = '#7209b7'; g.fillRect(X(771), Z(223), 34 * k, 26 * k);
   g.fillStyle = '#e63946'; g.fillRect(X(813), Z(288), 4 * k, 4 * k);
   g.strokeStyle = '#f1faee'; g.lineWidth = 1; g.strokeRect(X(F.minX), Z(F.minZ), (F.maxX - F.minX) * k, (F.maxZ - F.minZ) * k);
+  // Millbrook: sidewalks, the square, the gas station forecourt, the water tower and silos
+  const M = W.MILL, mx = M.x;
+  g.fillStyle = '#b8b2a6'; R(mx - 12, M.minZ, mx - 6, -347); R(mx + 6, M.minZ, mx + 12, -347); g.fillStyle = '#d8cdb5'; R(mx - 22, -347, mx + 22, M.maxZ);
+  g.fillStyle = '#6f6d68'; R(mx + 12, M.minZ, mx + 58, -428);
+  g.fillStyle = '#b8c0c8'; g.beginPath(); g.arc(X(712), Z(-372), 5 * k, 0, TAU); g.fill();
+  g.fillStyle = '#c9ced3'; for (const x of [583, 594]) { g.beginPath(); g.arc(X(x), Z(-440), 4 * k, 0, TAU); g.fill(); }
 };

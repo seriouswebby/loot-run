@@ -300,9 +300,9 @@ function pedAI(p, dt) {
   if (p.down) { p.downT -= dt; p.vx = p.vz = 0; if (p.downT <= 0) { p.getUp(); a.mode = 'flee'; a.fleeT = 8; a.thx = G.player.x; a.thz = G.player.z; } return; }
   if (p.handsUp > 0) { p.handsUp -= dt; p.vx = p.vz = 0; if (p.handsUp <= 0) { a.mode = 'flee'; a.fleeT = rand(6, 9); a.thx = G.player.x; a.thz = G.player.z; } return; }
   if (a.mode === 'vera') { p.vx = p.vz = 0; const P = G.player; if (dist(p.x, p.z, P.x, P.z) < 8) p.facing = turnTo(p.facing, Math.atan2(P.x - p.x, P.z - p.z), dt * 5); return; }
-  if (a.mode === 'park') { // a Funland visitor strolling the paths, stopping now and then to watch the rides
+  if (a.mode === 'park') { // strolling a district's paths (Funland, Millbrook), stopping now and then to look around
     if (a.waitT > 0) { a.waitT -= dt; p.vx = p.vz = 0; return; }
-    if (moveToward(p, a.tx, a.tz, a.speed, dt) < 0.7) Funland.nextTarget(p);
+    if (moveToward(p, a.tx, a.tz, a.speed, dt) < 0.7) Strollers.nextTarget(p);
   } else if (a.mode === 'walk') {
     const d = moveToward(p, a.tx, a.tz, a.speed, dt);
     if (d < 0.8) pedNextCorner(p);
@@ -313,7 +313,7 @@ function pedAI(p, dt) {
     const wob = Math.sin(G.time * 2 + p.anim) * 0.4;
     const vx = dx - dz * wob, vz = dz + dx * wob;
     moveToward(p, p.x + vx * 3, p.z + vz * 3, 5.4, dt);
-    if (a.fleeT <= 0) { if (a.park) Funland.resume(p); else { a.mode = 'walk'; a.block = W.nearestBlock(p.x, p.z); pedTarget(p); } }
+    if (a.fleeT <= 0) { if (a.park) Strollers.resume(p); else { a.mode = 'walk'; a.block = W.nearestBlock(p.x, p.z); pedTarget(p); } }
   } else if (a.mode === 'fight') {
     a.fightT -= dt;
     const P = G.player;

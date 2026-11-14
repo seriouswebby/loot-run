@@ -139,7 +139,7 @@ const PhysCar = {
       b.applyTorque({ x: up.x * tq, y: up.y * tq, z: up.z * tq }, true);
     }
     // downforce: the faster you go the harder the air presses the car onto its tyres (about double the grip flat out)
-    if (contacts) b.applyForceToCenter({ x: -up.x * m * 0.0055 * vF * vF, y: -up.y * m * 0.0055 * vF * vF, z: -up.z * m * 0.0055 * vF * vF }, true);
+    if (contacts) { const df = m * 0.0065 * vF * vF; b.applyForceToCenter({ x: -up.x * df, y: -up.y * df, z: -up.z * df }, true); }
     if (thrust > 0 && thr > 0 && vF < maxV) b.applyForceToCenter({ x: fw.x * m * thrust, y: 0, z: fw.z * m * thrust }, true);
     // over the speed limit (it changes with the zone): ease back to it
     if (vF > maxV + 0.3 && contacts) { const k = m * Math.min(12, (vF - maxV) * 3); b.applyForceToCenter({ x: -fw.x * k, y: 0, z: -fw.z * k }, true); }

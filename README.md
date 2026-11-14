@@ -46,7 +46,7 @@ Planes and jets: W/S throttle, build speed on the runway, Space to pull up, Shif
 | `js/world.js` | City generation, road graph, Ring Highway, zones, collisions, minimap |
 | `js/outer.js` | The county outside the city: country roads, roundabout, farms, woods, the airport, Mirror Lake, the Bay River and bridges, Pine Ridge and its tunnel, the railway |
 | `js/terrain.js` | Hills: rolling farmland, wooded hills, snowy highlands and badland mesas (everything built stays on flat ground), plus the stunt jumps |
-| `js/districts.js` | Districts out in the county: Funland, a theme park with a big wheel, the Viper coaster, a drop tower, a carousel and a ticket office to rob |
+| `js/districts.js` | Districts out in the county: Funland (a theme park with rides you can board and a ticket office to rob), Millbrook village (a diner, a general store and a gas station to rob), and people strolling their paths |
 | `js/puffs.js` | Soft billowing smoke from damaged and burning cars, tyres and explosions |
 | `js/physics.js` | Box3D world: ragdolls, loose props, flying debris, and the static walls around anything physical |
 | `js/drive.js` | Realistic handling: your car as a Box3D body on spring-damper wheels with a tyre model |

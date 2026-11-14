@@ -1014,7 +1014,7 @@ function updatePopulation(dt) {
     const d = dist(n.x, n.z, t.x, t.z);
     const unseen = () => !G.canSee(n.x, n.z, 1) || d > 340;
     if (n.kind === 'ped' && n.ai.mode !== 'vera') {
-      const keep = n.ai.park ? Funland.keepVisitor(n, t) : d <= 170;
+      const keep = n.ai.park ? Strollers.keep(n, t) : d <= 170;
       if (!keep && unseen()) n.remove(); else if (!n.ai.park) peds++;
     }
     if (n.kind === 'cop') {
@@ -1023,7 +1023,7 @@ function updatePopulation(dt) {
     }
   }
   if (peds < 32) { const p = randomSidewalkPoint(t.x, t.z, 35, 150, false, true); if (p) spawnPed(p.x, p.z, p.b, p.sx, p.sz); }
-  Funland.populate(t);
+  Strollers.populate(t);
   if (Heat.level === 0 && patrol < 2) { const p = randomSidewalkPoint(t.x, t.z, 50, 140, false, true); if (p) { const c = spawnCop(p.x, p.z, 'walk'); c.ai.mode = 'walk'; c.ai.block = p.b; c.ai.sx = p.sx; c.ai.sz = p.sz; c.ai.dir = 1; c.ai.speed = 1.8; pedTarget(c); } }
   // vehicles
   let traffic = 0, parked = 0;
