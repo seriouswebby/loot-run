@@ -18,7 +18,7 @@ Progress saves in your browser after every story job.
 | Mouse | Aim (3rd person: look) | | |
 | Click | Attack / shoot | | |
 | Space | Jump · vault · mantle · open parachute | Handbrake (BMX: hop) | Climb |
-| Shift | Sprint | Nitro | Descend |
+| Shift | Sprint (uses stamina) | Nitro | Descend |
 | E | Interact · hold to rob, cut alarms, loop cameras | Sell at Rusty's | |
 | F | Steal / enter a vehicle | Get out | Get out / bail out |
 | Q, 1–6 | Weapons | | |
@@ -26,7 +26,7 @@ Progress saves in your browser after every story job.
 | T · B | Grenade · C4 | | |
 | H | Medkit | | |
 | C | Camera: isometric · top-down · 3rd person | | |
-| M | City map | | |
+| M | City map (click it to set a waypoint) | | |
 | Esc · N | Pause · sound | | |
 
 ## Code layout
