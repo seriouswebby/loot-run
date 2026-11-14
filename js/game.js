@@ -478,6 +478,18 @@ G.updateTumble = function (dt) {
     Phys.unragdoll(P); P.tumble = null; P.safeT = G.time + 0.5; P.kx = P.kz = 0;
   }
 };
+/* big air: a small reward for any good jump, a big one the first time you clear each named stunt ramp */
+G.stunt = function (car, air, distM, ramp) {
+  const pay = Math.round(air * 20 + distM * 1.5);
+  G.S.stunts = G.S.stunts || [];
+  if (ramp && !G.S.stunts.includes(ramp.name)) {
+    G.S.stunts.push(ramp.name);
+    UI.banner('STUNT JUMP', ramp.name + ' · ' + distM.toFixed(0) + ' m · ' + air.toFixed(1) + ' s · ' + G.S.stunts.length + ' of ' + W.STUNTS.length, 'done');
+    G.addCash(500 + pay, car.x, car.z); Sfx.sting('step'); G.save();
+  } else {
+    G.toast('Big air! ' + distM.toFixed(0) + ' m · ' + air.toFixed(1) + ' s', 'good'); G.addCash(pay, car.x, car.z);
+  }
+};
 G.repairCost = (car) => Math.round(60 + (1 - clamp(car.hp / car.maxHp, 0, 1)) * car.T.value * 0.35);
 G.repairCar = function () {
   const car = G.player.inCar; if (!car) return false;

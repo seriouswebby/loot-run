@@ -64,6 +64,7 @@ function buildTerrain() {
   const C = 8, x0 = -W.OUT - 80, z0 = -W.OUT - 80, x1 = W.OUT + 80, z1 = W.SHORE + 80;
   const nx = Math.ceil((x1 - x0) / C) + 1, nz = Math.ceil((z1 - z0) / C) + 1, H = new Float32Array(nx * nz);
   W.TERRAIN = { C, x0, z0, nx, nz, H, env: null };
+  for (const st of W.STUNTS) W.FLAT.push({ minX: st.x - st.len, maxX: st.x + st.len, minZ: st.z - st.len, maxZ: st.z + st.len, pad: 6 });
   // county buildings stay level too
   for (const b of W.buildings) if (W.inCounty(b.minX, b.minZ) || W.inCounty(b.maxX, b.maxZ)) W.FLAT.push({ minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ, pad: 10 });
   if (!W.HILLS) return;
@@ -126,3 +127,45 @@ W.rampAt = function (x, z) {
   }
   return h;
 };
+
+/* named stunt jumps: x, z, heading (direction you drive up it), length, width, lip height */
+W.STUNTS = [
+  { name: 'River Run', x: 886, z: -300, ang: Math.PI / 2, len: 12, w: 7, h: 5.6 },
+  { name: 'Return Leg', x: 964, z: -330, ang: -Math.PI / 2, len: 12, w: 7, h: 5.6 },
+  { name: 'Runway Launch', x: -565, z: 300, ang: Math.PI / 2, len: 11, w: 9, h: 3.4 },
+  { name: 'Wrong Way Up', x: -1225, z: 300, ang: -Math.PI / 2, len: 11, w: 9, h: 3.4 },
+  { name: 'Beach Flyer', x: 160, z: 386, ang: Math.PI / 2, len: 10, w: 6, h: 2.8 },
+  { name: 'Sand Bar', x: -170, z: 386, ang: -Math.PI / 2, len: 10, w: 6, h: 2.8 },
+  { name: 'Barrier Breaker', x: 78, z: -318, ang: Math.PI, len: 12, w: 7, h: 3.4 },
+  { name: 'Circle Jump', x: 600, z: 45, ang: Math.PI / 2, len: 10, w: 6, h: 3.0 },
+  { name: 'Mesa Hop', x: 820, z: -690, ang: Math.PI / 2, len: 12, w: 7, h: 4.2 },
+];
+function buildRamps() {
+  const stripeTex = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 16; const g = c.getContext('2d'); g.fillStyle = '#1b1b1e'; g.fillRect(0, 0, 64, 16); g.fillStyle = '#ffd23f'; for (let x = -16; x < 64; x += 16) { g.beginPath(); g.moveTo(x, 16); g.lineTo(x + 8, 16); g.lineTo(x + 16, 0); g.lineTo(x + 8, 0); g.closePath(); g.fill(); } const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; return t; })();
+  W.STUNTS.forEach((st, i) => {
+    const fx = Math.sin(st.ang), fz = Math.cos(st.ang), r = { id: i, x: st.x, z: st.z, fx, fz, len: st.len, w: st.w, h: st.h, reach: st.len / 2 + st.w / 2 + 1, name: st.name };
+    W.RAMPS.push(r);
+    // the wedge: a sloped deck rising to the lip, sides, and a back wall under the lip
+    const L = st.len / 2, Wd = st.w / 2, Hh = st.h, g = new THREE.BufferGeometry();
+    const v = [[-Wd, 0, -L], [Wd, 0, -L], [Wd, Hh, L], [-Wd, Hh, L], [-Wd, 0, L], [Wd, 0, L]];
+    const tri = [[0, 2, 1], [0, 3, 2], [0, 4, 3], [1, 2, 5], [4, 5, 2], [4, 2, 3]], pos = [];
+    for (const t of tri) for (const k of t) pos.push(...v[k]);
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0x9a968c, side: THREE.DoubleSide })); m.castShadow = true; m.receiveShadow = true;
+    const base = W.groundAt(st.x, st.z) - W.rampAt(st.x, st.z); // terrain under it (the ramp itself is already counted)
+    m.position.set(st.x, base, st.z); m.rotation.y = st.ang; S.add(m);
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(st.w, 0.12, 0.6), new THREE.MeshLambertMaterial({ map: stripeTex })); lip.position.set(0, Hh + 0.02, L - 0.3); m.add(lip);
+    for (const s of [-1, 1]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.5, st.len), lam('#ffd23f')); rail.position.set(s * Wd, Hh / 2 + 0.25, 0); rail.rotation.x = -Math.atan2(Hh, st.len); m.add(rail); }
+    // the back wall under the lip is solid (from behind you hit it; off the lip you're already above it)
+    for (let k = -Wd; k <= Wd; k += 1.0) { const c = W.addCircle(st.x + fx * (L + 0.5) + fz * k, st.z + fz * (L + 0.5) - fx * k, 0.5, 'ramp'); c.h = Hh * 0.8; c.oneWay = [fx, fz]; }
+    W.places['stunt' + i] = { id: 'stunt', name: st.name, x: st.x, z: st.z };
+    // clear trees off the run-up and the landing
+    for (const t of W.trees) {
+      if (!t.col || t.col.removed) continue;
+      const dx = t.x - st.x, dz = t.z - st.z, along = dx * fx + dz * fz, side = dx * fz - dz * fx;
+      if (along > -L - 25 && along < L + 60 && Math.abs(side) < Wd + 4) { W.removeCollider(t.col); W.hideTree(t); }
+    }
+  });
+}
+/* which ramp (if any) is under a point */
+W.rampUnder = function (x, z) { for (const r of W.RAMPS) { const dx = x - r.x, dz = z - r.z, along = dx * r.fx + dz * r.fz, side = dx * r.fz - dz * r.fx; if (Math.abs(along) <= r.len / 2 + 0.5 && Math.abs(side) <= r.w / 2 + 0.5) return r; } return null; };

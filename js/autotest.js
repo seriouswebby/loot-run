@@ -600,6 +600,30 @@ function runAutotest() {
     G.god = false; G.noSpawn = false; P.y = 0; Heat.clear(); clearPolice(); tp(0, 25);
     return (reached && turned > 0.3 && jumped && robbed) || `reached the gold car ${reached} (fell ${fell}) through a bend ${turned.toFixed(2)} rad, jump landed on the train ${jumped}, robbed ${robbed} (cash +${G.S.cash - cash0})`;
   });
+  T('stunt ramps: jump the river and the highway barrier, land, get the bonus; a ramp is solid from behind', () => {
+    const bad = []; G.S.stunts = [];
+    const jump = (name, speed) => {
+      const r = W.RAMPS.find((q) => q.name === name); reset(); G.noSpawn = true; for (const c of G.cars.slice()) if (!c.persistent) c.remove();
+      const x = r.x - r.fx * 45, z = r.z - r.fz * 45, car = new Car('supercar', x, z, Math.atan2(r.fx, r.fz)); tp(x, z); G.enterCar(car);
+      car.v = speed; car.vx = r.fx * speed; car.vz = r.fz * speed; Input.keys.KeyW = true;
+      let top = 0, air = 0, crashed = false;
+      for (let i = 0; i < 360; i++) { step(STEP); top = Math.max(top, car.y); if (car.y > 0.2) air += STEP; if (air > 0.3 && car.y <= 0) break; }
+      Input.keys.KeyW = false; const out = { x: car.x, z: car.z, top, air, hp: car.hp / car.maxHp, along: (car.x - r.x) * r.fx + (car.z - r.z) * r.fz };
+      G.exitCar(true); car.remove(); G.noSpawn = false; void crashed; return out;
+    };
+    const river = jump('River Run', 40), rv = W.RIVER.pts;
+    let rd = 1e9; for (let i = 1; i < rv.length; i++) rd = Math.min(rd, segPointDist(river.x, river.z, rv[i - 1][0], rv[i - 1][1], rv[i][0], rv[i][1]));
+    if (!(river.air > 0.9 && river.top > 4 && rd > W.RIVER.w / 2 && river.x > 940)) bad.push(`river: air ${river.air.toFixed(1)} s top ${river.top.toFixed(1)} m landed at x ${river.x.toFixed(0)} (${rd.toFixed(0)} m from the water's middle)`);
+    const bar = jump('Barrier Breaker', 32);
+    if (!(bar.z < -W.HWY + W.HWH && bar.air > 0.6)) bad.push(`barrier: landed z ${bar.z.toFixed(0)} air ${bar.air.toFixed(1)}`);
+    if (!(G.S.stunts.includes('River Run') && G.S.stunts.includes('Barrier Breaker'))) bad.push('stunts recorded: ' + G.S.stunts.join(','));
+    // from behind: the back wall under the lip stops you
+    const r = W.RAMPS.find((q) => q.name === 'Circle Jump'); reset(); G.noSpawn = true;
+    const bx = r.x + r.fx * 30, bz = r.z + r.fz * 30, car = new Car('sedan', bx, bz, Math.atan2(-r.fx, -r.fz)); tp(bx, bz); G.enterCar(car); Input.keys.KeyW = true; steps(3); Input.keys.KeyW = false;
+    const along = (car.x - r.x) * r.fx + (car.z - r.z) * r.fz; if (along < r.len / 2 - 0.5) bad.push('drove through the back of a ramp, along ' + along.toFixed(1));
+    G.exitCar(true); car.remove(); G.noSpawn = false;
+    return !bad.length || bad.join(' | ');
+  });
   T('county: no trees, buildings or fields on the country roads', () => {
     const bad = [];
     for (const e of W.countyEdges) {

@@ -196,6 +196,12 @@ function drawMap(ctx, size, cx, cz, span, full) {
     if (h.pilot === 'ai') { if (!full) { ctx.beginPath(); ctx.arc(X(h.spotX), Z(h.spotZ), 3.4 * s + 1, 0, TAU); ctx.fillStyle = 'rgba(255,242,176,0.45)'; ctx.fill(); } dot(h.x, h.z, full ? 5 : 4.2, blink ? '#ff4a3d' : '#3d8bff', '#ffffff'); }
     else dot(h.x, h.z, full ? 4 : 3.2, '#ffffff', '#0f1216');
   }
+  // stunt ramps: yellow chevrons pointing the way you jump (grey once done)
+  for (const r of W.RAMPS) if (inView(r.x, r.z)) {
+    const done = G.S.stunts && G.S.stunts.includes(r.name), k = full ? 7 : 5;
+    ctx.save(); ctx.translate(X(r.x), Z(r.z)); ctx.rotate(Math.atan2(r.fz, r.fx)); ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(-k, -k * 0.8); ctx.lineTo(-k * 0.4, 0); ctx.lineTo(-k, k * 0.8); ctx.closePath();
+    ctx.fillStyle = done ? '#8a8a8a' : '#ffd23f'; ctx.fill(); ctx.strokeStyle = '#0f1216'; ctx.lineWidth = 1.2; ctx.stroke(); ctx.restore();
+  }
   for (const c of Train.cars) if (inView(c.x, c.z)) { ctx.save(); ctx.translate(X(c.x), Z(c.z)); ctx.rotate(-c.h); ctx.fillStyle = c.loco ? '#e0a100' : c.cash ? '#c9a227' : '#8b3a2a'; ctx.fillRect(-1.6 * s - 1, -c.hl * s, 3.2 * s + 2, c.len * s); ctx.restore(); }
   for (const rb of Roadblocks.list) if (inView(rb.x, rb.z) && (scanner || dist(rb.x, rb.z, t.x, t.z) < 160)) { label(rb.x, rb.z, '✕', '#ff4a3d'); }
   // objective
@@ -407,7 +413,7 @@ function updateCamera(dt) {
     const back = P.inHeli ? (P.inHeli.wing ? PLANES[P.inHeli.kind].cam : 17) : P.inCar ? (P.inCar.T.bike ? 7 : 10) + spd * 0.08 : CAM.chaseD;
     const fx3 = Math.sin(yaw), fz3 = Math.cos(yaw), cp = Math.cos(pitch), spch = Math.sin(pitch);
     const sh = veh ? 0 : 0.75; // over-the-shoulder offset to the right
-    const px = t.x - fz3 * sh, pz = t.z + fx3 * sh, py = P.inHeli ? fy + 3.5 : P.inCar ? 2.3 : fy + 1.8;
+    const px = t.x - fz3 * sh, pz = t.z + fx3 * sh, py = P.inHeli ? fy + 3.5 : P.inCar ? fy + 2.3 : fy + 1.8;
     let cx = px - fx3 * cp * back, cz = pz - fz3 * cp * back, cy = py + spch * back;
     const hit = py > 25 ? 1 : W.segHitT(px, pz, cx, cz, 2);
     if (hit < 1) { const k = Math.max(0.12, hit - 0.06); cx = px + (cx - px) * k; cz = pz + (cz - pz) * k; cy = py + (cy - py) * k; }
@@ -1146,6 +1152,11 @@ function demoSetup(kind) {
     const b = new Car('sports', x + 1, z + 9, Math.PI, { parked: true }); b.damage(b.maxHp * 0.8, b.x, b.z - 2);
     const a = new Car('sedan', x - 4, z + 9, Math.PI, { parked: true }); a.damage(a.maxHp * 0.6, a.x, a.z - 2);
     for (let i = 0; i < 150; i++) { step(STEP); Puffs.update(STEP, persp, 800); }
+  }
+  else if (kind === 'stunt') {
+    G.noSpawn = true; G.camMode = 'chase'; const r = W.RAMPS.find((q) => q.name === 'River Run'), x = r.x - r.fx * 45, z = r.z - r.fz * 45;
+    const car = new Car('supercar', x, z, Math.atan2(r.fx, r.fz)); P.x = x; P.z = z; G.enterCar(car); car.v = 40; car.vx = r.fx * 40; car.vz = r.fz * 40; Input.keys.KeyW = true;
+    for (let i = 0; i < 400 && !(car.y > 6 || (car.airT > 0.4 && car.y > 3)); i++) step(STEP); Input.keys.KeyW = false; CAM.carYaw = car.h + 0.7; CAM.carPitch = 0.2; CAM.wasInCar = true;
   }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }

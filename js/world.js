@@ -164,11 +164,12 @@ W.queryBox = function (x0, z0, x1, z1) {
   return out;
 };
 /* Push circle p{x,z} radius r out of all static colliders. Returns deepest hit {nx,nz,depth} or null. */
-W.collideCircle = function (p, r, y) {
+W.collideCircle = function (p, r, y, vx, vz) {
   let hit = null;
   const list = W.queryBox(p.x - r - 0.5, p.z - r - 0.5, p.x + r + 0.5, p.z + r + 0.5);
   for (const c of list) {
     if (y > 0 && c.h <= y) continue;
+    if (c.oneWay && vx != null && vx * c.oneWay[0] + vz * c.oneWay[1] > 0) continue; // a ramp's back only stops you coming from behind
     let nx = 0, nz = 0, pen = 0;
     if (c.circle) {
       const dx = p.x - c.x, dz = p.z - c.z, rr = r + c.r, d2 = dx * dx + dz * dz;
@@ -1096,6 +1097,7 @@ W.build = function (scene, seed) {
   buildTrees();
   buildCounty();
   buildTerrain();
+  buildRamps();
   for (const k in GB) GB[k].build(S);
   P.build(S);
   buildMinimap();

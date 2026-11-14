@@ -189,9 +189,9 @@ class Car {
     for (let i = 0; i < n; i++) {
       const g0 = W.groundAt(this.x, this.z);
       this.x += (this.vx + this.kx) * h; this.z += (this.vz + this.kz) * h;
-      this.collideStatic();
       const dg = W.groundAt(this.x, this.z) - g0;
       if (dg) this.groundStep(dg, h, sp * h);
+      this.collideStatic();
     }
     const k = Math.exp(-3 * dt); this.kx *= k; this.kz *= k;
   }
@@ -199,7 +199,11 @@ class Car {
      grounded ones follow it unless it drops away faster than they can, which launches them */
   groundStep(dg, h, len) {
     if (this.y > 0.001 || this.yv > 0) { this.y -= dg; return; }
-    if (dg < -Math.max(0.1, len * 0.3)) { this.y = -dg; this.yv = Math.max(0, this.gvy || 0); this.airT = 0; return; }
+    if (dg < -Math.max(0.1, len * 0.3)) {
+      const bx = this.x - this.vx * h, bz = this.z - this.vz * h; // where it took off from
+      this.y = -dg; this.yv = Math.max(0, this.gvy || 0); this.airT = 0; this.launch = { x: bx, z: bz, ramp: W.rampUnder(bx, bz) };
+      return;
+    }
     this.gvy = dg / h;
   }
   circles() {
@@ -213,7 +217,7 @@ class Car {
     const ox = this.x, oz = this.z;
     for (const [cx, cz] of this.circles()) {
       const p = { x: cx, z: cz };
-      const hit = W.collideCircle(p, this.r, this.y);
+      const hit = W.collideCircle(p, this.r, this.y, this.vx, this.vz);
       if (hit) { this.x += p.x - cx; this.z += p.z - cz; if (!best || hit.depth > best.depth) best = hit; }
     }
     if (!best) return;
@@ -348,8 +352,12 @@ class Car {
       this.bar[1].material.color.set(on && !ph ? 0x2050ff : 0x111155);
     }
     if (this.y > 0 || this.yv > 0) {
-      this.yv -= 22 * dt; this.y += this.yv * dt;
-      if (this.y <= 0) { this.y = 0; this.yv = 0; if (this.driver === 'player') Sfx.land(this.x, this.z); }
+      this.yv -= 22 * dt; this.y += this.yv * dt; this.airT = (this.airT || 0) + dt;
+      if (this.y <= 0) {
+        this.y = 0; this.yv = 0;
+        if (this.driver === 'player') { Sfx.land(this.x, this.z); if (this.launch && this.airT > 0.9 && !this.wreck) G.stunt(this, this.airT, dist(this.launch.x, this.launch.z, this.x, this.z), this.launch.ramp); }
+        this.launch = null;
+      }
     }
     const gnd = W.groundAt(this.x, this.z), fx = Math.sin(this.h), fz = Math.cos(this.h);
     this.mesh.position.set(this.x, this.y + gnd, this.z); this.mesh.rotation.y = this.h;

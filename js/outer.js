@@ -316,7 +316,7 @@ function buildWater(OP) {
   const disc = (x, z, r, y, col) => { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 64), col.isMaterial ? col : new THREE.MeshLambertMaterial({ color: col })); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; S.add(m); return m; };
   // the lake: sand shore, water, a jetty with a rowboat
   disc(L.x, L.z, L.r + 9, 0.022, '#d8c690'); disc(L.x, L.z, L.r, 0.03, waterMat);
-  W.addCircle(L.x, L.z, L.r - 1, 'water');
+  W.addCircle(L.x, L.z, L.r - 1, 'water').h = 0.6;
   for (let k = 0; k < 14; k++) OP.box(L.x + L.r - 2 + k * 1.2 - 14, 0.3, L.z + 0.5, 1.1, 0.2, 3, '#8b6a45');
   for (const s of [-1, 1]) for (let k = 0; k < 4; k++) OP.box(L.x + L.r - 15 + k * 4, 0.2, L.z + 0.5 + s * 1.4, 0.35, 1.2, 0.35, '#5b4630');
   OP.box(L.x + L.r - 18, 0.25, L.z + 4.5, 1.6, 0.5, 4.2, '#c75a2a'); OP.box(L.x + L.r - 18, 0.52, L.z + 4.5, 1.2, 0.08, 3.6, '#e9d8a6');
@@ -340,8 +340,8 @@ function buildWater(OP) {
     const nearRoad = (x, z) => { let d = 1e9; if (!crossing.some((c) => dist(x, z, c.x, c.z) < hw + 40)) return d; for (const e of W.countyEdges) d = Math.min(d, segPointDist(x, z, e.ax, e.az, e.bx, e.bz)); return d; };
     for (let s = 0; s <= len; s += 3) {
       const x = ax + dx * s, z = az + dz * s;
-      if (nearRoad(x, z) > hw + 7) { if (s % 6 === 0) W.addCircle(x, z, hw - 1, 'water'); continue; }
-      for (let o = -hw + 3; o <= hw - 3; o += 4) { const px = x - dz * o, pz = z + dx * o; if (nearRoad(px, pz) > 10.5) W.addCircle(px, pz, 3, 'water'); }
+      if (nearRoad(x, z) > hw + 7) { if (s % 6 === 0) W.addCircle(x, z, hw - 1, 'water').h = 0.6; continue; }
+      for (let o = -hw + 3; o <= hw - 3; o += 4) { const px = x - dz * o, pz = z + dx * o; if (nearRoad(px, pz) > 10.5) W.addCircle(px, pz, 3, 'water').h = 0.6; }
     }
   }
   // bridges: a deck, railings you can't drive through, girders and piers in the water

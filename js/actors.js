@@ -135,7 +135,7 @@ class Actor {
     const tx = (mx + this.kx) * dt, tz = (mz + this.kz) * dt, hops = Math.min(10, Math.max(1, Math.ceil(Math.hypot(tx, tz) / 0.25)));
     for (let i = 0; i < hops; i++) {
       const g0 = W.groundAt(this.x, this.z);
-      this.x += tx / hops; this.z += tz / hops; if (hops > 1) W.collideCircle(this, this.r, this.y);
+      this.x += tx / hops; this.z += tz / hops; if (hops > 1) W.collideCircle(this, this.r, this.y, tx, tz);
       const dg = W.groundAt(this.x, this.z) - g0;
       if (dg) this.groundStep(dg, dt / hops, Math.hypot(tx, tz) / hops);
     }
@@ -154,7 +154,7 @@ class Actor {
         if (roofs && drop > 6 && !chuted && !(this.safeT > G.time)) { G.toast(drop > 20 ? 'That was a long way down.' : 'Ouch — hard landing.', 'warn'); G.hurtPlayer((drop - 6) * 9, this.x, this.z + 1, 0, null); }
       }
     } else { this.y = floor; this.top = null; }
-    W.collideCircle(this, this.r, this.y);
+    W.collideCircle(this, this.r, this.y, this.vx + this.kx, this.vz + this.kz);
     if (roofs && this.y > 0.5) W.collideBuildings(this, this.r, this.y);
   }
   animate(dt) {
