@@ -144,6 +144,9 @@ function countyFarms(OP, free) {
     const fw = 50 + rnd() * 40, fd = 40 + rnd() * 30;
     if (!free(x, z, 0) || !free(x - fw / 2, z - fd / 2, 0) || !free(x + fw / 2, z + fd / 2, 0) || !free(x + fw / 2, z - fd / 2, 0) || !free(x - fw / 2, z + fd / 2, 0)) continue;
     if (!W.nearCountyRoad(x, z, 120)) continue;
+    // no road may cross the field (checking corners alone let roads run straight through the middle)
+    const box = { minX: x - fw / 2 - 12, maxX: x + fw / 2 + 12, minZ: z - fd / 2 - 12, maxZ: z + fd / 2 + 12 };
+    if (W.countyEdges.some((e) => W.segAABB(e.ax, e.az, e.bx, e.bz, box) >= 0 || (e.ax > box.minX && e.ax < box.maxX && e.az > box.minZ && e.az < box.maxZ))) continue;
     // the field: rows of crops on dirt, a wooden fence round it
     GB.dirt.rect(x - fw / 2, z - fd / 2, x + fw / 2, z + fd / 2, 0.03, 6);
     const crop = pick(['#7aa63a', '#c9b44a', '#5e8f2f', '#a8c25a']);

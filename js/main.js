@@ -1099,6 +1099,7 @@ function demoSetup(kind) {
   else if (kind === 'roundabout') { const R = W.ROUNDABOUT; P.x = R.x - 30; P.z = R.z + 25; CAM.zoomIso = 70; CAM.curIso = 70; for (let i = 0; i < 60; i++) step(STEP); }
   else if (kind === 'tunnel') { G.camMode = 'chase'; P.x = -100 + 2; P.z = W.TUNNEL.maxZ + 40; P.facing = CAM.yaw = Math.PI; CAM.pitch = 0.12; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'ridge') { P.x = -100; P.z = W.TUNNEL.maxZ - 30; CAM.zoomIso = 120; CAM.curIso = 120; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'narrow') { const b = W.blocks.find((k) => k.type === 'city' && k.j === 2); G.camMode = 'chase'; P.x = b.cx; P.z = b.cz - 13; P.facing = CAM.yaw = 0; CAM.pitch = 0.15; CAM.chaseD = 5; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }

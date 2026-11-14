@@ -516,18 +516,26 @@ function cityBlock(b, mul) {
   for (let q = 0; q < 4; q++) {
     if (b.storeQ === q) continue;
     const sx = (q === 1 || q === 3) ? 1 : -1, sz = q >= 2 ? 1 : -1;
-    const w = 13.6 + rnd() * 1.1, d = 13.6 + rnd() * 1.1, h = bHeight(cx, cz, mul);
-    addBuilding(cx + sx * (15.1 - w / 2), cz + sz * (15.1 - d / 2), w, d, h, styleFor(h), { collide: false });
+    const w0 = 13.6 + rnd() * 1.1, d0 = 13.6 + rnd() * 1.1, h = bHeight(cx, cz, mul); void w0; void d0; // (draws kept so the rest of the city is unchanged)
+    addBuilding(cx + sx * (15.1 - NARROW_W / 2), cz + sz * (15.1 - NARROW_W / 2), NARROW_W, NARROW_W, h, styleFor(h));
   }
-  W.addCollider(cx - 15.1, cz - 15.1, cx + 15.1, cz + 15.1, 8, 'block');
+  narrowAlleys(cx, cz);
+}
+/* the 1.5 m gaps between a block's four buildings: narrow alleys you can slip through on foot or on a bike, but no car fits */
+const NARROW_W = 14.35;
+function narrowAlleys(cx, cz) {
+  const g = 15.1 - NARROW_W;
+  W.alleys.push({ dead: false, narrow: true, cx, cz, minX: cx - g, maxX: cx + g, minZ: cz - 15.5, maxZ: cz + 15.5, exits: [{ x: cx, z: cz - 19.5 }, { x: cx, z: cz + 19.5 }] });
+  W.alleys.push({ dead: false, narrow: true, cx, cz, minX: cx - 15.5, maxX: cx + 15.5, minZ: cz - g, maxZ: cz + g, exits: [{ x: cx - 19.5, z: cz }, { x: cx + 19.5, z: cz }] });
+  GB.alley.rect(cx - g, cz - 15.1, cx + g, cz + 15.1, 0.036, 8); GB.alley.rect(cx - 15.1, cz - g, cx + 15.1, cz + g, 0.036, 8);
 }
 
 function storeLot(b, key) {
   const st = STORES[key]; const { cx, cz } = b; const q = st.q;
   const sx = (q === 1 || q === 3) ? 1 : -1, sz = q >= 2 ? 1 : -1;
-  const w = 14.2, d = 13.4, h = 6.2;
+  const w = NARROW_W, d = NARROW_W, h = 6.2;
   const x = cx + sx * (15.1 - w / 2), z = cz + sz * (15.1 - d / 2);
-  addBuilding(x, z, w, d, h, 'stucco', { collide: false, color: st.wall });
+  addBuilding(x, z, w, d, h, 'stucco', { color: st.wall });
   const face = sz < 0 ? 'n' : 's', fz = cz + sz * 15.1, [, nz] = FACE_N[face];
   // storefront: window, door, awning, sign
   P.box(x, 1.6, fz + nz * 0.05, w - 3, 2.4, 0.12, '#a9d6e5');
@@ -551,9 +559,9 @@ function alleyBlock(b, o, dead) {
   const { cx, cz } = b, AW = 3;
   const m = (u, v) => { switch (o) { case 'n': return [cx + v, cz + u]; case 's': return [cx - v, cz - u]; case 'w': return [cx + u, cz - v]; default: return [cx - u, cz + v]; } };
   const rect = (u0, u1, v0, v1) => { const [x0, z0] = m(u0, v0), [x1, z1] = m(u1, v1); return { minX: Math.min(x0, x1), maxX: Math.max(x0, x1), minZ: Math.min(z0, z1), maxZ: Math.max(z0, z1) }; };
-  const bld = (u0, u1, v0, v1) => {
+  const bld = (u0, u1, v0, v1, solid) => {
     const r = rect(u0, u1, v0, v1), h = bHeight(cx, cz);
-    addBuilding((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, h, styleFor(h), { collide: false });
+    addBuilding((r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2, r.maxX - r.minX, r.maxZ - r.minZ, h, styleFor(h), { collide: !!solid });
   };
   const col = (u0, u1, v0, v1, h) => { const r = rect(u0, u1, v0, v1); W.addCollider(r.minX, r.minZ, r.maxX, r.maxZ, h || 8, 'block'); };
   const end = dead ? 6.5 : 15.5;
@@ -564,8 +572,12 @@ function alleyBlock(b, o, dead) {
     const [wx, wz] = m(6.3, 0); const vert = (o === 'n' || o === 's');
     P.box(wx, 1.6, wz, vert ? 6 : 0.4, 3.2, vert ? 0.4 : 6, '#7d4a3a');
   } else {
-    bld(-15.1, -0.4, -15.1, -3.4); bld(0.4, 15.1, -15.1, -3.4); bld(-15.1, -0.4, 3.4, 15.1); bld(0.4, 15.1, 3.4, 15.1);
-    col(-15.1, 15.1, -15.1, -AW); col(-15.1, 15.1, AW, 15.1);
+    // through-alley: each building is solid on its own, with a narrow cut-through between them across the alley
+    const g = 15.1 - NARROW_W;
+    bld(-15.1, -g, -15.1, -3.4, true); bld(g, 15.1, -15.1, -3.4, true); bld(-15.1, -g, 3.4, 15.1, true); bld(g, 15.1, 3.4, 15.1, true);
+    const cr = rect(-g, g, -15.5, 15.5), [ex0, ez0] = m(0, -19.5), [ex1, ez1] = m(0, 19.5);
+    W.alleys.push(Object.assign({ dead: false, narrow: true, cx, cz, exits: [{ x: ex0, z: ez0 }, { x: ex1, z: ez1 }] }, cr));
+    GB.alley.rect(cr.minX, cr.minZ, cr.maxX, cr.maxZ, 0.036, 8);
   }
   const zr = rect(-15.5, end, -AW, AW);
   const exits = [m(-15.5 - 4, 0)];
@@ -966,7 +978,7 @@ function placeProps() {
     const x = b.cx + nx * 16.3 + (nz !== 0 ? t : 0), z = b.cz + nz * 16.3 + (nx !== 0 ? t : 0);
     if (!avoid(x, z)) W.propSpots.push({ x, z, kind: kinds[Math.floor(rnd() * kinds.length)], rot: rnd() * TAU });
   }
-  for (const a of W.alleys) for (let k = 0; k < 2; k++) W.propSpots.push({ x: a.minX + 1.2 + rnd() * (a.maxX - a.minX - 2.4), z: a.minZ + 1.2 + rnd() * (a.maxZ - a.minZ - 2.4), kind: 'crate', rot: rnd() * TAU });
+  for (const a of W.alleys) if (!a.narrow) for (let k = 0; k < 2; k++) W.propSpots.push({ x: a.minX + 1.2 + rnd() * (a.maxX - a.minX - 2.4), z: a.minZ + 1.2 + rnd() * (a.maxZ - a.minZ - 2.4), kind: 'crate', rot: rnd() * TAU });
 }
 
 /* ---------------- minimap base ---------------- */

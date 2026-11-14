@@ -44,7 +44,7 @@ function runAutotest() {
   });
   T('player cannot walk through a building', () => {
     reset(); const b = W.blocks.find((k) => k.type === 'city');
-    tp(b.cx, b.cz - 18); G.inputOverride = { mx: 0, mz: 1 }; steps(3); G.inputOverride = null;
+    tp(b.cx - 7.5, b.cz - 18); G.inputOverride = { mx: 0, mz: 1 }; steps(3); G.inputOverride = null;
     return P.z <= b.cz - 15.4 || 'z ' + P.z.toFixed(2) + ' wall ' + (b.cz - 15.1);
   });
   T('loud store robbery pays and raises heat', () => {
@@ -116,9 +116,19 @@ function runAutotest() {
     const x0 = car.x; Input.keys.KeyW = true; steps(2.5); Input.keys.KeyW = false;
     const moved = car.x - x0; G.exitCar(); return (moved > 15 && !P.inCar) || 'moved ' + moved.toFixed(1);
   });
+  T('narrow alleys: walk (or ride a bike) through the gap between buildings; cars do not fit', () => {
+    reset(); G.noSpawn = true; const b = W.blocks.find((k) => k.type === 'city' && k.j === 2) || W.blocks.find((k) => k.type === 'city');
+    tp(b.cx, b.cz - 18); G.inputOverride = { mx: 0, mz: 1 }; let zone = ''; for (let i = 0; i < 480 && P.z < b.cz + 17; i++) { step(STEP); if (Math.abs(P.z - b.cz) < 10) zone = G.playerZone; } G.inputOverride = null;
+    const walked = P.z > b.cz + 16;
+    const bike = new Car('bmx', b.cx, b.cz - 22, 0); tp(b.cx + 1.2, b.cz - 22); G.enterCar(bike); Input.keys.KeyW = true; steps(5); Input.keys.KeyW = false;
+    const rode = bike.z > b.cz + 16; G.exitCar(true); bike.remove();
+    const car = new Car('hatch', b.cx, b.cz - 24, 0); tp(b.cx + 2, b.cz - 24); G.enterCar(car); Input.keys.KeyW = true; steps(4); Input.keys.KeyW = false;
+    const blocked = car.z < b.cz - 13; G.exitCar(true); car.remove(); G.noSpawn = false;
+    return (walked && zone === 'alley' && rode && blocked) || `walked through ${walked} (z ${P.z.toFixed(1)}) zone ${zone} bmx through ${rode} car blocked ${blocked} (z ${car.z.toFixed(1)} vs face ${(b.cz - 15.1).toFixed(1)})`;
+  });
   T('car cannot drive through a building', () => {
     reset(); const b = W.blocks.find((k) => k.type === 'city' && k.j === 2) || W.blocks.find((k) => k.type === 'city');
-    const car = new Car('sports', b.cx, b.cz - 23, 0); tp(b.cx + 3, b.cz - 23); G.enterCar(car);
+    const car = new Car('sports', b.cx - 7.5, b.cz - 23, 0); tp(b.cx - 4.5, b.cz - 23); G.enterCar(car);
     Input.keys.KeyW = true; steps(3); Input.keys.KeyW = false;
     const z = car.z; G.exitCar(); return z < b.cz - 16 || 'car z ' + z.toFixed(1) + ' block edge ' + (b.cz - 15.1);
   });
@@ -372,7 +382,7 @@ function runAutotest() {
   });
   T('riders show on bikes and get thrown off in a hard crash', () => {
     reset(); const b = W.blocks.find((k) => k.type === 'city');
-    const bike = new Car('motorbike', b.cx, b.cz - 26, 0); tp(b.cx + 1.5, b.cz - 26); G.enterCar(bike);
+    const bike = new Car('motorbike', b.cx - 7.5, b.cz - 26, 0); tp(b.cx - 6, b.cz - 26); G.enterCar(bike);
     const visible = P.rig.root.visible;
     bike.v = 30; bike.vx = 0; bike.vz = 30; G.god = true;
     for (let i = 0; i < 60 && P.inCar; i++) step(STEP);
@@ -411,7 +421,7 @@ function runAutotest() {
   });
   T('bike into a wall: thrown, no tunneling, and bikes do not mow down trees', () => {
     reset(); const b = W.blocks.find((k) => k.type === 'city');
-    const bike = new Car('motorbike', b.cx, b.cz - 26, 0); tp(b.cx + 1.5, b.cz - 26); G.enterCar(bike);
+    const bike = new Car('motorbike', b.cx - 7.5, b.cz - 26, 0); tp(b.cx - 6, b.cz - 26); G.enterCar(bike);
     bike.v = 40; bike.vz = 40; G.god = true; let inside = false;
     for (let i = 0; i < 300; i++) { step(STEP); if (P.z > b.cz - 15.1 + 0.5) inside = true; if (!P.inCar && !P.tumble && i > 30) break; }
     const thrown = !P.inCar; G.god = false; bike.remove();
@@ -543,7 +553,7 @@ function runAutotest() {
     G.exitHeli(true); tour.remove(); G.noSpawn = false;
     return !bad.length || bad.join(' | ');
   });
-  T('county: no trees standing on the country roads', () => {
+  T('county: no trees, buildings or fields on the country roads', () => {
     const bad = [];
     for (const e of W.countyEdges) {
       const L = dist(e.ax, e.az, e.bx, e.bz);
@@ -552,6 +562,7 @@ function runAutotest() {
         for (const c of W.queryBox(x - 6, z - 6, x + 6, z + 6)) if (!c.removed && (c.kind === 'tree' || c.kind === 'building') && (c.circle ? dist(c.x, c.z, x, z) < 6 : x > c.minX - 6 && x < c.maxX + 6 && z > c.minZ - 6 && z < c.maxZ + 6)) bad.push(c.kind + '@' + Math.round(x) + ',' + Math.round(z));
       }
     }
+    for (const f of W.fields) for (const e of W.countyEdges) if (W.segAABB(e.ax, e.az, e.bx, e.bz, { minX: f.x0 - 6, maxX: f.x1 + 6, minZ: f.z0 - 6, maxZ: f.z1 + 6 }) >= 0) bad.push('field@' + Math.round(f.x0) + ',' + Math.round(f.z0));
     return !bad.length || bad.length + ' blockers: ' + [...new Set(bad)].slice(0, 6).join(' ');
   });
   T('big map right-click teleports you (and your car) to a clear spot', () => {
@@ -640,11 +651,12 @@ function runAutotest() {
   });
   T('six-lane highway: wider and much faster than city streets', () => {
     const drive = (x, z, h) => {
-      reset(); tp(x, z); const car = new Car('sports', x, z, h); G.enterCar(car);
-      Input.keys.KeyW = true; steps(4); Input.keys.KeyW = false; const v = car.v; G.exitCar(); car.remove(); return v;
+      // long enough for both to reach their top speed, with no traffic in the way
+      reset(); G.noSpawn = true; for (const c of G.cars.slice()) if (!c.persistent) c.remove(); tp(x, z); const car = new Car('sports', x, z, h); G.enterCar(car);
+      Input.keys.KeyW = true; steps(7); Input.keys.KeyW = false; const v = car.v; G.exitCar(); car.remove(); G.noSpawn = false; return v;
     };
-    const hwyV = drive(-235, -W.HWY + 7.5, Math.PI / 2);
-    const cityV = drive(W.rp(4) - 2.5, W.rp(1) + 8, 0);
+    const hwyV = drive(-300, -W.HWY + 7.5, Math.PI / 2);
+    const cityV = drive(W.rp(4) - 2.5, W.rp(0) + 8, 0);
     const wide = W.onHighway(0, -W.HWY + 14) && !W.onHighway(0, -W.HWY + 17);
     return (wide && hwyV > cityV * 1.3 && hwyV * 3.6 > 170) || `highway ${(hwyV * 3.6).toFixed(0)} km/h city ${(cityV * 3.6).toFixed(0)} km/h wide ${wide}`;
   });
@@ -690,7 +702,7 @@ function runAutotest() {
     ram('supercar', px, pz, Math.atan2(Math.cos(a), Math.sin(a)), 88, (c) => Math.hypot(c.x - cx, c.z - cz) < W.RR + W.HWH + 0.6, 'supercar → curved barrier');
     // a city block wall
     const b = W.blocks.find((q) => q.type === 'city');
-    ram('supercar', b.cx, b.cz - 30, 0, 88, (c) => c.z < b.cz - 15.1, 'supercar → building');
+    ram('supercar', b.cx - 7.5, b.cz - 30, 0, 88, (c) => c.z < b.cz - 15.1, 'supercar → building');
     // a pedestrian flung by a crash
     reset(); tp(-150, -H + 12); P.kx = 0; P.kz = -75; P.y = 0.05; P.yv = 4; let flungOk = true;
     for (let i = 0; i < 60; i++) { step(STEP); if (P.z < -H - W.HWH - 0.6) flungOk = false; }
@@ -725,7 +737,7 @@ function runAutotest() {
     reset(); tp(0, 25); const car = new Car('sedan', 0, 27.5, Math.PI / 2, { parked: true }); P.facing = 0;
     G.inputOverride = { mx: 0, mz: 1 }; steps(0.05); G.jumpQ = true; steps(1); G.inputOverride = null;
     const overCar = P.z > 29; car.remove();
-    const b = W.blocks.find((k) => k.type === 'city'); tp(b.cx, b.cz - 15.1 - P.r - 0.05); P.facing = 0;
+    const b = W.blocks.find((k) => k.type === 'city'); tp(b.cx - 7.5, b.cz - 15.1 - P.r - 0.05); P.facing = 0;
     G.inputOverride = { mx: 0, mz: 1 }; G.jumpQ = true; steps(1); G.inputOverride = null;
     return (overCar && P.z < b.cz - 15) || `over car ${overCar} building z ${P.z.toFixed(1)} vs ${(b.cz - 15.1).toFixed(1)}`;
   });
@@ -926,7 +938,7 @@ function runAutotest() {
   });
   T('vehicle damage: crashes dent the car and crack the glass', () => {
     reset(); G.noSpawn = true; const b = W.blocks.find((k) => k.type === 'city');
-    const car = new Car('sedan', b.cx, b.cz - 26, 0); tp(b.cx + 2, b.cz - 26); G.enterCar(car); car.v = 22; car.vz = 22; Input.keys.KeyW = true;
+    const car = new Car('sedan', b.cx - 7.5, b.cz - 26, 0); tp(b.cx - 5.5, b.cz - 26); G.enterCar(car); car.v = 22; car.vz = 22; Input.keys.KeyW = true;
     steps(1.2); Input.keys.KeyW = false;
     let moved = 0; for (const d of car.dentable) { const a = d.m.geometry.attributes.position.array; for (let i = 0; i < a.length; i++) moved = Math.max(moved, Math.abs(a[i] - d.orig[i])); }
     const glass = car.glassMats.length && car.glassMats[0].color.getHexString() !== '22303c';
