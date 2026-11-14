@@ -261,6 +261,29 @@ G.setWaypoint = function (x, z) {
   G.waypoint = x == null ? null : { x: clamp(x, W.LAND.minX, W.LAND.maxX), z: clamp(z, W.LAND.minZ, W.LAND.maxZ) };
   GPS.t = 0; GPS.update(0);
 };
+/* right-click on the big map: teleport there (with whatever you're driving or flying) */
+G.teleport = function (x, z) {
+  const P = G.player; if (G.respawning || P.down) return false;
+  x = clamp(x, W.LAND.minX + 8, W.LAND.maxX - 8); z = clamp(z, W.LAND.minZ + 8, W.SHORE - 6);
+  const veh = P.inCar || P.inHeli, r = P.inHeli ? 6 : P.inCar ? 3 : 1;
+  // nearest open spot: spiral out until nothing solid is in the way
+  let sx = x, sz = z;
+  for (let k = 0; k < 400; k++) {
+    const a = k * 2.4, d = Math.sqrt(k) * 3, px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d, p = { x: px, z: pz };
+    if (P.inHeli || (!W.collideCircle(p, r, 0) && !W.buildings.some((b) => px > b.minX - r && px < b.maxX + r && pz > b.minZ - r && pz < b.maxZ + r))) { sx = px; sz = pz; break; }
+  }
+  if (P.ragdoll) Phys.unragdoll(P);
+  P.tumble = null; P.vault = null; P.chute = false; P.jumping = false; P.kx = P.kz = 0;
+  if (veh) { veh.x = sx; veh.z = sz; if (P.inCar) { veh.v = 0; veh.vx = veh.vz = 0; } }
+  P.x = sx; P.z = sz; P.y = P.inHeli ? P.y : 0; P.yv = 0;
+  CAM.fx = sx; CAM.fz = sz; G.remount = null; GPS.t = 0;
+  return true;
+};
+function bigMapTeleport(fx, fy) {
+  const x = BM.cx + (fx - 0.5) * BM.span, z = BM.cz + (fy - 0.5) * BM.span;
+  if (!G.teleport(x, z)) { Sfx.error(); return; }
+  $('bigmap').hidden = true; G.state = 'play'; Sfx.whoosh(); G.toast('Teleported.', 'good');
+}
 function bigMapClick(fx, fy, clear) {
   // fx, fy: click position as a fraction of the canvas (0..1)
   const span = BM.span, x = BM.cx + (fx - 0.5) * span, z = BM.cz + (fy - 0.5) * span, wp = G.waypoint;
@@ -884,12 +907,12 @@ function frame(now) {
   const B = G.body();
   Weather.update(dt, CAM.fx, P.inHeli ? Math.max(0, P.inHeli.y - 12) : Math.max(0, P.y - 4), CAM.fz);
   // nothing past the fog can be seen, so don't draw it: with the county out there this culls most of the world
-  if (G.scene.fog) { const far = Math.min(900, G.scene.fog.far + 25); if (Math.abs(persp.far - far) > 5) { persp.far = far; persp.updateProjectionMatrix(); } }
+  if (G.scene.fog) { const far = Math.min(1400, G.scene.fog.far + 25); if (Math.abs(persp.far - far) > 5) { persp.far = far; persp.updateProjectionMatrix(); } }
   const sir = G.cars.filter((c) => c.siren && !c.wreck && !c.dead).sort((a, b) => dist(a.x, a.z, B.x, B.z) - dist(b.x, b.z, B.x, B.z)).slice(0, 2);
   let heli = null, hd = 1e9;
   for (const h of Choppers.list) if (!h.dead && h.rotor > 0.3 && (!h.wing || h.pilot)) { const d = h === P.inHeli ? 0 : dist(h.x, h.z, B.x, B.z); if (d < hd) { hd = d; heli = h; } }
   const cf = G.camFwd || { x: 0, z: -1 };
-  Sfx.update(dt, { playing: G.state === 'play', lx: B.x, lz: B.z, rx: -cf.z, rz: cf.x, sirens: sir, heat: Heat.level, zone: G.playerZone, rain: Weather.p.rain, slip: G.slip || 0,
+  Sfx.update(dt, { playing: G.state === 'play', lx: B.x, lz: B.z, rx: -cf.z, rz: cf.x, sirens: sir, heat: Heat.level, zone: G.playerZone, rain: Math.max(Weather.p.rain, Weather.p.hail * 0.8), hail: Weather.p.hail, wind: Weather.p.wind + Weather.gust, slip: G.slip || 0,
     engine: P.inCar && !P.inCar.T.pedal ? { speed: P.inCar.v, throttle: G.throttle || 0, boost: G.boosting, bike: !!P.inCar.T.bike } : null, heli: heli ? { x: heli.x, z: heli.z, kind: heli.kind, v: heli.v || 0, thr: heli.thr || 0, mine: heli === P.inHeli } : null });
   renderer.render(G.scene, cam);
   Input.endFrame();
@@ -907,7 +930,7 @@ function setupScene() {
   sun.shadow.bias = -0.0008;
   scene.add(sun); scene.add(sun.target);
   ortho = new THREE.OrthographicCamera(-20, 20, 20, -20, 1, 800);
-  persp = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 900);
+  persp = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 1400);
   raycaster = new THREE.Raycaster(); aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.2);
   return scene;
 }
@@ -964,6 +987,7 @@ function bootUI() {
     $('bigmap').hidden = true; G.state = 'play';
   });
   const cvs = $('bigmapCanvas'), frac = (e) => { const r = cvs.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, r.width]; };
+  $('bigmapCanvas').addEventListener('contextmenu', (e) => { e.preventDefault(); const [fx, fy] = frac(e); bigMapTeleport(fx, fy); });
   cvs.addEventListener('wheel', (e) => { e.preventDefault(); const [fx, fy] = frac(e); bigMapZoom(fx, fy, e.deltaY > 0 ? 1.2 : 1 / 1.2); }, { passive: false });
   cvs.addEventListener('mousedown', (e) => { if (e.button !== 0) return; BM.drag = { x: e.clientX, y: e.clientY, cx: BM.cx, cz: BM.cz }; BM.moved = false; });
   window.addEventListener('mousemove', (e) => {
@@ -972,7 +996,6 @@ function bootUI() {
     if (BM.moved) { BM.cx = BM.drag.cx - dx / w * BM.span; BM.cz = BM.drag.cz - dy / w * BM.span; drawBigMap(); }
   });
   window.addEventListener('mouseup', () => { BM.drag = null; });
-  $('bigmapCanvas').addEventListener('contextmenu', (e) => { e.preventDefault(); bigMapClick(0, 0, true); });
   for (const id of ['shop', 'pause', 'title', 'dialog', 'ending', 'bigmap']) {
     $(id).addEventListener('mouseenter', () => { G.uiBlock = true; }); $(id).addEventListener('mouseleave', () => { G.uiBlock = false; });
   }
@@ -1026,7 +1049,7 @@ function demoSetup(kind) {
   else if (kind === 'shop') { G.S.cash = 3000; UI.openShop('Boom Town Explosives'); }
   else if (kind === 'heli') { const pad = W.places.helipads[0]; P.x = pad.x + 4; P.z = pad.z; G.enterHeli(pad.heli); pad.heli.rotor = 1; pad.heli.y = 22; pad.heli.vx = -8; for (let i = 0; i < 60; i++) step(STEP); }
   else if (kind === 'chopper') { P.x = 0; P.z = 20; G.god = true; Heat.add(3, 5, 'Demo'); for (let i = 0; i < 900; i++) step(STEP); G.god = false; }
-  else if (kind === 'rain' || kind === 'storm' || kind === 'fog') { Weather.set(kind, true); Weather.apply(); }
+  else if (WEATHER[kind]) { Weather.set(kind, true); if (kind === 'snow') Weather.snowCover = 0.8; G.camMode = 'chase'; CAM.pitch = 0.12; for (let i = 0; i < 60; i++) { step(STEP); Weather.update(STEP, P.x, 0, P.z); } }
   else if (kind === 'curve') { const k = W.HWY - W.RR, rp = W.ringPoint(2 * k + 40); const car = new Car('supercar', rp.x - rp.tz * 7.5, rp.z + rp.tx * 7.5, Math.atan2(rp.tx, rp.tz)); P.x = car.x; P.z = car.z; G.enterCar(car); car.v = 40; for (let i = 0; i < 20; i++) step(STEP); CAM.zoomIso = 60; CAM.curIso = 60; }
   else if (kind === 'chute') { const b = W.buildings.filter((k) => k.h > 25).sort((p, q) => q.h - p.h)[0]; P.x = b.maxX + 6; P.z = (b.minZ + b.maxZ) / 2; P.y = b.h * 0.6; P.yv = -2; P.chute = true; P.facing = Math.PI / 2; for (let i = 0; i < 20; i++) step(STEP); CAM.zoomIso = 34; CAM.curIso = 34; }
   else if (kind === 'ragdoll') {
@@ -1090,7 +1113,7 @@ function runBench() {
     const P = G.player; P.x = x; P.z = z; W.collideCircle(P, P.r);
     for (let i = 0; i < 120; i++) step(STEP); // let traffic and people fill in
     const t0 = performance.now(); for (let i = 0; i < 600; i++) step(STEP); const stepMs = (performance.now() - t0) / 600;
-    Weather.update(0.016, CAM.fx, 0, CAM.fz); persp.far = Math.min(900, G.scene.fog.far + 25); persp.updateProjectionMatrix();
+    Weather.update(0.016, CAM.fx, 0, CAM.fz); persp.far = Math.min(1400, G.scene.fog.far + 25); persp.updateProjectionMatrix();
     const cam = updateCamera(0.016); renderer.info.autoReset = false; renderer.info.reset();
     const t1 = performance.now(); for (let i = 0; i < 5; i++) renderer.render(G.scene, cam); const drawMs = (performance.now() - t1) / 5;
     // where the triangles go: render again with one kind of object hidden at a time

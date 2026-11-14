@@ -496,16 +496,18 @@ const Sfx = {
     // ambience
     const A = this.ambi, z = s.zone;
     const city = !s.playing ? 0.04 : z === 'forest' ? 0.04 : z === 'highway' ? 0.42 : z === 'outskirts' ? 0.14 : 0.24;
-    const wind = !s.playing ? 0 : z === 'forest' ? 0.22 : z === 'outskirts' || z === 'highway' ? 0.1 : 0.035;
+    const wind = !s.playing ? 0 : (z === 'forest' ? 0.22 : z === 'outskirts' || z === 'highway' || z === 'country' || z === 'airport' ? 0.1 : 0.035) + Math.max(0, (s.wind || 0) - 0.2) * 0.3;
     const swell = 0.7 + 0.3 * Math.sin(t * 0.37);
     if (SL.amb_city) { SL.amb_city.g.gain.setTargetAtTime(city * 0.95, t, 0.8); A.cg.gain.setTargetAtTime(city * 0.25, t, 0.8); }
     else A.cg.gain.setTargetAtTime(city, t, 0.8);
-    if (SL.amb_rain) { SL.amb_rain.g.gain.setTargetAtTime((s.rain || 0) * 0.65, t, 0.8); A.rg.gain.setTargetAtTime(0, t, 0.3); }
+    if (SL.amb_rain) { SL.amb_rain.g.gain.setTargetAtTime((s.rain || 0) * 0.65, t, 0.8); SL.amb_rain.src.playbackRate.setTargetAtTime(1 + (s.hail || 0) * 0.35, t, 0.5); A.rg.gain.setTargetAtTime(0, t, 0.3); }
     else A.rg.gain.setTargetAtTime((s.rain || 0) * 0.16, t, 0.8);
     if (SL.amb_wind) { SL.amb_wind.g.gain.setTargetAtTime(wind * 1.6 * swell, t, 0.6); A.wg.gain.setTargetAtTime(0, t, 0.3); }
     else A.wg.gain.setTargetAtTime(wind * swell, t, 0.6);
     A.wf.frequency.setTargetAtTime(420 + 220 * Math.sin(t * 0.21), t, 0.5);
     if (SL.amb_forest) SL.amb_forest.g.gain.setTargetAtTime(s.playing && z === 'forest' ? 0.5 : s.playing && z === 'outskirts' ? 0.12 : 0, t, 1.2);
+    // hailstones rattling off cars and roofs around you
+    if (s.playing && (s.hail || 0) > 0.3 && Math.random() < s.hail * 0.35) { const a = rand(0, TAU), r = rand(2, 14); this.play('impact', s.lx + Math.cos(a) * r, s.lz + Math.sin(a) * r, 0.12, { range: 30, rate: rand(1.4, 2.2), vary: 0.1 }); }
     if (s.playing && z === 'forest' && !SL.amb_forest) {
       this.birdT -= dt;
       if (this.birdT <= 0) { this.birdT = rand(1.2, 4); const a = rand(0, TAU); this.chirp(s.lx + Math.cos(a) * rand(8, 30), s.lz + Math.sin(a) * rand(8, 30)); }

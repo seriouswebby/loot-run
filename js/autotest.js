@@ -275,6 +275,26 @@ function runAutotest() {
     Weather.set('clear', true); Weather.apply();
     return (fog < 0.6 && rain < 0.9 && grip < 0.8 && Weather.sight() === 1) || `fog ${fog} rain ${rain} grip ${grip}`;
   });
+  T('weather: every kind runs its effects, snow settles, and it is mostly sunny', () => {
+    const bad = [];
+    for (const k in WEATHER) {
+      Weather.set(k, true); Weather.snowCover = 0;
+      for (let i = 0; i < 90; i++) Weather.update(STEP, 0, 0, 25);
+      const f = G.scene.fog.far, W8 = WEATHER[k];
+      const fx = { rain: Weather.rainMesh.visible === !!W8.rain, snow: Weather.snowP.m.visible === !!W8.snow, hail: Weather.hailP.m.visible === !!W8.hail, clouds: (Weather.cloudMesh.count > 0) === (W8.clouds > 0.01) };
+      for (const e in fx) if (!fx[e]) bad.push(k + ' ' + e);
+      if (!isFinite(f) || f < 50) bad.push(k + ' fog ' + f);
+    }
+    Weather.set('snow', true); for (let i = 0; i < 60 * 80; i++) Weather.update(1 / 60, 0, 0, 25); const cover = Weather.snowCover;
+    if (!(cover > 0.5 && Weather.blanket.visible && Weather.grip() < 0.55)) bad.push('snow cover ' + cover.toFixed(2) + ' grip ' + Weather.grip().toFixed(2));
+    // long run: time-weighted share of sunshine
+    let t = {}, cur = 'clear';
+    for (let i = 0; i < 4000; i++) { Weather.cur = cur; const d = WEATHER[cur].dur; t[cur] = (t[cur] || 0) + (d[0] + d[1]) / 2; cur = Weather.pickNext(); }
+    const tot = Object.values(t).reduce((a, b) => a + b, 0), sunny = t.clear / tot;
+    if (!(sunny > 0.42 && sunny < 0.7)) bad.push('sunny share ' + sunny.toFixed(2));
+    Weather.set('clear', true); Weather.snowCover = 0; Weather.update(STEP, 0, 0, 25);
+    return !bad.length || bad.join(' | ');
+  });
   T('weather cycles on its own', () => {
     reset(); G.state = 'play'; const before = Weather.cur; let changed = false;
     for (let i = 0; i < 12 && !changed; i++) { Weather.timer = 0.01; Weather.update(0.02, 0, 0, 0); if (Weather.cur !== before) changed = true; }
@@ -418,7 +438,7 @@ function runAutotest() {
     GPS.t = 0; GPS.update(STEP); const p = GPS.path, end = p && p[p.length - 1];
     const routed = GPS.toWaypoint && p && p.length > 2 && dist(end[0], end[1], ch.x, ch.z) < 1 && GPS.beam.visible;
     bigMapClick(fx + 0.002, fy, false); const cleared = !G.waypoint;
-    bigMapClick(fx, fy, false); bigMapClick(0, 0, true); const rightClick = !G.waypoint;
+    bigMapClick(fx, fy, false); bigMapClick(fx + 0.002, fy, false); const rightClick = !G.waypoint;
     bigMapClick(fx, fy, false); tp(ch.x + 2, ch.z); steps(0.2); GPS.update(STEP); const reached = !G.waypoint && !GPS.toWaypoint;
     return (set && routed && cleared && rightClick && reached) || `set ${set} routed ${routed} (path ${p && p.length}) cleared ${cleared} right-click ${rightClick} reached ${reached}`;
   });
@@ -489,6 +509,17 @@ function runAutotest() {
       }
     }
     return !bad.length || bad.length + ' blockers: ' + [...new Set(bad)].slice(0, 6).join(' ');
+  });
+  T('big map right-click teleports you (and your car) to a clear spot', () => {
+    reset(); tp(0, 25); openBigMap();
+    const bank = W.places.bank, fx = (bank.x - BM.cx) / BM.span + 0.5, fy = (bank.z - BM.cz) / BM.span + 0.5;
+    bigMapTeleport(fx, fy); // onto a building: you land on open ground beside it
+    const onFoot = dist(P.x, P.z, bank.x, bank.z) < 30 && !W.buildings.some((b) => P.x > b.minX && P.x < b.maxX && P.z > b.minZ && P.z < b.maxZ) && G.state === 'play' && $('bigmap').hidden;
+    const car = new Car('sedan', P.x + 3, P.z, 0); G.enterCar(car); openBigMap();
+    const R = W.ROUNDABOUT; bigMapTeleport((R.x + 30 - BM.cx) / BM.span + 0.5, (R.z - 3 - BM.cz) / BM.span + 0.5);
+    const drove = P.inCar === car && dist(car.x, car.z, R.x + 30, R.z - 3) < 12;
+    G.exitCar(true); car.remove();
+    return (onFoot && drove) || `on foot ok ${onFoot} (${P.x.toFixed(0)},${P.z.toFixed(0)}) car came along ${drove}`;
   });
   T('crimes need a witness: nobody around, nobody calls it in', () => {
     reset(); G.noSpawn = true; const x = -235, z = -W.HWY - 4;

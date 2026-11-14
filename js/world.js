@@ -441,7 +441,11 @@ function addBuilding(cx, cz, w, d, h, style, opts) {
   const fac = FAC[style] || FAC.brick;
   const side = opts.color ? new THREE.MeshLambertMaterial({ color: opts.color }) : new THREE.MeshLambertMaterial({ map: fac.tex });
   const roof = new THREE.MeshLambertMaterial({ color: fac.roof });
-  const mesh = new THREE.Mesh(geo, [side, side, roof, roof, side, side]);
+  // regroup the box's six faces into two draw calls (walls, then roof and floor) instead of six
+  const idx = geo.index.array, gr = geo.groups, ni = [];
+  for (const f of [0, 1, 4, 5, 2, 3]) for (let i = 0; i < gr[f].count; i++) ni.push(idx[gr[f].start + i]);
+  geo.setIndex(ni); geo.clearGroups(); geo.addGroup(0, 24, 0); geo.addGroup(24, 12, 1);
+  const mesh = new THREE.Mesh(geo, [side, roof]);
   mesh.position.set(cx, h / 2, cz); mesh.castShadow = true; mesh.receiveShadow = true;
   S.add(mesh);
   const b = { minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2, h, mesh, mats: [side, roof], fade: 1 };

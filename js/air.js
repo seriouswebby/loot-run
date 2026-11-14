@@ -354,6 +354,7 @@ function flyPlane(h, dt, fw, st, up, down) {
   if (out) { h.yaw = h.yaw + clamp(angDiff(h.yaw, Math.atan2(-h.x, W.VIEW.cz - h.z)), -1.6 * dt, 1.6 * dt); if (!(G.edgeT > G.time)) { G.edgeT = G.time + 4; G.toast('Edge of the map: turning back.'); } }
   h.vx = Math.sin(h.yaw) * h.v; h.vz = Math.cos(h.yaw) * h.v;
   h.x += h.vx * dt; h.z += h.vz * dt;
+  if (!onGround) { h.x += Weather.windX() * 3 * dt; h.z += Weather.windZ() * 3 * dt; } // crosswind drift
   // fences, trees and the like when taxiing or skimming the grass
   if (h.y - g < 3 && h.v > 0.5) {
     const p = { x: h.x, z: h.z }, hit = W.collideCircle(p, 2.2, h.y);
@@ -412,6 +413,7 @@ function flyHeli(h, dt, fw, st, up, down) {
     const k = Math.exp(-0.75 * dt); h.vx *= k; h.vz *= k;
     const sp = Math.hypot(h.vx, h.vz), top = h.top || 36; if (sp > top) { h.vx *= top / sp; h.vz *= top / sp; }
   } else { h.vx = damp(h.vx, 0, 6, dt); h.vz = damp(h.vz, 0, 6, dt); }
+  if (airborne) { h.vx += Weather.windX() * 2.2 * dt; h.vz += Weather.windZ() * 2.2 * dt; } // gusts push choppers about
   h.x += h.vx * dt; h.z += h.vz * dt;
   const lim = W.OUT + 30; h.x = clamp(h.x, -lim, lim); h.z = clamp(h.z, -lim, W.SHORE + 120);
   heliCollide(h);

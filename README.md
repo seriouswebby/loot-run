@@ -26,7 +26,7 @@ Progress saves in your browser after every story job.
 | T · B | Grenade · C4 | | |
 | H | Medkit | | |
 | C | Camera: isometric · top-down · 3rd person | | |
-| M | City map (click it to set a waypoint) | | |
+| M | Map: click to set a waypoint, right-click to teleport, scroll to zoom | | |
 | Esc · N | Pause · sound | | |
 
 ## Code layout
