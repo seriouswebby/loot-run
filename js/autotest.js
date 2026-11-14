@@ -207,6 +207,7 @@ function runAutotest() {
       case 'chase': if (a.target) a.target.damage(9999, a.target.x + 1, a.target.z, P); break;
       case 'boardTrain': { if (P.inCar) G.exitCar(true); if (P.inHeli) G.exitHeli(true); Train.climb(Train.cars[2]); break; }
       case 'ride': a.rideT = s.time; break;
+      case 'airborne': { const h = P.inHeli; h.y = s.alt + 10; h.v = 40; h.thr = 0.7; break; }
       case 'loopCams': for (const c of W.places[s.target].sec.cams) G.loopCam(c); break;
       default: break;
     }
@@ -580,6 +581,25 @@ function runAutotest() {
     G.noSpawn = false;
     return !bad.length || bad.join(' | ');
   });
+  T('train: board the front at speed, walk back through a bend to the gold car, crack the safe', () => {
+    reset(); G.noSpawn = true; G.god = true; const R = W.RAIL, kx = R.hx - R.r;
+    // put the train at speed just as it enters the north-east bend
+    Train.s = 2 * kx + 10; Train.v = Train.CRUISE; Train.state = 'run'; Train.place(0);
+    Train.climb(Train.cars[0]); const safe = W.places.trainSafe; safe.cd = 0; safe.robbing = false;
+    let fell = false, turned = 0; const h0 = Train.cars[2].h;
+    for (let i = 0; i < 900 && dist(P.x, P.z, safe.x, safe.z) > 1.2; i++) {
+      const c = Train.riding(P, true) || Train.cars[0]; G.inputOverride = { mx: -Math.sin(c.h), mz: -Math.cos(c.h) };
+      step(STEP); if (P.y < 2) { fell = true; break; }
+    }
+    G.inputOverride = null; turned = Math.abs(angDiff(h0, Train.cars[2].h));
+    const reached = !fell && dist(P.x, P.z, safe.x, safe.z) <= 1.3;
+    // a jump on the roof lands back on the roof, not 15 m behind
+    G.jumpQ = true; steps(1.2); const jumped = !!Train.onTrain(P);
+    const cash0 = G.S.cash; G.interact = computeInteract(); hold(G.robHoldTime(safe) + 0.5);
+    const robbed = G.S.cash > cash0 + 2000 && !!Train.onTrain(P);
+    G.god = false; G.noSpawn = false; P.y = 0; Heat.clear(); clearPolice(); tp(0, 25);
+    return (reached && turned > 0.3 && jumped && robbed) || `reached the gold car ${reached} (fell ${fell}) through a bend ${turned.toFixed(2)} rad, jump landed on the train ${jumped}, robbed ${robbed} (cash +${G.S.cash - cash0})`;
+  });
   T('county: no trees, buildings or fields on the country roads', () => {
     const bad = [];
     for (const e of W.countyEdges) {
@@ -590,6 +610,7 @@ function runAutotest() {
       }
     }
     for (const f of W.fields) for (const e of W.countyEdges) if (W.segAABB(e.ax, e.az, e.bx, e.bz, { minX: f.x0 - 6, maxX: f.x1 + 6, minZ: f.z0 - 6, maxZ: f.z1 + 6 }) >= 0) bad.push('field@' + Math.round(f.x0) + ',' + Math.round(f.z0));
+    for (const f of W.fields) for (let x = f.x0; x <= f.x1; x += 5) for (let z = f.z0; z <= f.z1; z += 5) { const r = W.inReserve(x, z, 0); if (r) { bad.push('field on the ' + r.kind + '@' + Math.round(x) + ',' + Math.round(z)); x = 1e9; break; } }
     return !bad.length || bad.length + ' blockers: ' + [...new Set(bad)].slice(0, 6).join(' ');
   });
   T('big map right-click teleports you (and your car) to a clear spot', () => {
@@ -612,6 +633,18 @@ function runAutotest() {
     for (const g of ['ped_hurt', 'ped_panic', 'witness', 'carjacked', 'clerk', 'cop_spot', 'cop_chase', 'cop_hurt', 'cop_cuff', 'cop_lost']) if (Voice.groupKeys(g).length < 3) bad.push(g + ' has ' + Voice.groupKeys(g).length);
     for (const k in CRIMES) if (!Voice.has('dispatch/crime_' + k)) bad.push('no radio call for ' + k);
     return !bad.length || bad.slice(0, 5).join(' | ');
+  });
+  T('voices: a person keeps one voice; old saves keep their story progress', () => {
+    const n = Voice.groupInfo('ped_hurt'), cop = Voice.groupInfo('cop_spot'), ped = { x: P.x + 2, z: P.z, voiceSeed: 7 };
+    const keys = new Set(); for (let i = 0; i < 30; i++) { Voice.cd = 0; ped.barkT = 0; Voice.bark('ped_hurt', ped); }
+    for (const l of Voice.log) keys.add(l.what);
+    const sameVoice = n.voices >= 4 && cop.voices >= 3 && n.lines >= 5;
+    // an old save that had finished the original story through the bank job
+    const json = localStorage.getItem(SAVE_KEY); localStorage.setItem(SAVE_KEY, JSON.stringify({ cash: 10, storyDone: 7 }));
+    const s = G.loadSave(); if (json != null) localStorage.setItem(SAVE_KEY, json); else localStorage.removeItem(SAVE_KEY);
+    const S0 = G.S; G.S = s; const nx = Story.next(); G.S = S0;
+    const migrated = s && s.jobsDone.length === 7 && s.jobsDone.includes('bank') && nx && nx.id === 'snitch';
+    return (sameVoice && migrated) || `voices ped ${n.voices}x${n.lines} cop ${cop.voices} migrated ${migrated} (next ${nx && nx.id}, done ${s && s.jobsDone})`;
   });
   T('voices: a punched person yells; a witnessed theft is shouted and called in on the radio', () => {
     reset(); G.noSpawn = true; const x = W.places.spawn.x, z = W.places.spawn.z; tp(x, z);
@@ -1085,7 +1118,7 @@ function runAutotest() {
       lines.push(!bad.length ? 'PASS recorded sounds are audible' : 'FAIL silent/short samples: ' + bad.join(', '));
       // voices decode in this context too, and a radio call renders through the radio filter
       Voice.radioQ.length = 0; Voice.radioBusy = false;
-      return Promise.all(['vera/0', 'bark/ped_hurt/0', 'dispatch/crime_rob', 'x/Main/Fifth'].map((k) => Voice.get(k)));
+      return Promise.all(['vera/0', 'bark/ped_hurt/0/0', 'dispatch/crime_rob', 'x/Main/Fifth'].map((k) => Voice.get(k)));
     }).then((vb) => {
       const durs = vb.map((b) => (b ? b.duration : 0));
       lines.push(durs.every((d) => d > 0.3) ? 'PASS voice clips decode (' + durs.map((d) => d.toFixed(1) + 's').join(', ') + ')' : 'FAIL voice clips — durations ' + durs.join(', '));

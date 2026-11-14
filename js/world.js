@@ -871,7 +871,7 @@ function buildOutskirts() {
   W.addCollider(37, SH + 12, 53, SH + 160, 1, 'water', true);
   const water = new THREE.Mesh(new THREE.PlaneGeometry(2 * O + 400, 200), new THREE.MeshLambertMaterial({ color: 0x2f7ea3 }));
   water.rotation.x = -Math.PI / 2; water.position.set(0, -0.15, SH + 100); S.add(water);
-  W.water = water;
+  W.water = water; W.markWater(water.material);
   GB.white.rect(-O, SH + 0.5, O, SH + 1.6, 0.025, 4);
   // Pier 9 and the getaway boat
   for (let z = SH - 1; z < SH + 23; z += 1.2) P.box(0, 0.25, z + 0.6, 8, 0.25, 1.1, '#8b6a45');
@@ -1038,6 +1038,8 @@ function buildMinimap() {
   W.minimap = c; W.mmScale = k; W.mmX0 = x0; W.mmZ0 = z0;
 }
 
+/* water writes 1 into the stencil buffer so the snow blanket can leave it uncovered */
+W.markWater = function (m) { m.stencilWrite = true; m.stencilRef = 1; m.stencilFunc = THREE.AlwaysStencilFunc; m.stencilZPass = THREE.ReplaceStencilOp; };
 /* ---------------- main build ---------------- */
 W.build = function (scene, seed) {
   rnd = mulberry32(seed || 7);

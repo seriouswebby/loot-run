@@ -26,12 +26,13 @@ const Voice = {
     });
     this.loading.set(key, p); return p;
   },
-  /* keys in a bark group: bark/<group>/0, 1, ... */
-  groupKeys(g) {
+  /* a bark group's size: clips are bark/<group>/<line>/<voice> */
+  groupInfo(g) {
     this._g = this._g || {};
-    if (!this._g[g]) { const out = []; if (typeof VOICE_DATA !== 'undefined') for (let i = 0; VOICE_DATA['bark/' + g + '/' + i]; i++) out.push('bark/' + g + '/' + i); this._g[g] = out; }
+    if (!this._g[g]) { let lines = 0, voices = 0; if (typeof VOICE_DATA !== 'undefined') { while (VOICE_DATA['bark/' + g + '/' + lines + '/0']) lines++; while (VOICE_DATA['bark/' + g + '/0/' + voices]) voices++; } this._g[g] = { lines, voices }; }
     return this._g[g];
   },
+  groupKeys(g) { const n = this.groupInfo(g), out = []; for (let i = 0; i < n.lines; i++) for (let v = 0; v < n.voices; v++) out.push('bark/' + g + '/' + i + '/' + v); return out; },
 
   /* ---------- people shouting ---------- */
   bark(group, who, opts) {
@@ -40,10 +41,10 @@ const Voice = {
     if (this.cd > G.time && !opts.force) return false;
     if (who && who.barkT > G.time) return false;
     if (who && x != null && dist(x, z, G.player.x, G.player.z) > 55) return false; // too far away to hear
-    const keys = this.groupKeys(group); if (!keys.length) return false;
-    // each person keeps the same voice: their take index is fixed by who they are
-    const pick2 = who ? (who.voiceSeed = who.voiceSeed != null ? who.voiceSeed : randi(0, 1)) : randi(0, 1);
-    const line = randi(0, Math.floor((keys.length - 1) / 2)), key = keys[Math.min(keys.length - 1, line * 2 + pick2)];
+    const n = this.groupInfo(group); if (!n.lines || !n.voices) return false;
+    // each person keeps one voice for everything they shout
+    const seed = who ? (who.voiceSeed = who.voiceSeed != null ? who.voiceSeed : randi(0, 99)) : randi(0, 99);
+    const key = 'bark/' + group + '/' + randi(0, n.lines - 1) + '/' + (seed % n.voices);
     this.cd = G.time + (opts.gap || 1.1); if (who) who.barkT = G.time + (opts.every || 5);
     this.note(group);
     this.get(key).then((b) => {
@@ -84,10 +85,12 @@ const Voice = {
     return 'x/' + S.ew[j] + '/' + S.ns[i];
   },
   // queue a transmission: a list of clip keys spoken back to back through the radio
-  radio(keys, opts) {
+  radio(keys, prio) {
     keys = keys.filter((k) => this.has(k)); if (!keys.length) return false;
     this.note('radio:' + keys.join('+'));
-    if (this.radioQ.length >= 3) this.radioQ.shift(); // stale news gets dropped
+    // a full queue drops its oldest routine call; heat changes, roadblocks and outcomes are never squeezed out
+    if (this.radioQ.length >= 3) { const i = this.radioQ.findIndex((q) => !q.prio); this.radioQ.splice(i >= 0 ? i : 0, 1); }
+    keys.prio = !!prio;
     this.radioQ.push(keys);
     if (!this.radioBusy) this.nextRadio();
     return true;
@@ -135,13 +138,16 @@ const Voice = {
   /* the dispatcher reports a crime the police just heard about, and a unit answers */
   report(type, x, z) {
     const k = 'dispatch/crime_' + type; if (!this.has(k)) return false;
+    this.lastRep = this.lastRep || {};
+    if (this.lastRep[type] > G.time - 25) return false; // one report per kind of crime every 25 s, not every shot
+    this.lastRep[type] = G.time;
     const parts = [k];
     if (type !== 'bank') parts.push(this.placeKey(x, z));
     this.radio(parts);
-    if (Math.random() < 0.7) this.radio([this.unit('ack_' + randi(1, 4))]);
+    if (Math.random() < 0.6) this.radio([this.unit('ack_' + randi(1, 4))]);
     return true;
   },
-  heatUp(level) { if (level >= 2) this.radio(['dispatch/heat_' + level]); },
+  heatUp(level) { if (level >= 2) this.radio(['dispatch/heat_' + level], true); },
 };
 let VOICE_STREETS = { ew: ['Oak', 'Pine', 'Maple', 'Cedar', 'Main', 'Elm', 'Market', 'Union', 'Harbor'], ns: ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth'] };
 /* "Main & Fifth" for the HUD: the cross streets nearest to a spot in the city */

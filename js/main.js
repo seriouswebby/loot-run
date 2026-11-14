@@ -1113,6 +1113,8 @@ function demoSetup(kind) {
   else if (kind === 'train') { G.noSpawn = true; for (let i = 0; i < 900; i++) step(STEP); const c = Train.cars[0], fx = Math.sin(c.h), fz = Math.cos(c.h); G.camMode = 'chase'; P.x = c.x + fx * 45 + fz * 12; P.z = c.z + fz * 45 - fx * 12; P.facing = CAM.yaw = Math.atan2(c.x - P.x, c.z - P.z); CAM.pitch = 0.15; for (let i = 0; i < 20; i++) step(STEP); }
   else if (kind === 'trainride') { G.noSpawn = true; for (let i = 0; i < 900; i++) step(STEP); Train.climb(Train.cars[2]); G.camMode = 'chase'; CAM.yaw = Train.cars[2].h; CAM.pitch = 0.3; for (let i = 0; i < 60; i++) step(STEP); }
   else if (kind === 'station') { const st = W.STATIONS[0]; G.camMode = 'chase'; P.x = st.x - 40; P.z = st.z + 18; P.facing = CAM.yaw = Math.PI / 2 + 0.3; CAM.pitch = 0.15; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'snowlake') { const L = W.LAKE; Weather.set('snow', true); Weather.snowCover = 0.8; G.camMode = 'chase'; P.x = L.x + L.r + 22; P.z = L.z + 6; P.facing = CAM.yaw = -Math.PI / 2; CAM.pitch = 0.2; for (let i = 0; i < 60; i++) { step(STEP); Weather.update(STEP, P.x, 0, P.z); } }
+  else if (kind === 'cloudyiso') { Weather.set('cloudy', true); for (let i = 0; i < 30; i++) { step(STEP); Weather.update(STEP, P.x, 0, P.z); } }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }

@@ -534,6 +534,11 @@ function aiTraffic(car, dt) {
   a.checkT -= dt; a.ignoreT -= dt;
   if (a.checkT <= 0) { a.checkT = 0.15; a.blocked = obstacleAhead(car, 6 + Math.max(0, car.v) * 0.6); }
   let want = a.flee ? Math.min(car.T.maxV * 0.85, a.limit * 1.8) : a.limit;
+  for (const cr of W.railCrossings || []) {
+    if (!cr.closed) continue;
+    const dx = cr.x - car.x, dz = cr.z - car.z, d = Math.hypot(dx, dz);
+    if (d < 30 && d > 7 && dx * Math.sin(car.h) + dz * Math.cos(car.h) > d * 0.7) { want = 0; break; }
+  }
   if (a.blocked && !a.flee) {
     want = 0; a.blockT += dt;
     if (a.blocked === 'player' && a.blockT > 1.2 && car.honkT <= 0) { car.honkT = 3; Sfx.honk(car.x, car.z); }
@@ -684,7 +689,7 @@ const Roadblocks = {
     }
     this.list.push(rb);
     G.toast(Heat.level >= 3 ? 'Roadblock ahead! Spikes in the gap.' : 'Roadblock ahead on the highway!', 'warn');
-    Voice.radio([Voice.unit('roadblock'), Voice.placeKey(rb.x, rb.z)].concat(rb.spike ? [Voice.unit('spikes')] : []));
+    Voice.radio([Voice.unit('roadblock'), Voice.placeKey(rb.x, rb.z)].concat(rb.spike ? [Voice.unit('spikes')] : []), true);
     Sfx.alarm();
     return true;
   },

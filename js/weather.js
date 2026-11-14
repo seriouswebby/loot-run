@@ -49,7 +49,9 @@ const Weather = {
     this.hailP = pts(1800, 0.3, 0xf2f6fa);
     this.leafP = pts(260, 0.28, 0x8a6a3a); this.leafP.m.material.map = null;
     // a snow blanket that builds up on the ground around you while it snows
-    this.blanket = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), new THREE.MeshLambertMaterial({ color: 0xf4f7fa, transparent: true, opacity: 0, depthWrite: false }));
+    const bm = new THREE.MeshLambertMaterial({ color: 0xf4f7fa, transparent: true, opacity: 0, depthWrite: false });
+    bm.stencilWrite = true; bm.stencilRef = 1; bm.stencilFunc = THREE.NotEqualStencilFunc; bm.stencilZPass = THREE.KeepStencilOp; // not on water
+    this.blanket = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), bm);
     this.blanket.rotation.x = -Math.PI / 2; this.blanket.renderOrder = 1; this.blanket.visible = false; scene.add(this.blanket);
     // clouds: flattened puffs drifting high overhead, wrapped round whoever is watching
     const puff = new THREE.IcosahedronGeometry(1, 1);
@@ -130,7 +132,7 @@ const Weather = {
   },
   updateClouds(dt, fx, fz, wx, wz) {
     const m = this.cloudMesh, C = this.p.clouds, n = Math.floor(this.clouds.length * Math.min(1, C));
-    m.visible = n > 0; if (!m.visible) { m.count = 0; return; }
+    m.visible = n > 0 && (G.camMode === 'chase' || G.state === 'title'); if (!m.visible) { m.count = n > 0 ? m.count : 0; if (n === 0) return; }
     this.cloudOff.x += (1.5 + wx * 6) * dt; this.cloudOff.z += (0.6 + wz * 6) * dt;
     m.material.color.copy(this.cloudC); m.material.emissive.copy(this.cloudC).multiplyScalar(0.45); m.material.opacity = 0.55 + C * 0.35;
     const S = this.cloudSpan, d = this.d3;

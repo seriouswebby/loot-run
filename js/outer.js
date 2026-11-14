@@ -150,6 +150,9 @@ function countyFarms(OP, free) {
     // no road may cross the field (checking corners alone let roads run straight through the middle)
     const box = { minX: x - fw / 2 - 12, maxX: x + fw / 2 + 12, minZ: z - fd / 2 - 12, maxZ: z + fd / 2 + 12 };
     if (W.countyEdges.some((e) => W.segAABB(e.ax, e.az, e.bx, e.bz, box) >= 0 || (e.ax > box.minX && e.ax < box.maxX && e.az > box.minZ && e.az < box.maxZ))) continue;
+    let reserved = false; // the railway, lake and river are thin or round: sample the whole field, not just its corners
+    for (let gx = x - fw / 2; gx <= x + fw / 2 + 0.1 && !reserved; gx += 8) for (let gz = z - fd / 2; gz <= z + fd / 2 + 0.1 && !reserved; gz += 8) if (W.inReserve(gx, gz, 6)) reserved = true;
+    if (reserved) continue;
     // the field: rows of crops on dirt, a wooden fence round it
     GB.dirt.rect(x - fw / 2, z - fd / 2, x + fw / 2, z + fd / 2, 0.03, 6);
     const crop = pick(['#7aa63a', '#c9b44a', '#5e8f2f', '#a8c25a']);
@@ -309,7 +312,7 @@ W.LAKE = { x: -280, z: -830, r: 128 };
 W.RIVER = { w: 34, pts: [[930, -W.OUT - 60], [905, -1060], [945, -760], [902, -470], [940, -170], [912, 120], [928, W.SHORE + 40]] };
 W.bridges = [];
 function buildWater(OP) {
-  const waterMat = new THREE.MeshLambertMaterial({ color: 0x3b86ad }), L = W.LAKE;
+  const waterMat = new THREE.MeshLambertMaterial({ color: 0x3b86ad }), L = W.LAKE; W.markWater(waterMat);
   const disc = (x, z, r, y, col) => { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 64), col.isMaterial ? col : new THREE.MeshLambertMaterial({ color: col })); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; S.add(m); return m; };
   // the lake: sand shore, water, a jetty with a rowboat
   disc(L.x, L.z, L.r + 9, 0.022, '#d8c690'); disc(L.x, L.z, L.r, 0.03, waterMat);

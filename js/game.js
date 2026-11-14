@@ -11,14 +11,23 @@ const G = {
 function freshState() {
   return {
     cash: 150, weapons: { fists: true }, ammo: { pistol: 0, shells: 0, smg: 0, rockets: 0 }, tools: {},
-    armor: 0, medkit: 1, smoke: 0, spikes: 0, grenade: 0, c4: 0, parachute: 0, storyDone: 0,
+    armor: 0, medkit: 1, smoke: 0, spikes: 0, grenade: 0, c4: 0, parachute: 0, storyDone: 0, jobsDone: [],
     stats: { robbed: 0, earned: 0, kos: 0, escapes: 0, maxHeat: 0, busts: 0 },
   };
 }
 const SAVE_KEY = 'lootrun.save.v1';
-G.save = function () { try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.S)); } catch (e) { /* storage blocked */ } };
+G.save = function () { if (typeof Story !== 'undefined') Story.sync(); try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.S)); } catch (e) { /* storage blocked */ } };
 G.loadSave = function () {
-  try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s && typeof s.cash === 'number') { const f = freshState(); s.ammo = Object.assign(f.ammo, s.ammo); s.stats = Object.assign(f.stats, s.stats); return Object.assign(f, s); } } catch (e) { /* ignore */ }
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if (s && typeof s.cash === 'number') {
+      const f = freshState(); s.ammo = Object.assign(f.ammo, s.ammo); s.stats = Object.assign(f.stats, s.stats);
+      // saves from before jobs had ids only counted them, in the original eight-job order
+      if (!Array.isArray(s.jobsDone)) s.jobsDone = ['first', 'tools', 'atms', 'quiet', 'glimmer', 'truck', 'bank', 'boat'].slice(0, s.storyDone || 0);
+      s.storyDone = s.jobsDone.length;
+      return Object.assign(f, s);
+    }
+  } catch (e) { /* ignore */ }
   return null;
 };
 
@@ -154,7 +163,7 @@ const Heat = {
     this.need = (4 + this.level * 2.4) * zone.evade * (G.S.tools.mask ? 0.75 : 1);
     if (this.evade >= this.need) {
       this.clear(); G.S.stats.escapes++;
-      G.toast('You lost the cops!', 'good'); Sfx.sting('lost'); Voice.radio(['dispatch/evaded']);
+      G.toast('You lost the cops!', 'good'); Sfx.sting('lost'); Voice.radio(['dispatch/evaded'], true);
       return;
     }
     this.spawnT -= dt;
@@ -198,7 +207,7 @@ function onZoneChange(prev, now) {
     if (dist(e.x, e.z, t.x, t.z) < 14) continue;
     if (G.npcs.filter((c) => c.kind === 'cop').length >= 12) break;
     for (let k = 0; k < (Heat.level >= 3 ? 2 : 1); k++) spawnCop(e.x + rand(-2, 2), e.z + rand(-2, 2), 'chase');
-    if (!n) Voice.radio(['dispatch/perimeter', Voice.placeKey(t.x, t.z)]);
+    if (!n) Voice.radio(['dispatch/perimeter', Voice.placeKey(t.x, t.z)], true);
     n++;
   }
   if (n) G.toast(now === 'forest' ? 'Police are covering the Forest Park exits!' : (G.curAlley.dead ? 'Dead end! Cops are blocking the alley mouth!' : 'Cops are covering both ends of the alley!'), 'warn');
@@ -338,12 +347,12 @@ G.startRob = function (r) {
   if (r.kind === 'atm') { G.crime('atm', r.x, r.z, {}); return; }
   const h = G.robHeat(r), s = secStatus(r);
   if (h > 0) {
-    const why = [s.alarmOn ? 'silent alarm' : null, s.camsOn ? 'cameras' : null, r.base ? 'clerk panicked' : null].filter(Boolean).join(' + ');
+    const why = [s.alarmOn ? 'silent alarm' : null, s.camsOn ? 'cameras' : null, r.base ? (r.onTrain ? "the safe's tracker" : 'clerk panicked') : null].filter(Boolean).join(' + ');
     Voice.report(r.kind === 'bank' ? 'bank' : 'rob', r.x, r.z);
     Heat.add(h, 5, why ? 'Robbery — ' + why : 'Robbery');
   } else G.toast('Clean job: no alarm, no cameras. Nobody is calling this in.', 'good');
   panic(r.x, r.z, 16);
-  Voice.bark('clerk', { x: r.x, z: r.z, barkT: 0 }, { force: true });
+  if (!r.onTrain) Voice.bark('clerk', { x: r.x, z: r.z, barkT: 0 }, { force: true });
 };
 G.completeRob = function (r) {
   r.robbing = false; r.cd = r.cool;
@@ -536,7 +545,7 @@ G.knockedOut = function () {
   if (P.inCar) G.exitCar(true);
   if (P.inHeli) G.exitHeli(true);
   P.down = true; P.chute = false; P.tumble = null; // a knocked-out skydiver loses the chute
-  if (Heat.level > 0) Voice.radio(['dispatch/suspect_down']);
+  if (Heat.level > 0) Voice.radio(['dispatch/suspect_down'], true);
   Phys.ragdoll(P, { x: P.kx + P.vx, y: P.yv, z: P.kz + P.vz }); P.vx = P.vz = 0;
   const loss = Math.round(G.S.cash * 0.15);
   G.startRespawn('KNOCKED OUT', 'Hospital bill: -' + money(loss), W.places.hospital, loss, true);
@@ -547,7 +556,7 @@ G.busted = function () {
   if (P.inHeli) G.exitHeli(true);
   P.handsUp = 99; P.chute = false;
   { let cop = null, cd = 30; for (const n of G.npcs) if (n.kind === 'cop' && !n.down && dist(n.x, n.z, P.x, P.z) < cd) { cd = dist(n.x, n.z, P.x, P.z); cop = n; } if (cop) Voice.bark('cop_cuff', cop, { force: true }); }
-  if (Heat.level > 0) Voice.radio(['dispatch/custody']);
+  if (Heat.level > 0) Voice.radio(['dispatch/custody'], true);
   const loss = Math.round(G.S.cash * 0.25);
   G.S.stats.busts++;
   G.startRespawn('CUFFED', 'Bail and confiscation: -' + money(loss), W.places.police, loss, false);
@@ -726,7 +735,7 @@ const MISSIONS = [
       [V, "Cut their alarm, loop both cameras, and empty the desk. Then take the private jet and lose the cops in the air."]],
     steps: [{ t: 'cutAlarm', target: 'fxdesk', text: "Cut SkyCash's alarm box (at the airport terminal)" }, { t: 'loopCams', target: 'fxdesk', text: 'Loop or shoot out both SkyCash cameras' },
       { t: 'rob', target: 'fxdesk', text: 'Empty the SkyCash desk (hold E)' }, { t: 'board', kinds: ['bizjet'], text: 'Steal the private jet on the apron' },
-      { t: 'loseHeat', text: 'Lose the cops' }, { t: 'land', text: 'Land somewhere and stop' }],
+      { t: 'airborne', alt: 25, text: 'Take off' }, { t: 'loseHeat', text: 'Lose the cops in the air' }, { t: 'land', text: 'Land somewhere and stop' }],
     outro: [[V, 'A getaway by private jet. Bayhaven has never seen anything like you.']],
   },
   {
@@ -767,8 +776,10 @@ const RINGS = {
 const Story = {
   active: null, rings: [],
   get done() { return G.S.storyDone; },
-  available() { return G.S.storyDone < MISSIONS.length && !this.active; },
-  next() { return MISSIONS[G.S.storyDone]; },
+  // jobsDone (ids) is the record; storyDone is its count. Setting storyDone directly (tests, old code) re-derives the list.
+  sync() { const S = G.S; if (!Array.isArray(S.jobsDone) || S.jobsDone.length !== S.storyDone) S.jobsDone = MISSIONS.slice(0, S.storyDone).map((m) => m.id); },
+  available() { this.sync(); return !!this.next() && !this.active; },
+  next() { this.sync(); return MISSIONS.find((m) => !G.S.jobsDone.includes(m.id)); },
   start() {
     const m = this.next(); if (!m) return;
     UI.dialog(m.intro, () => this.begin());
@@ -815,6 +826,7 @@ const Story = {
       case 'land': { const h = P.inHeli; if (!h || !G.heliLanded(h)) return false; if (s.at !== 'runway') return true; const r = W.AIRPORT.runway; return h.x > r.minX - 10 && h.x < r.maxX + 10 && h.z > r.minZ - 10 && h.z < r.maxZ + 10; }
       case 'chase': { const c = a.target; return !!c && (c.wreck || c.dead || c.hp <= 0 || c.driver !== 'ai'); }
       case 'boardTrain': return !!Train.onTrain(P);
+      case 'airborne': return !!P.inHeli && P.inHeli.y > s.alt;
       case 'ride': return (a.rideT || 0) >= s.time;
       default: return false;
     }
@@ -878,7 +890,7 @@ const Story = {
     const m = this.active.m; this.clearRings();
     if (this.active.target && !this.active.target.dead && !this.active.target.wreck) this.active.target.mission = false;
     this.active = null;
-    G.S.storyDone++;
+    this.sync(); if (!G.S.jobsDone.includes(m.id)) G.S.jobsDone.push(m.id); G.S.storyDone = G.S.jobsDone.length;
     if (G.S.storyDone >= MISSIONS.length) { Heat.clear(); clearPolice(); }
     G.addCash(m.reward, G.player.x, G.player.z);
     G.save();

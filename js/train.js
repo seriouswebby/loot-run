@@ -45,20 +45,33 @@ const Train = {
       c.mesh.position.set(c.x, 0.15, c.z); c.mesh.rotation.y = c.h;
     }
   },
-  /* which car (if any) covers a point, with a margin */
-  carAt(x, z, m) {
+  /* which car (if any) covers a point; ml stretches it lengthwise (the roofs bridge the couplings for walking) */
+  carAt(x, z, m, ml) {
     for (const c of this.cars) {
       const fx = Math.sin(c.h), fz = Math.cos(c.h), dx = x - c.x, dz = z - c.z;
-      if (Math.abs(dx * fx + dz * fz) < c.hl + (m || 0) && Math.abs(dx * fz - dz * fx) < c.hw + (m || 0)) return c;
+      if (Math.abs(dx * fx + dz * fz) < c.hl + (ml != null ? ml : m || 0) && Math.abs(dx * fz - dz * fx) < c.hw + (m || 0)) return c;
     }
     return null;
   },
   floorAt(x, z, y) {
     let f = 0;
-    for (const c of this.cars) { if (c.roof > y + 0.6 || c.roof <= f) continue; if (this.carAt(x, z, 0.1) === c) f = c.roof; }
+    for (const c of this.cars) {
+      if (c.roof > y + 0.6 || c.roof <= f) continue;
+      const fx = Math.sin(c.h), fz = Math.cos(c.h), dx = x - c.x, dz = z - c.z;
+      if (Math.abs(dx * fx + dz * fz) < c.hl + 1.3 && Math.abs(dx * fz - dz * fx) < c.hw + 0.1) f = c.roof;
+    }
     return f;
   },
-  onTrain(P) { const c = !P.inCar && !P.inHeli && P.y > 2 && this.carAt(P.x, P.z, 0.2); return c && Math.abs(P.y - c.roof) < 0.35 ? c : null; },
+  // the car whose roof you're standing on (or flying over, mid-jump)
+  riding(P, air) {
+    if (P.inCar || P.inHeli || P.y < 2) return null;
+    for (const c of this.cars) {
+      const fx = Math.sin(c.h), fz = Math.cos(c.h), dx = P.x - c.x, dz = P.z - c.z;
+      if (Math.abs(dx * fx + dz * fz) < c.hl + 1.3 && Math.abs(dx * fz - dz * fx) < c.hw + (air ? 0.8 : 0.3) && P.y > c.roof - 0.5 && P.y < c.roof + (air ? 6 : 0.5)) return c;
+    }
+    return null;
+  },
+  onTrain(P) { return this.riding(P, false); },
   near(x, z, d) { for (const c of this.cars) if (this.carAt(x, z, d) === c) return c; return null; },
   climb(c) {
     const P = G.player; if (!c) return;
@@ -78,12 +91,13 @@ const Train = {
       this.v = want > this.v ? Math.min(want, this.v + 1.3 * dt) : Math.max(0, this.v - 1.6 * dt);
       if (ahead < 1.5 || (ahead < 6 && this.v < 0.5)) { this.state = 'dwell'; this.dwell = 10; this.v = 0; this.nextStop = (this.nextStop + 1) % W.STATIONS.length; }
     }
+    // riders go where the train goes: keep their spot on the car (turning with it on bends), even mid-jump
+    const P = G.player, ride = this.riding(P, true);
+    let lx = 0, lz = 0;
+    if (ride) { const fx = Math.sin(ride.h), fz = Math.cos(ride.h), dx = P.x - ride.x, dz = P.z - ride.z; lz = dx * fx + dz * fz; lx = dx * fz - dz * fx; }
     this.s += this.v * dt;
     this.place(dt);
-    const P = G.player;
-    // riders go where the train goes
-    const ride = P.y > 2 && !P.inCar && !P.inHeli ? this.cars.find((c) => this.carAt(P.x, P.z, 0.3) === c && Math.abs(P.y - c.roof) < 0.5) : null;
-    if (ride) { P.x += ride.dx; P.z += ride.dz; }
+    if (ride) { const fx = Math.sin(ride.h), fz = Math.cos(ride.h); P.x = ride.x + fx * lz + fz * lx; P.z = ride.z + fz * lz - fx * lx; }
     if (this.safe) { const c = this.cars[2]; this.safe.x = c.x; this.safe.z = c.z; }
     this.hornT -= dt;
     if (this.v > 3) this.collide(dt);
@@ -91,6 +105,7 @@ const Train = {
     const loco = this.cars[0], blink = Math.floor(G.time * 3) % 2;
     for (const cr of W.railCrossings) {
       const near = this.cars.some((c) => dist(c.x, c.z, cr.x, cr.z) < 110) && this.v > 0.5;
+      cr.closed = near;
       cr.posts.forEach((p, i) => { p.light.material.color.set(near && (blink ^ (i & 1)) ? 0xff2020 : 0x441111); p.arm.rotation.z = damp(p.arm.rotation.z, near ? 0 : Math.PI / 2 - 0.05, 3, dt); });
       if (near && dist(loco.x, loco.z, cr.x, cr.z) < 90 && dist(loco.x, loco.z, cr.x, cr.z) > 40 && this.hornT <= 0) this.horn();
     }

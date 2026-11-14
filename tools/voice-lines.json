@@ -1,25 +1,118 @@
 {
-  "_note": "Every spoken line in Loot Run. Rendered by tools/build-voice.py with the Kokoro TTS model (Apache-2.0). Vera's mission lines are read straight from js/game.js. Each bark line is voiced by the voices listed for its group, in rotation.",
+  "_note": "Every spoken line in Loot Run. Rendered by tools/build-voice.py with the Kokoro TTS model (Apache-2.0). Vera's mission lines are read straight from js/game.js. Each bark line is rendered once per voice of its role, so a person keeps the same voice whatever they shout.",
   "voices": {
     "vera": "af_heart",
     "dispatch": "af_bella",
-    "unit": ["am_michael", "am_puck"],
-    "pedM": ["am_puck", "bm_george", "am_fenrir"],
-    "pedF": ["af_sarah", "bf_emma", "af_kore", "af_aoede"],
-    "cop": ["am_fenrir", "am_michael", "bm_george"],
-    "clerk": ["af_kore", "am_puck"]
+    "unit": [
+      "am_michael",
+      "am_puck"
+    ],
+    "cop": [
+      "am_fenrir",
+      "am_michael",
+      "bm_george"
+    ],
+    "clerk": [
+      "af_kore",
+      "am_puck"
+    ],
+    "ped": [
+      "am_puck",
+      "bm_george",
+      "af_sarah",
+      "bf_emma"
+    ]
   },
   "barks": {
-    "ped_hurt": { "voices": ["pedM", "pedF"], "lines": ["Ow! What's your problem?", "Hey! Stop it!", "Help! Somebody help me!", "Get away from me!", "Are you crazy?", "Please, stop!"] },
-    "ped_panic": { "voices": ["pedM", "pedF"], "lines": ["He's got a gun!", "Run! Run!", "Oh my God!", "Somebody call the police!", "Get down!"] },
-    "witness": { "voices": ["pedF", "pedM"], "lines": ["I'm calling the cops!", "Hello, police? I need to report a crime.", "I saw that! I'm calling nine one one!", "Hey! Somebody stop him!"] },
-    "carjacked": { "voices": ["pedM", "pedF"], "lines": ["Hey! That's my car!", "Get out of my car!", "No, no, no! My car!", "Thief! Stop that guy!"] },
-    "clerk": { "voices": ["clerk"], "lines": ["Please don't shoot! Just take it!", "Okay, okay! Here's the money!", "The cops are already on their way, you know."] },
-    "cop_spot": { "voices": ["cop"], "lines": ["Freeze! Police!", "Stop right there!", "Police! Don't move!", "Hands where I can see them!"] },
-    "cop_chase": { "voices": ["cop"], "lines": ["Suspect on foot, I'm in pursuit!", "Stop running!", "You can't run forever!", "Get on the ground, now!"] },
-    "cop_hurt": { "voices": ["cop"], "lines": ["Agh! I'm hit!", "Officer needs assistance!", "Shots fired! Shots fired!"] },
-    "cop_cuff": { "voices": ["cop"], "lines": ["You're under arrest!", "Hands behind your back!", "You have the right to remain silent."] },
-    "cop_lost": { "voices": ["cop"], "lines": ["Where'd he go?", "I lost him!", "He was right here a second ago."] }
+    "ped_hurt": {
+      "lines": [
+        "Ow! What's your problem?",
+        "Hey! Stop it!",
+        "Help! Somebody help me!",
+        "Get away from me!",
+        "Are you crazy?",
+        "Please, stop!"
+      ],
+      "role": "ped"
+    },
+    "ped_panic": {
+      "lines": [
+        "He's got a gun!",
+        "Run! Run!",
+        "Oh my God!",
+        "Somebody call the police!",
+        "Get down!"
+      ],
+      "role": "ped"
+    },
+    "witness": {
+      "lines": [
+        "I'm calling the cops!",
+        "Hello, police? I need to report a crime.",
+        "I saw that! I'm calling nine one one!",
+        "Hey! Somebody stop him!"
+      ],
+      "role": "ped"
+    },
+    "carjacked": {
+      "lines": [
+        "Hey! That's my car!",
+        "Get out of my car!",
+        "No, no, no! My car!",
+        "Thief! Stop that guy!"
+      ],
+      "role": "ped"
+    },
+    "clerk": {
+      "lines": [
+        "Please don't shoot! Just take it!",
+        "Okay, okay! Here's the money!",
+        "The cops are already on their way, you know."
+      ],
+      "role": "clerk"
+    },
+    "cop_spot": {
+      "lines": [
+        "Freeze! Police!",
+        "Stop right there!",
+        "Police! Don't move!",
+        "Hands where I can see them!"
+      ],
+      "role": "cop"
+    },
+    "cop_chase": {
+      "lines": [
+        "Suspect on foot, I'm in pursuit!",
+        "Stop running!",
+        "You can't run forever!",
+        "Get on the ground, now!"
+      ],
+      "role": "cop"
+    },
+    "cop_hurt": {
+      "lines": [
+        "Agh! I'm hit!",
+        "Officer needs assistance!",
+        "Shots fired! Shots fired!"
+      ],
+      "role": "cop"
+    },
+    "cop_cuff": {
+      "lines": [
+        "You're under arrest!",
+        "Hands behind your back!",
+        "You have the right to remain silent."
+      ],
+      "role": "cop"
+    },
+    "cop_lost": {
+      "lines": [
+        "Where'd he go?",
+        "I lost him!",
+        "He was right here a second ago."
+      ],
+      "role": "cop"
+    }
   },
   "radio": {
     "dispatch": {
@@ -80,7 +173,27 @@
     "air": "Over the city."
   },
   "streets": {
-    "ew": ["Oak", "Pine", "Maple", "Cedar", "Main", "Elm", "Market", "Union", "Harbor"],
-    "ns": ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth"]
+    "ew": [
+      "Oak",
+      "Pine",
+      "Maple",
+      "Cedar",
+      "Main",
+      "Elm",
+      "Market",
+      "Union",
+      "Harbor"
+    ],
+    "ns": [
+      "First",
+      "Second",
+      "Third",
+      "Fourth",
+      "Fifth",
+      "Sixth",
+      "Seventh",
+      "Eighth",
+      "Ninth"
+    ]
   }
 }

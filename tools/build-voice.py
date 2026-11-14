@@ -45,15 +45,9 @@ def main():
     jobs = []  # (key, text, voice, speed, kind)
     for i, t in enumerate(vera_lines()): jobs.append((f'vera/{i}', t, V['vera'], 1.0, 'vera'))
     for g, b in spec['barks'].items():
-        pools = [V[p] if isinstance(V[p], list) else [V[p]] for p in b['voices']]
-        n = 0
+        # every line in every voice of the role: a person picks one voice and keeps it for everything they shout
         for i, t in enumerate(b['lines']):
-            # two takes per line, from different voices, so a crowd doesn't all sound the same
-            for take in range(2):
-                pool = pools[(i + take) % len(pools)]
-                voice = pool[(i * 2 + take) % len(pool)]
-                if take == 1 and len(pools) == 1 and len(pool) == 1: break
-                jobs.append((f'bark/{g}/{n}', t, voice, 1.05, 'bark')); n += 1
+            for j, voice in enumerate(V[b['role']]): jobs.append((f'bark/{g}/{i}/{j}', t, voice, 1.05, 'bark'))
     for k, t in spec['radio']['dispatch'].items(): jobs.append((f'dispatch/{k}', t, V['dispatch'], 1.08, 'radio'))
     for k, t in spec['radio']['unit'].items():
         for j, voice in enumerate(V['unit']): jobs.append((f'unit/{k}/{j}', t, voice, 1.05, 'radio'))
