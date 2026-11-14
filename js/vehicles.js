@@ -159,6 +159,8 @@ class Car {
       const z = W.zoneAt(this.x, this.z);
       mul = W.ZONES[z].car;
       if (z === 'forest' && !W.onTrail(this.x, this.z)) mul = 0.55;
+      // the fastest machines are tamed on city streets (nitro still gives the full kick)
+      if ((z === 'street' || z === 'alley') && CITY_TAME[this.type] && !boost) mul *= CITY_TAME[this.type];
     }
     if (this.popped) mul *= 0.5;
     const cond = clamp(this.hp / this.maxHp, 0, 1);
@@ -493,6 +495,8 @@ function navPoints(car) {
   a.stage = 'exit';
   a.limit = Math.min((A.hwy && B.hwy) ? 30 - car.lane : 14, car.T.maxV * ((A.hwy && B.hwy) ? 1.1 : 0.8));
 }
+/* top-speed factor on city streets for the fastest vehicles */
+const CITY_TAME = { supercar: 0.72, sports: 0.8, motorbike: 0.76 };
 function initTraffic(car, from, to) {
   car.ai = Object.assign(car.ai || {}, { mode: car.police ? 'patrol' : 'traffic', from, to, blockT: 0, ignoreT: 0, checkT: 0, blocked: null, stuckT: 0, revT: 0 });
   navPoints(car); car.ai.stage = 'run';

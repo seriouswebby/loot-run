@@ -840,6 +840,15 @@ function runAutotest() {
     const T0 = CAR_TYPES.sedan.maxV;
     return (street > T0 * 1.1 && grass > T0 * 0.9) || `sedan base ${T0} street ${street.toFixed(1)} grass ${grass.toFixed(1)}`;
   });
+  T('supercars, sports cars and motorbikes are tamed on city streets (not with nitro, not on the highway)', () => {
+    const top = (type, x, z, h, nitro) => { reset(); G.noSpawn = true; for (const c of G.cars.slice()) if (!c.persistent) c.remove(); tp(x, z); const car = new Car(type, x, z, h); G.enterCar(car); G.nitro = 1; Input.keys.KeyW = true; if (nitro) Input.keys.ShiftLeft = true; let v = 0; for (let i = 0; i < 360; i++) { step(STEP); v = Math.max(v, car.v); } Input.keys.KeyW = Input.keys.ShiftLeft = false; G.exitCar(true); car.remove(); G.noSpawn = false; return v * 3.6; };
+    const bad = [];
+    for (const [type, cityMax] of [['supercar', 155], ['sports', 135], ['motorbike', 145]]) {
+      const city = top(type, W.rp(4) - 2.5, W.rp(0) + 8, 0, false), boosted = top(type, W.rp(4) - 2.5, W.rp(0) + 8, 0, true), hwy = top(type, -300, -W.HWY + 7.5, Math.PI / 2, false);
+      if (!(city < cityMax && boosted > city * 1.2 && hwy > city * 1.25)) bad.push(`${type}: city ${city.toFixed(0)} km/h (max ${cityMax}) with nitro ${boosted.toFixed(0)} highway ${hwy.toFixed(0)}`);
+    }
+    return !bad.length || bad.join(' | ');
+  });
   T('top speed holds at the cap (no creeping past it)', () => {
     const bad = [];
     for (const type of ['supercar', 'motorbike', 'sports']) {

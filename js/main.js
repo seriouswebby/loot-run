@@ -344,14 +344,25 @@ const GPS = {
     this.beam.visible = !!wp && dist(B.x, B.z, wp.x, wp.z) > 12;
     if (wp) { this.beam.position.set(wp.x, 35, wp.z); this.beam.material.opacity = 0.25 + Math.sin(G.time * 3) * 0.08; }
     this.arrow.material.color.set(this.toWaypoint ? 0xff4fd8 : 0xffd23f);
-    const a = this.arrow, p = this.path;
+    const a = this.arrow, p = this.path, car = G.player.inCar;
     if (!p || p.length < 2 || G.player.inHeli || dist(B.x, B.z, obj.x, obj.z) < 7) { a.visible = false; return; }
-    let nx = p[1][0], nz = p[1][1];
-    if (dist(B.x, B.z, nx, nz) < 6 && p.length > 2) { nx = p[2][0]; nz = p[2][1]; }
-    const ang = Math.atan2(nx - B.x, nz - B.z), r = G.player.inCar ? 4.2 : 2.2;
-    a.visible = true; a.position.set(B.x + Math.sin(ang) * r, 0.12, B.z + Math.cos(ang) * r);
-    a.rotation.set(0, ang, 0); a.scale.setScalar(G.player.inCar ? 1.4 : 0.9);
-    a.material.opacity = 0.65 + Math.sin(G.time * 5) * 0.25;
+    // painted on the route itself, a little way ahead (further at speed), pointing along the road to take:
+    // coming up to a turn, it sits on the road you turn into instead of swinging around under the car
+    const ahead = car ? clamp(12 + Math.abs(car.v) * 0.6, 12, 32) : 5;
+    let left = ahead, px = p[0][0], pz = p[0][1], ang = 0, found = false;
+    for (let i = 1; i < p.length; i++) {
+      const ax = p[i - 1][0], az = p[i - 1][1], bx = p[i][0], bz = p[i][1], L = dist(ax, az, bx, bz);
+      if (L < 0.01) continue;
+      ang = Math.atan2(bx - ax, bz - az);
+      if (L >= left) { px = ax + (bx - ax) * left / L; pz = az + (bz - az) * left / L; found = true; break; }
+      left -= L; px = bx; pz = bz;
+    }
+    if (!found) { a.visible = false; return; }
+    // the route is behind you: put the arrow in front of the car, pointing back the way to go
+    if (car) { const fx = Math.sin(car.h), fz = Math.cos(car.h); if ((px - B.x) * fx + (pz - B.z) * fz < 6) { const qx = B.x + fx * 12, qz = B.z + fz * 12; ang = Math.atan2(px - qx, pz - qz); px = qx; pz = qz; } }
+    a.visible = true; a.position.set(px, 0.13, pz);
+    a.rotation.set(0, ang, 0); a.scale.setScalar(car ? 1.8 : 0.9);
+    a.material.opacity = 0.7 + Math.sin(G.time * 5) * 0.2;
   },
 };
 
@@ -1116,6 +1127,11 @@ function demoSetup(kind) {
   else if (kind === 'station') { const st = W.STATIONS[0]; G.camMode = 'chase'; P.x = st.x - 40; P.z = st.z + 18; P.facing = CAM.yaw = Math.PI / 2 + 0.3; CAM.pitch = 0.15; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'snowlake') { const L = W.LAKE; Weather.set('snow', true); Weather.snowCover = 0.8; G.camMode = 'chase'; P.x = L.x + L.r + 22; P.z = L.z + 6; P.facing = CAM.yaw = -Math.PI / 2; CAM.pitch = 0.2; for (let i = 0; i < 60; i++) { step(STEP); Weather.update(STEP, P.x, 0, P.z); } }
   else if (kind === 'cloudyiso') { Weather.set('cloudy', true); for (let i = 0; i < 30; i++) { step(STEP); Weather.update(STEP, P.x, 0, P.z); } }
+  else if (kind === 'drivechase' || kind === 'drivechase2') {
+    G.camMode = 'chase'; const b = W.places.spawn; const car = new Car('sedan', W.rp(3) + 2.5, W.rp(1) + 20, 0); P.x = car.x; P.z = car.z; G.enterCar(car);
+    if (kind === 'drivechase2') G.setWaypoint(W.places.chop.x, W.places.chop.z);
+    Input.keys.KeyW = true; for (let i = 0; i < 90; i++) step(STEP); Input.keys.KeyW = false; void b; GPS.t = 0; GPS.update(0.016);
+  }
   else if (kind === 'waypoint') { G.setWaypoint(W.places.chop.x + 6, W.places.chop.z); GPS.update(0.5); openBigMap(); bigMapZoom(0.5, 0.42, 0.35); }
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }
