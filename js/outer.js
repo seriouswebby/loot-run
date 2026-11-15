@@ -70,6 +70,7 @@ function buildCounty() {
   countyFarms(OP, free);
   const trees = countyWoods(free);
   trees.push(...buildDistricts());
+  funlandCarPark();
   countyTreeMeshes(trees);
   OP.build(S);
   W.benchSpots = [['county', W.ROUNDABOUT.x + 40, W.ROUNDABOUT.z - 6.5], ['woods', -500, -520], ['airport', -650, 140], ['funland', 735, 150]];
@@ -132,7 +133,18 @@ function countyRoads() {
   // round pads where county roads bend or meet, so corners don't leave notches
   for (const n of W.nodes) {
     if (n.hwy || !W.inCounty(n.x, n.z) || n.adj.length < 2 || W.ringNodes.has(n.id)) continue;
-    if (n.half > 0) { GB.asphalt.rect(n.x - n.half, n.z - n.half, n.x + n.half, n.z + n.half, 0.045, 12); continue; }
+    if (n.half > 0) {
+      GB.asphalt.rect(n.x - n.half, n.z - n.half, n.x + n.half, n.z + n.half, 0.045, 12);
+      // a road meeting the junction at an angle sticks out past that square: fill out to the corners of every road's end
+      const cs = [];
+      for (const id of n.adj) { const m = W.nodes[id], L = dist(n.x, n.z, m.x, m.z) || 1, dx = (m.x - n.x) / L, dz = (m.z - n.z) / L, ex = n.x + dx * n.half, ez = n.z + dz * n.half; cs.push([ex - dz * 6, ez + dx * 6], [ex + dz * 6, ez - dx * 6]); }
+      const ang = (p) => Math.atan2(p[1] - n.z, p[0] - n.x); cs.sort((p, q) => ang(p) - ang(q));
+      for (let i = 0; i < cs.length; i++) {
+        const p = cs[i], q = cs[(i + 1) % cs.length]; let gap = ang(q) - ang(p); if (gap <= 0) gap += TAU;
+        if (gap < Math.PI) GB.road.quad([[n.x, n.z], p, q, [n.x, n.z]], [[0.5, 0.2], [0, 0.2], [1, 0.2], [0.5, 0.2]], 0.042);
+      }
+      continue;
+    }
     const [p, q] = n.adj.map((i) => W.nodes[i]), a1 = Math.atan2(p.z - n.z, p.x - n.x), a2 = Math.atan2(q.z - n.z, q.x - n.x);
     if (Math.abs(Math.abs(angDiff(a1, a2)) - Math.PI) < 0.02) continue; // straight through
     const N = 12;

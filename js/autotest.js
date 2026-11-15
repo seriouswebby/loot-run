@@ -48,6 +48,15 @@ function runAutotest() {
     G.scene.traverse((o) => { if (!o.isMesh || o.material !== W.terrainMat) return; const p = o.geometry.attributes.position.array; for (let i = 0; i < p.length; i += 3) if (p[i + 2] > W.SHORE + 4) { sea++; if (p[i + 1] > -0.2) above++; } });
     return (sea > 0 && above === 0) || 'terrain vertices out at sea ' + sea + ', drawn at or above the water ' + above;
   });
+  T('Funland car park: joined to East Road; traffic drives in, turns round and drives back out', () => {
+    reset(); G.noSpawn = true; const lot = W.nodes.find((n) => n.lot); if (!lot) return 'no car park in the road network';
+    const j = W.nodes[lot.adj[0]]; for (const c of G.cars.slice()) if (!c.persistent && !c.parked && dist(c.x, c.z, 775, 30) < 80) c.remove();
+    const car = new Car('sedan', j.x - 2, j.z, 0, { driver: 'ai' }); initTraffic(car, j.id, lot.id); tp(760, 8);
+    let inLot = false, out = false, i = 0; for (; i < 60 * 45 && !out; i++) { step(STEP); if (car.z > 44) inLot = true; if (inLot && car.z < 22) out = true; }
+    const r = 'in ' + inLot + ' back out ' + out + ' after ' + (i / 60).toFixed(0) + ' s (at ' + car.x.toFixed(0) + ',' + car.z.toFixed(0) + ' hp ' + Math.round(car.hp) + ')';
+    car.remove(); G.noSpawn = false;
+    return (inLot && out && !car.wreck) || r;
+  });
   T('player cannot walk through a building', () => {
     reset(); const b = W.blocks.find((k) => k.type === 'city');
     tp(b.cx - 7.5, b.cz - 18); G.inputOverride = { mx: 0, mz: 1 }; steps(3); G.inputOverride = null;

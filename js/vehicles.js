@@ -637,6 +637,7 @@ function aiTraffic(car, dt) {
     let opts = B.adj.filter((n) => n !== a.from);
     if (!opts.length) opts = B.adj;
     let next = pick(opts);
+    if (W.nodes[next].lot && opts.length > 1 && Math.random() < 0.7) next = pick(opts.filter((n) => !W.nodes[n].lot)); // (a car park is a stop, not the way on)
     // a fleeing driver mostly takes the turn that leads away from you
     if (a.flee && Math.random() < 0.8) { const t = G.body(); next = opts.slice().sort((p, q) => dist(W.nodes[q].x, W.nodes[q].z, t.x, t.z) - dist(W.nodes[p].x, W.nodes[p].z, t.x, t.z))[0]; }
     return next;

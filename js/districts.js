@@ -42,7 +42,11 @@ function buildFunland(trees) {
   pave(gx - 32, F.minZ, gx + 32, 112); pave(gx - 7, 112, gx + 7, F.maxZ); pave(F.minX, 184, F.maxX - 4, 198);
   pave(694, 137, gx - 7, 143); pave(gx + 7, 137, 802, 143); pave(722, 243, gx - 7, 249); pave(gx + 7, 287, 808, 293);
   GB.asphalt.rect(745, 30, 806, 74, 0.035, 12);
-  for (let x = 749; x < 803; x += 4) for (const [z, h] of [[35, 0], [69, Math.PI]]) { GB.white.rect(x - 0.08, z - 2.6, x + 0.08, z + 2.6, 0.05, 1); if (rnd() < 0.45) W.curbSpots.push({ x: x + 2, z, h }); }
+  for (let x = 749; x < 803; x += 4) for (const [z, h] of [[35, 0], [69, Math.PI]]) {
+    const gate = z === 35 && x > 767 && x < 781; // (the way in from East Road)
+    if (!gate || x === 767) GB.white.rect(x - 0.08, z - 2.6, x + 0.08, z + 2.6, 0.05, 1);
+    if (rnd() < 0.45 && !gate) W.curbSpots.push({ x: x + 2, z, h });
+  }
   // the path network visitors wander (and the boarding spots for the rides)
   const N = { gate: [gx, 86], wheelJ: [gx, 140], hub: [gx, 191], viperJ: [gx, 246], dropJ: [gx, 290], back: [gx, 316], carousel: [698, 140], wheel: [797, 140],
     west: [F.minX + 6, 191], east: [F.maxX - 8, 191], viper: [723, 246], drop: [804, 290], plazaW: [gx - 14, 104], plazaE: [gx + 14, 104] };
@@ -261,6 +265,18 @@ function buildViper(R, FP) {
   const k = Math.max(0, (E0 - 0.5 * 9 * 9 - g * yB) / run);
   R.coaster = { V, cars, head, s: sStop, v: 0, state: 'load', dwell: 6, sStop, sTop, sBrake, E0, k, gap: 2.7, frame };
   W.viperNear = (x, z, r) => { for (let i = 0; i < n; i += 4) if (Math.abs(V.x[i] - x) < r && Math.abs(V.z[i] - z) < r) return true; return false; };
+}
+
+/* the car park joins the roads: a way in from East Road (traffic pulls in now and then, loops round and drives back
+   out) and a driveway across to Funland Drive by the gate. Built once the county's roads exist. */
+function funlandCarPark() {
+  const j = W.nodes.find((n) => Math.abs(n.x - 775) < 0.5 && Math.abs(n.z - 18) < 0.5); if (!j) return;
+  const lot = W.addNode(775, 52, false, 0); W.nodes[lot].lot = true; W.addEdge(j.id, lot);
+  W.countyEdges.push({ ax: j.x, az: j.z, bx: 775, bz: 52, e: W.edges[W.edges.length - 1], name: 'Funland car park' });
+  GB.asphalt.rect(769, 23.5, 781, 30.5, 0.036, 12); // the way in from East Road
+  GB.asphalt.rect(740.5, 47, 745.5, 57, 0.036, 12); // and across to Funland Drive
+  addSign(786, 2.2, 27.5, 'n', 'PARKING', '#1d3557', '#ffffff', 4.4, 1, 'FUNLAND');
+  W.places.funPark = { id: 'funPark', name: 'Funland car park', x: 775, z: 52 };
 }
 
 /* the rides move in the simulation step, so tests and the game see the same thing */
