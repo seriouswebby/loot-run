@@ -42,6 +42,12 @@ function runAutotest() {
       && W.zoneAt(-650, 160) === 'airport' && !!W.places.fxdesk;
     return ok || `blocks ${W.blocks.length} nodes ${W.nodes.length} robs ${W.robs.length} cams ${W.cams.length} alarms ${W.alarms.length} alleys ${W.alleys.length} shops ${W.places.shops.length} pads ${W.places.helipads.length} alleyZone ${ac}`;
   });
+  T('the sea is water out from the shore: the ground is drawn under it, not over it as grass', () => {
+    if (!W.terrainMat) return 'SKIP';
+    let above = 0, sea = 0;
+    G.scene.traverse((o) => { if (!o.isMesh || o.material !== W.terrainMat) return; const p = o.geometry.attributes.position.array; for (let i = 0; i < p.length; i += 3) if (p[i + 2] > W.SHORE + 4) { sea++; if (p[i + 1] > -0.2) above++; } });
+    return (sea > 0 && above === 0) || 'terrain vertices out at sea ' + sea + ', drawn at or above the water ' + above;
+  });
   T('player cannot walk through a building', () => {
     reset(); const b = W.blocks.find((k) => k.type === 'city');
     tp(b.cx - 7.5, b.cz - 18); G.inputOverride = { mx: 0, mz: 1 }; steps(3); G.inputOverride = null;

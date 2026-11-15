@@ -252,8 +252,12 @@ function buildTerrainMesh(scene) {
     for (let j = 0; j < vz; j++) for (let i = 0; i < vx; i++) {
       const gi = ti + i, gj = tj + j, x = T.x0 + gi * T.C, z = T.z0 + gj * T.C, h = H[gj * nx + gi], k = j * vx + i;
       const sx = (H[gj * nx + Math.min(nx - 1, gi + 1)] - H[gj * nx + Math.max(0, gi - 1)]) / (2 * T.C), sz = (H[Math.min(T.nz - 1, gj + 1) * nx + gi] - H[Math.max(0, gj - 1) * nx + gi]) / (2 * T.C);
-      pos[k * 3] = x; pos[k * 3 + 1] = h; pos[k * 3 + 2] = z; uv[k * 2] = x / 12; uv[k * 2 + 1] = z / 12;
-      terrainColor(x, z, h, Math.hypot(sx, sz), col); colr[k * 3] = col[0]; colr[k * 3 + 1] = col[1]; colr[k * 3 + 2] = col[2];
+      // past the shoreline the ground is drawn as a sea bed, under the water (the grid runs on 80 m out to sea, and at
+      // the ground's own height it lay over the water as grass)
+      const sea = z > W.SHORE + 2;
+      pos[k * 3] = x; pos[k * 3 + 1] = sea ? -2.5 : h; pos[k * 3 + 2] = z; uv[k * 2] = x / 12; uv[k * 2 + 1] = z / 12;
+      if (sea) { col[0] = 0.76; col[1] = 0.7; col[2] = 0.5; } else terrainColor(x, z, h, Math.hypot(sx, sz), col);
+      colr[k * 3] = col[0]; colr[k * 3 + 1] = col[1]; colr[k * 3 + 2] = col[2];
       hmin = Math.min(hmin, h); hmax = Math.max(hmax, h);
     }
     for (let j = 0; j < cz; j++) for (let i = 0; i < cx; i++) { const a = j * vx + i, b = a + 1, c = a + vx, d = c + 1; idx.push(a, c, b, b, c, d); }

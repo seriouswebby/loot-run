@@ -1222,6 +1222,9 @@ function demoSetup(kind) {
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }
   else if (kind === 'beach') { P.x = 30; P.z = W.SHORE - 8; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'funiso') { P.x = 735; P.z = 60; CAM.zoomIso = 150; CAM.curIso = 150; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'funroad') { G.camMode = 'chase'; P.x = 690; P.z = 10; P.facing = CAM.yaw = Math.atan2(45, 36); CAM.pitch = 0.3; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'pier') { G.camMode = 'chase'; P.x = 0; P.z = W.SHORE - 4; P.facing = CAM.yaw = 0; CAM.pitch = 0.32; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'dialog') { Story.start(); }
   else if (kind === 'bank') { const b = W.places.bank; P.x = b.x + 4; P.z = b.z + 3; for (let i = 0; i < 30; i++) step(STEP); }
   CAM.fx = G.body().x; CAM.fz = G.body().z;
