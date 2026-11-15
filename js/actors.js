@@ -479,7 +479,7 @@ const Bullets = {
       const targets = b.team === 'cop' ? [P] : G.npcs;
       for (const t of targets) {
         if (t === b.owner || t.down || t.dead || t.invuln) continue;
-        if (t === P && P.inCar && !P.inCar.T.bike) continue;
+        if (t === P && P.inCar && !openRide(P.inCar)) continue;
         if (t === P && P.inHeli) {
           const h = P.inHeli;
           if (segPointDist(h.x, h.z, b.x, b.z, nx, nz) < 2.4) { h.damage(b.dmg * 0.5, b.owner); done = true; break; }

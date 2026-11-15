@@ -34,6 +34,8 @@ Progress saves in your browser after every story job.
 
 Cars drive on realistic handling when the physics engine has loaded (it comes from the internet): a Box3D body on sprung wheels with tyre grip, so they pitch, roll, ride up kerbs and slide. Every parked car, traffic car and police cruiser in play is a physics car too (at any range), so crashes are real collisions. Press L for the arcade handling for your own car, and K to turn the physics traffic off (both are remembered; offline, everything is arcade). Bikes (motorbikes, dirt bikes, pedal bikes and BMXs) are physics bodies too: two sprung wheels in line with the back one driven, leaning into turns; hit something hard and you go over the bars, and the bike falls over until someone picks it up.
 
+Boats: jet skis wait on the beach east of Pier 9, speedboats along the pier and a yacht on its other side. W/S throttle, A/D steer (SHIFT nitro on a speedboat); you can only get off alongside the pier, the beach or a bank, since you can't swim. At 3 stars out on the water, police boats come after you, ram you and shoot; they head off when the heat goes. Boats are sea-only: the lake, river and reservoir have none.
+
 Planes and jets: W/S throttle, build speed on the runway, Space to pull up, Shift to dive, A/D to bank; land and brake (S) to get out. Click fires the gun on police choppers, gunships and fighter jets. Next to the county train, E climbs on; Space jumps off.
 
 ## Code layout

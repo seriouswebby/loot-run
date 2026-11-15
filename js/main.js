@@ -83,8 +83,9 @@ const UI = {
     $('heatBox').classList.toggle('active', Heat.level > 0);
     const z = W.ZONES[G.playerZone] || W.ZONES.street;
     const B0 = G.body();
-    this.set('zoneLabel', G.playerZone === 'street' ? W.streetName(B0.x, B0.z).toUpperCase() : z.label + (G.playerZone === 'alley' && G.curAlley && G.curAlley.dead ? ' (DEAD END)' : ''));
-    this.set('zoneHint', z.hint);
+    const onWater = P.inCar && P.inCar.T.boat;
+    this.set('zoneLabel', onWater ? 'OPEN WATER' : G.playerZone === 'street' ? W.streetName(B0.x, B0.z).toUpperCase() : z.label + (G.playerZone === 'alley' && G.curAlley && G.curAlley.dead ? ' (DEAD END)' : ''));
+    this.set('zoneHint', onWater ? 'Nowhere to hide · police boats at 3 stars' : z.hint);
     $('zone').dataset.z = G.playerZone;
     // objective
     const o = Story.text();
@@ -101,7 +102,8 @@ const UI = {
       this.set('weapon', car.T.name.toUpperCase());
       this.set('ammo', Math.round(Math.abs(car.v) * 3.6) + ' KM/H · ' + (car.popped ? 'TIRES SHOT · ' : '') + 'CAR ' + Math.round(clamp(car.hp / car.maxHp, 0, 1) * 100) + '%' + (G.boosting ? ' · NITRO!' : car.y > 0.05 ? ' · AIRBORNE' : Input.down('Space') && car.type !== 'bmx' ? ' · HANDBRAKE' : ''));
       if (car.T.tank) items.push('Click fire the gun', 'A/D turn on the spot');
-      items.push(car.type === 'bmx' || car.T.dirt ? 'SPACE hop' : 'SPACE handbrake', 'G spikes ×' + S.spikes, 'H medkit ×' + S.medkit);
+      if (car.T.boat) { this.set('ammo', Math.round(Math.abs(car.v) * 3.6) + ' KM/H · HULL ' + Math.round(clamp(car.hp / car.maxHp, 0, 1) * 100) + '%' + (G.boosting ? ' · NITRO!' : '')); items.push('W/S throttle', 'A/D steer', 'F get off at the pier or beach', 'H medkit ×' + S.medkit); }
+      else items.push(car.type === 'bmx' || car.T.dirt ? 'SPACE hop' : 'SPACE handbrake', 'G spikes ×' + S.spikes, 'H medkit ×' + S.medkit);
       if (S.tools.nitro || car.T.nitro) { const n = Math.round(G.nitro * 10); items.push('⇧ NITRO ' + '▮'.repeat(n) + '▯'.repeat(10 - n)); }
     } else {
       this.set('weapon', w.name.toUpperCase());
@@ -436,7 +438,7 @@ function updateCamera(dt) {
       yaw = CAM.carYaw + CAM.carLook; pitch = CAM.carPitch; CAM.yaw = yaw;
     }
     CAM.wasInCar = !!veh;
-    const back = P.inHeli ? (P.inHeli.wing ? PLANES[P.inHeli.kind].cam : 17) : P.inCar ? (P.inCar.T.bike ? 7 : P.inCar.T.tank ? 15 : 10) + spd * 0.08 : CAM.chaseD;
+    const back = P.inHeli ? (P.inHeli.wing ? PLANES[P.inHeli.kind].cam : 17) : P.inCar ? (openRide(P.inCar) ? 7 : P.inCar.T.tank ? 15 : P.inCar.T.boat ? (P.inCar.T.len > 10 ? 24 : 12) : 10) + spd * 0.08 : CAM.chaseD;
     const fx3 = Math.sin(yaw), fz3 = Math.cos(yaw), cp = Math.cos(pitch), spch = Math.sin(pitch);
     const sh = veh ? 0 : 0.75; // over-the-shoulder offset to the right
     const px = t.x - fz3 * sh, pz = t.z + fx3 * sh, py = P.inHeli ? fy + 3.5 : P.inCar ? fy + (P.inCar.T.tank ? 3.8 : 2.3) : fy + 1.8;
@@ -530,7 +532,8 @@ function computeInteract() {
   }
   if (P.inCar) {
     const car = P.inCar, ch = W.places.chop, air = car.phys ? car.phys.wasAir && car.phys.airT > 0.15 : car.y > 0.3 && car.yv !== 0;
-    if (!air) out.f = { label: 'Get out', run: () => G.exitCar() };
+    if (car.T.boat) { if (Boats.landingSoon(car)) out.f = { label: 'Get off', run: () => G.exitCar() }; else out.e = { id: 'swim', disabled: "You can't swim: bring it alongside the pier or the beach to get off" }; }
+    else if (!air) out.f = { label: 'Get out', run: () => G.exitCar() };
     if (dist(car.x, car.z, ch.x, ch.z) < ch.r + 2) {
       out.e = { id: 'sell', label: 'Sell ' + car.T.name.toLowerCase() + ' to Rusty for ' + money(G.carValue(car)), disabled: Heat.level > 0 ? "Rusty won't buy while you have heat" : null, run: () => G.sellCar() };
       if (car.hp < car.maxHp || car.bumpers.some((b) => !b.on) || car.popped) out.r = { label: 'Repair for ' + money(G.repairCost(car)), run: () => G.repairCar() };
@@ -542,10 +545,11 @@ function computeInteract() {
   let bc = null, bd = 3.6;
   for (const c of G.cars) {
     if (c.dead || c.wreck || c.burning > 0) continue;
-    const d = dist(c.x, c.z, P.x, P.z) - c.T.w * 0.3; if (d < bd) { bd = d; bc = c; }
+    if (c.T.boat && c.driver === 'ai') continue;
+    const d = c.T.boat ? Boats.hullDist(c, P.x, P.z) + 0.6 : dist(c.x, c.z, P.x, P.z) - c.T.w * 0.3; if (d < bd) { bd = d; bc = c; }
   }
   if (bc) {
-    let lbl = (bc.T.bike ? 'Ride the ' : 'Get in the ') + bc.T.name.toLowerCase();
+    let lbl = (bc.T.ski ? 'Get on the ' : bc.T.boat ? 'Board the ' : bc.T.bike ? 'Ride the ' : 'Get in the ') + bc.T.name.toLowerCase();
     if (bc.fallen) lbl = 'Pick up the ' + bc.T.name.toLowerCase();
     if (bc.driver === 'ai' && bc.ai && bc.ai.mode !== 'roadblock' && bc.ai.mode !== 'parked') lbl = 'Carjack the ' + bc.T.name.toLowerCase();
     else if (bc.parked && bc.locked) lbl = bc.T.bike ? (bc.T.pedal ? 'Steal the ' : 'Hotwire the ') + bc.T.name.toLowerCase() : (G.S.tools.lockpick ? 'Pick the lock: ' : 'Smash window (loud): ') + bc.T.name.toLowerCase();
@@ -669,7 +673,7 @@ function updatePlayer(dt) {
     G.boosting = boost;
     // handbrake slides + wet-road drifts: tire screech, smoke and skid marks
     const hx = Math.sin(car.h), hz = Math.cos(car.h), spd = Math.hypot(car.vx, car.vz), lat = Math.abs(car.vx * hz - car.vz * hx);
-    G.slip = car.y > 0.05 ? 0 : clamp((Input.down('Space') && car.type !== 'bmx' && spd > 5 ? 0.55 : 0) + (lat - 2.5) / 7, 0, 1);
+    G.slip = car.y > 0.05 || car.T.boat ? 0 : clamp((Input.down('Space') && car.type !== 'bmx' && spd > 5 ? 0.55 : 0) + (lat - 2.5) / 7, 0, 1);
     if (G.slip > 0.25 && spd > 4) Skids.add(car, dt);
     P.x = car.x; P.z = car.z; P.vx = car.vx; P.vz = car.vz;
     return;
@@ -809,7 +813,7 @@ function step(dt) {
   updateZone(dt);
   updatePlayer(dt);
   Train.update(dt);
-  Funland.update(dt); Dam.update(dt); Tanks.update(dt);
+  Funland.update(dt); Dam.update(dt); Tanks.update(dt); Boats.update(dt);
   processHold(dt);
   for (const n of G.npcs) { if (n.dead) continue; if (n.kind === 'cop') copAI(n, dt); else pedAI(n, dt); }
   Heat.update(dt);
@@ -819,7 +823,7 @@ function step(dt) {
   for (const c of G.cars) {
     if (c.dead) continue;
     if (c !== P.inCar) {
-      if (c.driver === 'ai' && c.ai) { if (c.police) aiPolice(c, dt); else aiTraffic(c, dt); }
+      if (c.driver === 'ai' && c.ai) { if (c.T.boat) aiBoat(c, dt); else if (c.police) aiPolice(c, dt); else aiTraffic(c, dt); }
       else if (Math.abs(c.v) > 0.01 || Math.abs(c.vx) + Math.abs(c.vz) > 0.02) c.drive(dt, 0, 0, true, false);
     }
   }
@@ -847,9 +851,9 @@ function step(dt) {
 function poseRider(P, bike, dt) {
   const rg = P.rig, fx = Math.sin(bike.h), fz = Math.cos(bike.h), seat = bike.type === 'bmx' ? 0.35 : bike.T.pedal ? 0.45 : bike.T.dirt ? 0.5 : 0.4;
   rg.root.visible = true;
-  rg.root.position.set(bike.x - fx * 0.2, seat + (bike.y || 0) + W.groundAt(bike.x, bike.z), bike.z - fz * 0.2);
+  rg.root.position.set(bike.x - fx * 0.2, bike.T.ski ? bike.mesh.position.y + 0.4 : seat + (bike.y || 0) + W.groundAt(bike.x, bike.z), bike.z - fz * 0.2);
   rg.root.rotation.set(0, bike.h, 0);
-  rg.body.rotation.set(0.3, 0, bike.phys ? bike.lean || 0 : bike.mesh.rotation.z); rg.body.position.set(0, 0, 0); // (a physics bike's mesh carries the body's whole rotation: its lean is kept apart)
+  rg.body.rotation.set(0.3, 0, bike.phys || bike.T.ski ? bike.lean || 0 : bike.mesh.rotation.z); rg.body.position.set(0, 0, 0); // (a physics bike's mesh carries the body's whole rotation: its lean is kept apart)
   const pedal = bike.T.pedal ? (G.time * Math.abs(bike.v) * 1.2) : 0;
   rg.legL.rotation.x = -1.25 + Math.sin(pedal) * 0.45; rg.legR.rotation.x = -1.25 - Math.sin(pedal) * 0.45;
   rg.armL.rotation.x = rg.armR.rotation.x = -1.15;
@@ -964,7 +968,7 @@ function frame(now) {
   }
   G.canopy.visible = !!P.chute && !P.inCar && !P.inHeli;
   if (G.canopy.visible) { G.canopy.position.set(P.x, P.y + W.groundAt(P.x, P.z), P.z); G.canopy.rotation.y = P.facing; }
-  if (G.state !== 'title') { P.animate(dt); for (const n of G.npcs) n.animate(dt); if (P.inCar && P.inCar.T.bike) poseRider(P, P.inCar, dt); }
+  if (G.state !== 'title') { P.animate(dt); for (const n of G.npcs) n.animate(dt); if (openRide(P.inCar)) poseRider(P, P.inCar, dt); }
   FX.update(G.state === 'play' ? dt : 0);
   Puffs.update(G.state === 'play' ? dt : 0, cam, renderer.domElement.height);
   updateFades(cam, dt);
@@ -1224,6 +1228,16 @@ function demoSetup(kind) {
   else if (kind === 'beach') { P.x = 30; P.z = W.SHORE - 8; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'funiso') { P.x = 735; P.z = 60; CAM.zoomIso = 150; CAM.curIso = 150; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'funroad') { G.camMode = 'chase'; P.x = 690; P.z = 10; P.facing = CAM.yaw = Math.atan2(45, 36); CAM.pitch = 0.3; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'boats') { G.camMode = 'chase'; P.x = -1; P.z = W.SHORE + 1; P.facing = CAM.yaw = 0.25; CAM.pitch = 0.32; for (let i = 0; i < 60; i++) step(STEP); }
+  else if (kind === 'boatride') {
+    for (let i = 0; i < 5; i++) step(STEP); const b = Boats.MOORINGS[4].car; P.x = 3.6; P.z = b.z; G.enterCar(b); b.x = 60; b.z = W.SHORE + 70; b.h = 2.4; b.v = 26; b.vx = Math.sin(b.h) * 26; b.vz = Math.cos(b.h) * 26; b.sea = null;
+    Input.keys.KeyW = true; Input.keys.KeyA = true; for (let i = 0; i < 50; i++) step(STEP); Input.keys.KeyW = Input.keys.KeyA = false; CAM.carYaw = b.h + 0.5; CAM.carPitch = 0.22; CAM.wasInCar = true;
+  }
+  else if (kind === 'boatchase') {
+    for (let i = 0; i < 5; i++) step(STEP); const b = Boats.MOORINGS[4].car; P.x = 3.6; P.z = b.z; G.enterCar(b); b.x = 60; b.z = W.SHORE + 70; b.h = 1.2; b.sea = null; G.god = true; Heat.add(3, 5, 'demo');
+    Input.keys.KeyW = true; for (let i = 0; i < 60 * 9; i++) { step(STEP); Heat.spotted(); if (i % 120 === 0) Input.keys.KeyD = !Input.keys.KeyD; } Input.keys.KeyW = Input.keys.KeyD = false;
+    const cop = G.cars.find((c) => c.T.boat && c.police && !c.dead); if (cop) { CAM.carYaw = Math.atan2(cop.x - b.x, cop.z - b.z) + Math.PI; CAM.carPitch = 0.25; CAM.wasInCar = true; G.camMode = 'chase'; }
+  }
   else if (kind === 'pier') { G.camMode = 'chase'; P.x = 0; P.z = W.SHORE - 4; P.facing = CAM.yaw = 0; CAM.pitch = 0.32; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'dialog') { Story.start(); }
   else if (kind === 'bank') { const b = W.places.bank; P.x = b.x + 4; P.z = b.z + 3; for (let i = 0; i < 30; i++) step(STEP); }

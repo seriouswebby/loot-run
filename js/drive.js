@@ -362,10 +362,10 @@ const PhysCar = {
     this.on = !q.has('arcade') && pref !== 'arcade';
     this.world = !q.has('arcade') && !q.has('arcadeworld') && world !== 'off';
   },
-  usable(car) { return !!(Phys.ready && car && !car.dead && !car.wreck && (car.driver === 'player' ? this.on : this.world)); },
+  usable(car) { return !!(Phys.ready && car && !car.T.boat && !car.dead && !car.wreck && (car.driver === 'player' ? this.on : this.world)); },
   /* which cars become physics bodies (the K key turns the others off, in case they cost too much) */
   eligible(car) {
-    if (!car || car.dead || car.wreck) return false;
+    if (!car || car.dead || car.wreck || car.T.boat) return false; // (boats float on their own)
     if (car.driver === 'player') return true;
     if (!this.world || (car.T.bike && !this.classes.bikes)) return false;
     if (!car.driver || car.parked || (car.ai && (car.ai.mode === 'parked' || car.ai.mode === 'dead'))) return this.classes.parked;

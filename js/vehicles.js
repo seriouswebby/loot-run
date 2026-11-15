@@ -2,6 +2,10 @@
 /* Vehicles: arcade car physics, traffic + police AI, roadblocks, spikes, explosions. */
 
 const CAR_TYPES = {
+  jetski: { name: 'Jet ski', len: 2.8, w: 1.1, maxV: 30, accel: 16, hp: 90, value: 1500, mass: 0.35, boat: true, ski: true, colors: ['#ffd60a', '#ff006e', '#06d6a0', '#3a86ff', '#fb5607'] },
+  speedboat: { name: 'Speedboat', len: 6.4, w: 2.4, maxV: 36, accel: 12, hp: 170, value: 5200, mass: 1.4, boat: true, nitro: true, colors: ['#e63946', '#1d3557', '#2a9d8f', '#f4a261', '#ffffff'] },
+  yacht: { name: 'Yacht', len: 16, w: 5.2, maxV: 17, accel: 3.5, hp: 700, value: 85000, mass: 14, boat: true, colors: ['#f8f9fa'] },
+  policeboat: { name: 'Police boat', len: 7, w: 2.6, maxV: 33, accel: 12, hp: 240, value: 0, mass: 1.6, boat: true, colors: ['#1d3557'] },
   sedan: { name: 'Sedan', len: 4.3, w: 2.0, maxV: 25, accel: 13, hp: 160, value: 450, mass: 1, colors: ['#c1121f', '#284b63', '#e5e5e5', '#3c6e71', '#6d597a', '#b56576', '#22223b', '#9a8c98'] },
   sports: { name: 'Sports car', len: 4.2, w: 1.95, maxV: 39, accel: 22, hp: 130, value: 1200, mass: 0.9, nitro: true, colors: ['#ff006e', '#ffbe0b', '#fb5607', '#3a86ff', '#06d6a0'] },
   van: { name: 'Van', len: 5.0, w: 2.2, maxV: 20, accel: 10, hp: 220, value: 550, mass: 1.5, colors: ['#f1faee', '#a8dadc', '#6c757d', '#f4a261'] },
@@ -80,6 +84,42 @@ function buildCarMesh(type, color) {
     for (const sx of [-0.15, 0.15]) { rb(0.2, 0.7, 0.22, sx, 1.05, -0.05, pants, -1.2); rb(0.16, 0.62, 0.18, sx * 2.4, 1.45, 0.2, shirt, -1.1); }
     rider.visible = false; g.add(rider);
     return { g, mats, bar: null, rider };
+  }
+  if (T.boat) {
+    // a hull sitting in the water (its waterline at y = 0): a dark bottom, coloured sides, a pointed bow, and what each kind carries
+    const white = '#f4f4f0', dark = '#1b1b1e', hullC = type === 'policeboat' ? '#1d3557' : color, big = L > 10;
+    const turn = (m, rx, ry) => { m.rotation.set(rx || 0, ry || 0, 0); return m; };
+    if (T.ski) {
+      box(Wd * 0.85, 0.42, L * 0.8, 0, 0.05, -L * 0.08, hullC); turn(box(Wd * 0.7, 0.36, L * 0.32, 0, 0.12, L * 0.36, hullC), -0.35);
+      box(Wd * 0.6, 0.12, L * 0.42, 0, 0.32, -L * 0.12, white); box(0.36, 0.22, L * 0.38, 0, 0.42, -L * 0.14, dark);
+      box(0.14, 0.42, 0.14, 0, 0.5, L * 0.18, dark); box(0.7, 0.07, 0.07, 0, 0.72, L * 0.2, '#9aa0a6');
+      return { g, mats, bar: null, rider: null, dentable, glassMats, bumpers: [] };
+    }
+    const sideH = big ? 1.5 : 0.75, sideY = big ? 0.9 : 0.5, sideC = big ? white : hullC;
+    box(Wd, 0.5, L * 0.82, 0, -0.1, -L * 0.09, dark, false);
+    box(Wd, sideH, L * 0.82, 0, sideY, -L * 0.09, sideC);
+    for (const s of [-1, 1]) turn(box(Wd * 0.62, sideH, L * 0.26, s * Wd * 0.19, sideY, L * 0.38, sideC), 0, s * 0.42);
+    box(Wd * 1.01, 0.14, L * 0.8, 0, big ? 0.4 : 0.22, -L * 0.09, big ? '#1d3557' : white);
+    let bar = null;
+    if (big) {
+      // the yacht: a teak deck, two decks of cabin with tinted windows, a radar arch and rails
+      box(Wd * 0.95, 0.1, L * 0.8, 0, 1.68, -L * 0.09, '#c8a97e');
+      box(Wd * 0.75, 1.4, L * 0.42, 0, 2.4, -L * 0.12, white); box(Wd * 0.77, 0.45, L * 0.4, 0, 2.5, -L * 0.12, glass);
+      box(Wd * 0.6, 0.9, L * 0.25, 0, 3.55, -L * 0.15, white); box(Wd * 0.62, 0.32, L * 0.23, 0, 3.6, -L * 0.15, glass);
+      for (const s of [-1, 1]) { box(0.15, 1.2, 0.15, s * Wd * 0.25, 4.5, -L * 0.2, white); box(0.06, 0.06, L * 0.7, s * Wd * 0.47, 2.15, -L * 0.05, '#d9d9d9'); }
+      box(Wd * 0.55, 0.15, 0.3, 0, 5.1, -L * 0.2, white);
+    } else {
+      box(Wd * 0.9, 0.08, L * 0.75, 0, 0.9, -L * 0.1, white);
+      turn(box(Wd * 0.8, 0.45, 0.08, 0, 1.15, L * 0.12, glass), -0.5);
+      for (const z of [-0.05, -0.28]) box(Wd * 0.7, 0.35, 0.5, 0, 1.05, L * z, dark);
+      box(0.5, 0.9, 0.6, 0, 0.7, -L / 2 - 0.1, dark);
+      if (type === 'policeboat') {
+        // a cabin with a light bar on its roof
+        box(Wd * 0.8, 1.1, L * 0.3, 0, 1.45, -L * 0.02, white); box(Wd * 0.82, 0.35, L * 0.31, 0, 1.65, -L * 0.02, glass);
+        bar = [-0.3, 0.3].map((x, i) => { const m = new THREE.Mesh(C.bar, new THREE.MeshBasicMaterial({ color: i ? 0x111155 : 0x551111 })); m.position.set(x, 2.08, -L * 0.02); g.add(m); return m; });
+      }
+    }
+    return { g, mats, bar, rider: null, dentable, glassMats, bumpers: [] };
   }
   if (T.tank) {
     // hull, tracks with road wheels, and a turret that turns to where you aim, with a long gun
@@ -174,7 +214,7 @@ class Car {
     this.type = type; this.T = CAR_TYPES[type];
     this.x = x; this.z = z; this.h = h; this.v = 0; this.vx = 0; this.vz = 0; this.kx = 0; this.kz = 0; this.steerV = 0;
     this.hp = this.maxHp = this.T.hp; this.burning = 0; this.dead = false; this.wreck = false; this.wreckT = 0;
-    this.driver = o.driver || null; this.ai = null; this.police = type === 'police';
+    this.driver = o.driver || null; this.ai = null; this.police = type === 'police' || type === 'policeboat';
     this.parked = !!o.parked; this.persistent = !!o.persistent; this.mission = !!o.mission;
     this.popped = false; this.alarmT = 0; this.siren = false; this.smokeT = 0; this.honkT = 0; this.y = 0; this.yv = 0;
     this.r = this.T.w / 2 + 0.05; this.off = this.T.len / 2 - this.T.w / 2;
@@ -191,6 +231,7 @@ class Car {
   /* how fast this car may go, and how hard it pulls, right here and now: the zone (streets, highway, sand...), city
      taming, off-road boosts, nitro, damage, a flat tyre, fire. Both handling models use it. */
   limits(boost) {
+    if (this.T.boat) { const cond = clamp(this.hp / this.maxHp, 0, 1); return { maxV: this.T.maxV * (boost ? 1.45 : 1) * (cond < 0.5 ? 0.6 + 0.8 * cond : 1) * (this.burning > 0 ? 0.6 : 1), accel: this.T.accel * (boost ? 2 : 1), cond }; }
     const T = this.T;
     let mul = 1;
     if (this.driver === 'player' || (this.police && this.ai && this.ai.mode !== 'patrol')) {
@@ -211,6 +252,7 @@ class Car {
   drive(dt, thr, steer, hb, boost) {
     if (this.phys) { this.phys.input(thr, steer, hb, boost); return; } // realistic handling: the physics body drives
     const T = this.T, { maxV, accel, cond } = this.limits(boost);
+    if (T.boat) { Boats.drive(this, dt, thr, steer, hb, maxV, accel); return; }
     if (this.y <= 0.001) { const sl = W.slopeAlong(this.x, this.z, Math.sin(this.h), Math.cos(this.h)); if (sl) this.v -= sl * ((OFFROAD[this.type] || 0) > 1 ? 5 : 9) * dt; } // 4x4s and dirt bikes pull up hills better
     if (thr > 0) {
       if (this.v < 0) this.v = Math.min(0, this.v + 32 * dt); else if (this.v < maxV) this.v = Math.min(maxV, this.v + accel * thr * dt);
@@ -230,6 +272,7 @@ class Car {
   }
   integrate(dt) {
     if (this.phys) return; // moved by the physics step
+    if (this.T.boat) { Boats.move(this, dt); return; }
     // move in short hops so fast cars and bikes can't skip over thin barriers
     const sp = Math.hypot(this.vx + this.kx, this.vz + this.kz), n = Math.min(12, Math.max(1, Math.ceil(sp * dt / 0.25))), h = dt / n;
     for (let i = 0; i < n; i++) {
@@ -301,7 +344,7 @@ class Car {
     if (this.hp <= 0 && this.burning <= 0) {
       this.hp = 0; this.burning = 6.5;
       if (this.driver === 'player') G.toast('Your car is on fire — get out!', 'warn');
-      if (this.driver === 'ai' && this.ai) { const empty = this.ai.mode === 'roadblock' || this.ai.mode === 'parked'; this.ai.mode = 'dead'; if (!empty) G.ejectDriver(this); this.driver = null; }
+      if (this.driver === 'ai' && this.ai) { const empty = this.ai.mode === 'roadblock' || this.ai.mode === 'parked' || this.T.boat; this.ai.mode = 'dead'; if (!empty) G.ejectDriver(this); this.driver = null; }
     }
   }
   /* push panel vertices in around the impact, crack the glass, maybe knock a bumper off */
@@ -398,6 +441,7 @@ class Car {
       this.bar[1].material.color.set(on && !ph ? 0x2050ff : 0x111155);
     }
     if (this.phys) { this.phys.pose(); if (this.rider) this.rider.visible = this.driver === 'ai'; return; }
+    if (this.T.boat) { Boats.pose(this, dt); return; }
     // airborne (or the ground just rose up to meet a falling car): fall, and land properly either way
     if (this.y > 0 || this.yv !== 0) {
       this.yv -= 22 * dt; this.y += this.yv * dt; this.airT = (this.airT || 0) + dt;

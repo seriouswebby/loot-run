@@ -57,6 +57,73 @@ function runAutotest() {
     car.remove(); G.noSpawn = false;
     return (inLot && out && !car.wreck) || r;
   });
+  // boats: a fresh set at their moorings (the tests that don't ask for boats never see them)
+  const boatsUp = () => {
+    reset(); G.noSpawn = true; Boats.auto = true; if (!Boats.MOORINGS.length) Boats.init();
+    for (const c of G.cars.slice()) if (c.T.boat) c.remove(); for (const m of Boats.MOORINGS) m.car = null;
+    Boats.spawned = false; Boats.t = 0; step(STEP); return Boats.MOORINGS;
+  };
+  const boatsDown = () => { if (P.inCar) G.exitCar(true); for (const c of G.cars.slice()) if (c.T.boat) c.remove(); for (const m of Boats.MOORINGS) m.car = null; Boats.auto = false; Heat.clear(); G.god = false; G.noSpawn = false; for (const k of ['KeyW', 'KeyA', 'KeyD', 'KeyS']) Input.keys[k] = false; };
+  T('boats: jet skis, speedboats and the yacht float at their moorings; you board each from the beach or the pier, and get off there', () => {
+    const bad = [], moor = boatsUp();
+    if (moor.filter((m) => m.type === 'yacht').length !== 1 || !moor.some((m) => m.type === 'jetski') || !moor.some((m) => m.type === 'speedboat')) bad.push('moorings ' + moor.map((m) => m.type).join(','));
+    for (const m of moor) {
+      const c = m.car; if (!c || c.dead) { bad.push(m.type + ': not moored'); continue; }
+      if (!Boats.afloatAt(c, c.x, c.z, c.h)) { bad.push(m.type + ' at ' + c.x.toFixed(1) + ',' + c.z.toFixed(1) + ': not afloat'); continue; }
+      const spot = Boats.landing(c); if (!spot) { bad.push(m.type + ': no land within reach of it'); continue; }
+      tp(spot.x, spot.z); G.interact = computeInteract(); const f = G.interact.f;
+      if (!f || !/Get on|Board/.test(f.label)) { bad.push(m.type + ': prompt "' + (f && f.label) + '" standing at ' + spot.x.toFixed(1) + ',' + spot.z.toFixed(1)); continue; }
+      f.run(); if (P.inCar !== c) { bad.push(m.type + ': did not board'); continue; }
+      step(STEP); G.exitCar(); if (P.inCar) bad.push(m.type + ': could not get off at its mooring'); else if (W.waterAt(P.x, P.z)) bad.push(m.type + ': got off into the water');
+    }
+    // a rocket sinks the yacht
+    const y = moor.find((m) => m.type === 'yacht').car; if (y && !y.dead) { tp(-3, y.z); G.god = true; Ordnance.fireRocket(P, Math.atan2(y.x - P.x, y.z - P.z), null); steps(1); if (!y.wreck) bad.push('the yacht took a rocket: hp ' + Math.round(y.hp)); else { steps(10); if (!y.dead && !(y.sinkY > 2)) bad.push('the wrecked yacht did not sink'); } }
+    boatsDown();
+    return !bad.length || bad.join(' | ');
+  });
+  T("boats: full throttle stays on the water (the beach and the pier stop it); out at sea you can't get off; wrecked, you wash up on the beach", () => {
+    const bad = [], moor = boatsUp(), S = W.SHORE;
+    const ride = (m, h, keys, sec, at) => {
+      const c = m.car; const spot = Boats.landing(c); tp(spot.x, spot.z); G.enterCar(c); if (at) { c.x = at[0]; c.z = at[1]; } c.h = h; c.sea = null; step(STEP);
+      for (const k of keys) Input.keys[k] = true; let worst = '';
+      for (let i = 0; i < sec * 60; i++) { step(STEP); if (!worst && (!Boats.afloatAt(c, c.x, c.z, c.h) || c.z < S)) worst = 'aground at ' + c.x.toFixed(1) + ',' + c.z.toFixed(1) + ' after ' + (i / 60).toFixed(1) + ' s'; }
+      for (const k of keys) Input.keys[k] = false; return worst;
+    };
+    // a jet ski flat out at the beach; a speedboat swinging round into the pier
+    const w1 = ride(moor.find((m) => m.type === 'jetski'), Math.PI, ['KeyW'], 3); if (w1) bad.push('jet ski ' + w1);
+    G.exitCar(true);
+    const sb = moor.find((m) => m.type === 'speedboat'), w2 = ride(sb, Math.PI, ['KeyW', 'KeyA'], 5, [14, S + 16]); if (w2) bad.push('speedboat ' + w2); // (heading for the beach and turning into the pier)
+    // out at sea there's nowhere to step off
+    const c = sb.car; c.x = 60; c.z = S + 90; c.h = 0; c.v = c.vx = c.vz = 0; c.sea = null; step(STEP);
+    G.interact = computeInteract(); const swim = G.interact.e && G.interact.e.disabled;
+    G.exitCar(); if (P.inCar !== c) bad.push('got off out at sea (at ' + P.x.toFixed(0) + ',' + P.z.toFixed(0) + ')'); else if (!/swim/.test(swim || '')) bad.push('no hint about swimming: ' + swim);
+    // wrecked out there: you're thrown clear, ashore, and it sinks
+    G.god = true; c.damage(9999, c.x, c.z, null); steps(9);
+    if (P.inCar) bad.push('still aboard the wreck'); else if (P.z >= S || W.waterAt(P.x, P.z) || !inRect(P.x, P.z, W.LAND)) bad.push('washed up at ' + P.x.toFixed(1) + ',' + P.z.toFixed(1) + ' (shore ' + S + ')');
+    steps(6); if (!c.dead) bad.push('the wreck is still afloat (sunk ' + (c.sinkY || 0).toFixed(1) + ' m)');
+    boatsDown();
+    return !bad.length || bad.join(' | ');
+  });
+  T('police boats: at 3 stars out on the water they come after you (not at 2, not on foot), and they go when the heat does', () => {
+    const bad = [], moor = boatsUp(), S = W.SHORE, cops = () => G.cars.filter((c) => c.T.boat && c.police && !c.dead && !c.wreck);
+    const sb = moor.find((m) => m.type === 'speedboat').car, spot = Boats.landing(sb); tp(spot.x, spot.z); G.enterCar(sb); sb.x = 40; sb.z = S + 70; sb.h = 0; sb.sea = null; G.god = true;
+    const hold = (sec, fn) => { for (let i = 0; i < sec * 60; i++) { step(STEP); if (Heat.level) Heat.spotted(); if (fn) fn(i); } };
+    Heat.add(2, 5, 'test'); hold(5); if (cops().length) bad.push(cops().length + ' police boats at 2 stars');
+    Heat.add(1, 5, 'test'); hold(4); const n = cops().length; if (Heat.level < 3) bad.push('heat ' + Heat.level);
+    if (!n) bad.push('no police boats at 3 stars');
+    else {
+      const d0 = Math.min(...cops().map((c) => dist(c.x, c.z, sb.x, sb.z))); let best = d0; hold(10, () => { for (const c of cops()) best = Math.min(best, dist(c.x, c.z, sb.x, sb.z)); });
+      if (best > 30) bad.push('closest a police boat got: ' + best.toFixed(0) + ' m (from ' + d0.toFixed(0) + ' m)');
+      if (cops().some((c) => !Boats.afloatAt(c, c.x, c.z, c.h))) bad.push('a police boat ran aground');
+    }
+    // ashore at 3 stars: no more come, and with the heat gone they head off and go
+    sb.x = 5.9; sb.z = S + 13.5; sb.h = 0; sb.v = sb.vx = sb.vz = 0; sb.sea = null; for (const c of cops()) { c.x = 60 + Math.random() * 20; c.z = S + 60; c.sea = null; } step(STEP);
+    G.exitCar(); const before = cops().length; hold(6); if (cops().length > before) bad.push('police boats kept coming with you on foot');
+    Heat.clear(); hold(25); if (cops().length) bad.push(cops().length + ' police boats still about with no heat');
+    if (G.npcs.some((p) => !p.dead && W.waterAt(p.x, p.z))) bad.push('someone was left in the water');
+    boatsDown();
+    return !bad.length || bad.join(' | ');
+  });
   T('player cannot walk through a building', () => {
     reset(); const b = W.blocks.find((k) => k.type === 'city');
     tp(b.cx - 7.5, b.cz - 18); G.inputOverride = { mx: 0, mz: 1 }; steps(3); G.inputOverride = null;

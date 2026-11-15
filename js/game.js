@@ -406,9 +406,10 @@ G.enterCar = function (car) {
     if (car.police) G.crime('copCar', car.x, car.z, {});
   }
   car.locked = false; car.driver = 'player'; car.ai = null; car.parked = false; car.siren = false;
-  P.inCar = car; P.rig.root.visible = !!car.T.bike; P.vx = P.vz = 0;
+  P.inCar = car; P.rig.root.visible = openRide(car); P.vx = P.vz = 0;
   PhysCar.attach(car); // realistic handling when the physics engine is running (bikes stay arcade)
-  if (car.T.bike && !G.autotest) G.toast(car.T.pedal ? 'Pedal hard! Bikes are quiet but slow.' : car.T.dirt ? 'Dirt bike: made for grass, dirt and sand. SPACE to hop.' : 'Motorbike: fastest thing on two wheels on the road. Crash hard and you fly off.');
+  if (car.T.boat && !G.autotest) G.toast(car.T.ski ? 'Jet ski: W/S throttle, A/D steer. Bring it to the beach or the pier to get off.' : car.T.len > 10 ? 'The yacht is yours. Slow to turn, slower to stop. Bring it alongside the pier to get off.' : 'Speedboat: W/S throttle, A/D steer, SHIFT nitro. Bring it alongside the pier or the beach to get off.', 'good');
+  else if (car.T.bike && !G.autotest) G.toast(car.T.pedal ? 'Pedal hard! Bikes are quiet but slow.' : car.T.dirt ? 'Dirt bike: made for grass, dirt and sand. SPACE to hop.' : 'Motorbike: fastest thing on two wheels on the road. Crash hard and you fly off.');
   if (msg) G.toast(msg);
   Story.event('steal', car);
   return true;
@@ -417,18 +418,25 @@ G.exitCar = function (force) {
   const P = G.player, car = P.inCar; if (!car) return;
   // the car stays a physics body while it's near (PhysCar.keep decides)
   const fx = Math.sin(car.h), fz = Math.cos(car.h), off = car.T.w / 2 + 0.75;
-  let placed = false;
-  for (const s of [-1, 1]) {
-    const p = { x: car.x + fz * s * off, z: car.z - fx * s * off };
-    const ox = p.x, oz = p.z; W.collideCircle(p, P.r);
-    if (dist(ox, oz, p.x, p.z) < 0.3) { P.x = p.x; P.z = p.z; placed = true; break; }
+  if (car.T.boat) {
+    const spot = Boats.landing(car);
+    if (!spot && !force) { G.toast("You can't swim! Bring it alongside the pier or up to the beach to get off.", 'warn'); Sfx.error(); return false; }
+    const s = spot || { x: car.x, z: Math.min(car.z, W.SHORE - 2) }; P.x = s.x; P.z = s.z; W.collideCircle(P, P.r);
+  } else {
+    let placed = false;
+    for (const s of [-1, 1]) {
+      const p = { x: car.x + fz * s * off, z: car.z - fx * s * off };
+      const ox = p.x, oz = p.z; W.collideCircle(p, P.r);
+      if (dist(ox, oz, p.x, p.z) < 0.3) { P.x = p.x; P.z = p.z; placed = true; break; }
+    }
+    if (!placed) { P.x = car.x - fx * (car.T.len / 2 + 0.8); P.z = car.z - fz * (car.T.len / 2 + 0.8); W.collideCircle(P, P.r); }
   }
-  if (!placed) { P.x = car.x - fx * (car.T.len / 2 + 0.8); P.z = car.z - fz * (car.T.len / 2 + 0.8); W.collideCircle(P, P.r); }
   car.driver = null; car.parked = true; car.locked = false;
   if (car.T.pedal) car.leftT = 120;
   P.y = 0; P.yv = 0; P.spin = 0; P.kx = P.kz = 0; P.vault = null; P.chute = false; P.jumping = false; P.top = null;
   P.inCar = null; P.rig.root.visible = true; P.facing = car.h; P.resetPose();
   if (!force) Sfx.click();
+  return true;
 };
 G.sellCar = function () {
   const car = G.player.inCar; if (!car) return false;
@@ -555,7 +563,7 @@ G.missionCarLost = function (car) { if (Story.active && Story.active.car === car
 G.hurtPlayer = function (dmg, fx, fz, knock, src) {
   const P = G.player;
   if (P.down || G.respawning || G.god) return false;
-  if (P.inCar && !P.inCar.T.bike) { P.inCar.damage(dmg * 0.6, fx, fz); return false; }
+  if (P.inCar && !openRide(P.inCar)) { P.inCar.damage(dmg * 0.6, fx, fz); return false; }
   if (P.inHeli) { P.inHeli.damage(dmg * 0.6, null); return false; }
   let d = dmg;
   G.hurtLog = (G.hurtLog || []).slice(-5); G.hurtLog.push((src && src.kind ? src.kind : src === null ? 'world' : String(src)) + ':' + Math.round(dmg) + '@' + G.time.toFixed(1));

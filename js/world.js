@@ -940,14 +940,15 @@ function buildOutskirts() {
   W.addCollider(53, SH, O + 60, SH + 160, 1, 'water', true);
   W.addCollider(-4, SH + 23, 4, SH + 160, 1, 'water', true);
   W.addCollider(37, SH + 12, 53, SH + 160, 1, 'water', true);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(2 * O + 400, 200), new THREE.MeshLambertMaterial({ color: 0x2f7ea3 }));
-  water.rotation.x = -Math.PI / 2; water.position.set(0, -0.15, SH + 100); S.add(water);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(2 * O + 1200, 1400), new THREE.MeshLambertMaterial({ color: 0x2f7ea3 }));
+  water.rotation.x = -Math.PI / 2; water.position.set(0, -0.15, SH + 700); S.add(water);
   W.water = water; W.markWater(water.material);
   GB.white.rect(-O, SH + 0.5, O, SH + 1.6, 0.025, 4);
   // Pier 9 and the getaway boat
   for (let z = SH - 1; z < SH + 23; z += 1.2) P.box(0, 0.25, z + 0.6, 8, 0.25, 1.1, '#8b6a45');
   for (const x of [-3.8, 3.8]) for (let z = SH; z < SH + 23; z += 5) P.box(x, 0.2, z, 0.5, 1.4, 0.5, '#5b4630');
   P.box(0, 0.6, SH + 29.5, 4.4, 1.2, 10, '#f1f1ee'); P.box(0, 1.6, SH + 30.5, 3, 1.2, 4, '#1d3557'); P.box(0, 0.4, SH + 29.5, 4.6, 0.25, 10.2, '#c8282d');
+  W.addCollider(-2.3, SH + 24.4, 2.3, SH + 34.6, 2.2, 'boat', true);
   addSign(0, 1.2, SH + 23.7, 'n', 'PIER 9', '#1d3557', '#ffffff', 3.4, 0.9);
   W.places.pier = { id: 'pier', name: 'Pier 9', x: 0, z: SH + 19 };
   // helicopter dock on the beach: a wooden deck out over the water
