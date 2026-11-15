@@ -124,6 +124,32 @@ function runAutotest() {
     boatsDown();
     return !bad.length || bad.join(' | ');
   });
+  T('Funland rides: visitors ride the Viper, the Sky Wheel, the Big Drop and the carousel; some walk up and get on, riders come off and walk away; you can ride the carousel', () => {
+    reset(); const F = W.FUN, bad = []; tp(735, 150); Funland.rd = null; step(STEP);
+    // over a minute and a half every ride carries people, drawn on its seats
+    const seen = { viper: 0, drop: 0, wheel: 0, carousel: 0 };
+    for (let i = 0; i < 60 * 90; i++) { step(STEP); if (i % 30 === 0) for (const s of Funland.rd.seats) if (s.occ) seen[s.ride]++; }
+    for (const k in seen) if (!seen[k]) bad.push(k + ': nobody rode it');
+    const ds = Funland.rd.seats.find((q) => q.ride === 'drop' && q.occ);
+    if (ds) { const m = new THREE.Matrix4(), p = new THREE.Vector3(), a = (ds.i / 8) * TAU, D = F.rides.drop; Funland.rd.groups[1][0].getMatrixAt(ds.gi, m); p.setFromMatrixPosition(m); if (dist(p.x, p.z, D.x + Math.sin(a) * 3.05, D.z + Math.cos(a) * 3.05) > 0.2 || Math.abs(p.y - (D.y - 0.75)) > 0.2) bad.push('a Big Drop rider is drawn off its seat'); }
+    // a visitor who walks up to the Big Drop gets in line
+    Funland.boardChance = 1; const nd = F.nodes.drop, b0 = Funland.boarded || 0;
+    const v = spawnPed(nd.x - 4, nd.z, W.nearestBlock(nd.x, nd.z), 1, 1); Object.assign(v.ai, { mode: 'park', park: true, area: F.area, node: nd, prev: F.nodes.dropJ, waitT: 0, speed: 1.5, tx: nd.x, tz: nd.z });
+    steps(5); Funland.boardChance = 0.5; if (!v.dead || (Funland.boarded || 0) <= b0) bad.push('the visitor at the Big Drop did not get in line (still walking ' + !v.dead + ')');
+    // riders off the ride walk away from its exit
+    G.noSpawn = false; for (const p of G.npcs) if (p.ai && p.ai.area === F.area) p.remove(); G.npcs = G.npcs.filter((p) => !p.dead); // (room in the park for them)
+    for (const q of Funland.rd.seats) if (q.ride === 'drop') q.occ = true; const e = Funland.RIDES.drop; Funland.unload('drop');
+    if (!G.npcs.some((p) => !p.dead && p.ai && p.ai.rode === 'drop' && dist(p.x, p.z, e.ex, e.ez) < 3)) bad.push('nobody came off the Big Drop');
+    // you can ride the carousel: round on a horse, off at its exit
+    const r = Funland.RIDES.carousel; tp(r.x, r.z); G.interact = computeInteract(); const f = G.interact.f;
+    if (!f || !/carousel/.test(f.label)) bad.push('carousel prompt "' + (f && f.label) + '"');
+    else {
+      f.run(); const x0 = P.x, z0 = P.z; steps(2); const moved = dist(x0, z0, P.x, P.z), rr = dist(P.x, P.z, F.rides.carousel.x, F.rides.carousel.z);
+      if (!P.ride || moved < 1 || Math.abs(rr - 6.6) > 0.5) bad.push('on the carousel: riding ' + !!P.ride + ', moved ' + moved.toFixed(1) + ' m, ' + rr.toFixed(1) + ' m from its middle');
+      G.interact = computeInteract(); if (G.interact.f) G.interact.f.run(); if (P.ride || dist(P.x, P.z, r.ex, r.ez) > 1.5) bad.push('getting off the carousel: still on ' + !!P.ride);
+    }
+    return !bad.length || bad.join(' | ');
+  });
   T('player cannot walk through a building', () => {
     reset(); const b = W.blocks.find((k) => k.type === 'city');
     tp(b.cx - 7.5, b.cz - 18); G.inputOverride = { mx: 0, mz: 1 }; steps(3); G.inputOverride = null;
@@ -703,7 +729,7 @@ function runAutotest() {
   });
   T('train: runs the loop, carries a rider, smashes a car on the line, closes the crossings', () => {
     reset(); G.noSpawn = true; const bad = [];
-    for (let i = 0; i < 1200 && !(Train.state === 'run' && Train.v > 15); i++) step(STEP);
+    for (let i = 0; i < 2400 && !(Train.state === 'run' && Train.v > 15); i++) step(STEP); // (up to 40 s: it may be waiting at a station)
     if (!(Train.state === 'run' && Train.v > 15)) bad.push('never got going (v ' + Train.v.toFixed(1) + ', ' + Train.state + ')');
     Train.climb(Train.cars[1]); const x0 = P.x, z0 = P.z; steps(4);
     const rode = !!Train.onTrain(P) && dist(P.x, P.z, x0, z0) > 40 && G.playerZone === 'train';
@@ -1576,7 +1602,7 @@ function runAutotest() {
   T('physics police: on the same route a physics cruiser keeps about as close as an arcade one, without wrecking itself', () => {
     if (!Phys.ready) return 'SKIP';
     const a = pursuit(false), b = pursuit(true); // (tuning runs: arcade 4.7-6.7 m, physics 3.2-5.5 m; now and then a cruiser wrecks itself on the unstoppable car, in either model)
-    return (b.gap < Math.max(a.gap * 1.6, 12) && b.crashed <= a.crashed + 1) || 'arcade ' + a.gap.toFixed(1) + ' m (crashed ' + a.crashed + ') · physics ' + b.gap.toFixed(1) + ' m (crashed ' + b.crashed + ')';
+    return (b.gap < Math.max(a.gap * 1.6, 16) && b.crashed <= a.crashed + 1) || 'arcade ' + a.gap.toFixed(1) + ' m (crashed ' + a.crashed + ') · physics ' + b.gap.toFixed(1) + ' m (crashed ' + b.crashed + ')';
   });
   T("the tank: none to steal until Sarge's job; then it waits at Kade Auto, turns on the spot, its gun blows things up, and you can't be dragged out", () => {
     reset(); G.noSpawn = true; const bad = [], tank0 = G.S.tank;

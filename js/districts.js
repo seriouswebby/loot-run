@@ -141,7 +141,7 @@ function buildFunland(trees) {
   const top = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 6), lam(0xffd60a)); top.position.set(CX, 10.4, CZ); S.add(top);
   const cc = W.addCircle(CX, CZ, 9.8, 'fountain'); cc.h = 7; cc.noLos = true;
   addSign(CX + 9.9, 2.6, CZ - 5, 'e', 'CAROUSEL', '#ffd60a', '#7209b7', 6, 1.1);
-  R.carousel = { mesh: car, canopy };
+  R.carousel = { mesh: car, canopy, x: CX, z: CZ };
 
   // ---- the Sky Wheel: 16 gondolas on a 19 m wheel that turns slowly over the park ----
   const WX = 808, WY = 24, WZ = 140, WR = 19;
@@ -300,12 +300,14 @@ const Funland = {
     D.vy = (y - D.y) / Math.max(dt, 1e-4); D.y = y; D.mesh.position.y = y; D.loading = t <= 6 || t > 30;
     this.coaster(dt);
     this.carry();
+    this.riders(dt);
   },
   /* ---- riding: walk up to a ride's boarding spot, F to get on, F to get off (or jump off mid-ride) ---- */
   RIDES: {
     viper: { name: 'the Viper', x: 718.5, z: 248, r: 3.4, ex: 719.5, ez: 251 },
     wheel: { name: 'the Sky Wheel', x: 802, z: 140, r: 4, ex: 800.5, ez: 140 },
     drop: { name: 'the Big Drop', x: 808.5, z: 290, r: 3.5, ex: 807.5, ez: 290 },
+    carousel: { name: 'the carousel', x: 695.5, z: 140, r: 2.8, ex: 697, ez: 141.5 },
   },
   ready(kind) {
     const R = W.FUN.rides;
@@ -326,6 +328,7 @@ const Funland = {
     const P = G.player, R = W.FUN.rides; if (P.inCar || P.inHeli || P.ride || !this.ready(kind)) return false;
     let seat = 0;
     if (kind === 'wheel') { let lo = 1e9; for (let i = 0; i < R.wheel.n; i++) { const y = this.gondola(i).y; if (y < lo) { lo = y; seat = i; } } }
+    if (kind === 'carousel') { let bd = 1e9; for (let i = 1; i < 12; i += 2) { const h = this.horse(i), d = dist(P.x, P.z, h.x, h.z); if (d < bd) { bd = d; seat = i; } } } // (an outside horse, the nearest)
     if (kind === 'drop') { let best = -2; for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU, d = (Math.sin(a) * (P.x - R.drop.x) + Math.cos(a) * (P.z - R.drop.z)); if (d > best) { best = d; seat = i; } } }
     if (kind === 'viper') R.coaster.dwell = Math.max(R.coaster.dwell, 2);
     P.ride = { kind, seat }; P.vx = P.vz = P.kx = P.kz = 0; P.yv = 0; P.jumping = false; P.chute = false; P.vault = null; P.top = null; P.tumble = null;
@@ -340,6 +343,7 @@ const Funland = {
       const c = R.coaster, p = c.pos, sp = Math.hypot(p.vx, p.vy, p.vz) || 1;
       return { x: p.x, y: Math.max(0, p.y - 0.05), z: p.z, facing: p.yaw, pitch: -Math.asin(clamp(p.vy / sp, -1, 1)) * (c.v > 0.1 ? 1 : 0), vx: p.vx, vy: p.vy, vz: p.vz, rest: c.state === 'load', pose: c.v > 9 ? 'scream' : 'sit' };
     }
+    if (r.kind === 'carousel') { const h = this.horse(r.seat); return { x: h.x, y: h.y - 0.85, z: h.z, facing: h.yaw, pitch: 0, vx: 0, vy: 0, vz: 0, rest: true, pose: 'sit' }; }
     if (r.kind === 'wheel') { const g = this.gondola(r.seat); return { x: g.x, y: g.y - 0.55, z: g.z, facing: -Math.PI / 2, pitch: 0, vx: 0, vy: 0, vz: 0, rest: g.y < 4, pose: 'stand' }; }
     const D = R.drop, a = (r.seat / 8) * TAU;
     return { x: D.x + Math.sin(a) * 3, y: Math.max(0, D.y - 1.65), z: D.z + Math.cos(a) * 3, facing: a, pitch: 0, vx: 0, vy: D.vy, vz: 0, rest: D.loading, pose: D.vy < -4 ? 'scream' : 'sit' };
@@ -357,6 +361,82 @@ const Funland = {
     // off mid-ride: you carry the ride's speed and fall (the parachute works if you have one)
     P.x = s.x; P.z = s.z; P.y = s.y; P.kx = s.vx; P.kz = s.vz; P.yv = s.vy + (knocked ? 0 : 2.5); P.top = P.y; P.jumping = !knocked;
     if (!knocked) { Sfx.jump(P.x, P.z); if (P.y > 8) G.toast(G.S.parachute > 0 ? 'You jumped! Press SPACE to open your parachute.' : "You jumped — and you've no parachute!", 'warn'); }
+  },
+  /* a carousel horse: where its saddle is (a rider's hips), and which way its head points, as the carousel turns */
+  horse(i) {
+    const C = W.FUN.rides.carousel, th = C.mesh.rotation.y, a = (i / 12) * TAU, rr = i % 2 ? 6.6 : 4.4, lx = Math.cos(a) * rr, lz = Math.sin(a) * rr;
+    return { x: C.x + lx * Math.cos(th) + lz * Math.sin(th), y: (i % 2 ? 1.6 : 1.9) + 0.6 + 0.35, z: C.z - lx * Math.sin(th) + lz * Math.cos(th), yaw: th - a };
+  },
+  /* ---- the visitors on the rides: they queue at a ride's entrance (some of those strolling the paths get in line),
+     get on at the next load, and come off at the end of the ride and walk away. Empty seats fill now and then too, so
+     the rides are busy even when nobody has walked up. Drawn as seated figures: the shirt and the face tinted per rider. */
+  RIDE_SEATS: { viper: 6, drop: 8, wheel: 32, carousel: 12 },
+  boardChance: 0.5, queue: { viper: 0, drop: 0, wheel: 0, carousel: 0 },
+  canQueue(k) { return this.RIDE_SEATS[k] != null && this.queue[k] < this.RIDE_SEATS[k]; },
+  ridersInit() {
+    const fig = (up) => {
+      const shirt = new PropBatch(), skin = new PropBatch(), dark = new PropBatch();
+      shirt.box(0, 0.3, -0.02, 0.42, 0.55, 0.26, '#ffffff');
+      for (const s of [-1, 1]) { if (up) { shirt.box(s * 0.26, 0.8, 0, 0.12, 0.5, 0.14, '#ffffff'); skin.box(s * 0.26, 1.08, 0, 0.11, 0.11, 0.11, '#ffffff'); } else { shirt.box(s * 0.27, 0.22, 0.12, 0.12, 0.14, 0.42, '#ffffff'); skin.box(s * 0.27, 0.22, 0.36, 0.1, 0.1, 0.1, '#ffffff'); } }
+      skin.box(0, 0.72, 0, 0.28, 0.28, 0.28, '#ffffff');
+      dark.box(0, 0.89, -0.02, 0.3, 0.08, 0.31, '#3b2a20'); dark.box(0, -0.02, 0.2, 0.36, 0.16, 0.44, '#2b2d42');
+      for (const s of [-1, 1]) dark.box(s * 0.1, -0.3, 0.42, 0.14, 0.46, 0.14, '#2b2d42');
+      return [shirt, skin, dark].map((b) => { const m = b.build(S); S.remove(m); return m; });
+    };
+    const seats = [], groups = [[], []], counts = [0, 0];
+    for (const [ride, n, up] of [['viper', 6, 1], ['drop', 8, 1], ['wheel', 32, 0], ['carousel', 12, 0]]) for (let i = 0; i < n; i++) seats.push({ ride, i, up, gi: counts[up]++, occ: false });
+    for (const up of [0, 1]) groups[up] = fig(up).map((m) => { const im = new THREE.InstancedMesh(m.geometry, m.material, counts[up]); im.castShadow = true; im.frustumCulled = false; S.add(im); return im; });
+    const c = new THREE.Color();
+    for (const s of seats) { groups[s.up][0].setColorAt(s.gi, c.set(pick(LOOKS.shirt))); groups[s.up][1].setColorAt(s.gi, c.set(pick(LOOKS.skin))); }
+    this.rd = { seats, groups, o: new THREE.Object3D(), m: new THREE.Matrix4(), zero: new THREE.Matrix4().makeScale(0, 0, 0), loc: [-1, 1].map((sd) => new THREE.Matrix4().makeTranslation(sd * 0.38, 0.6, -0.15)), wLow: [], cT: 4, vState: null, dLoad: null };
+    this.rd.o.rotation.order = 'YXZ';
+    for (const s of seats) s.occ = chance(0.4); // (a busy park from the start)
+  },
+  playerSeat(s) {
+    const r = G.player.ride; if (!r || r.kind !== s.ride) return false;
+    return s.ride === 'viper' ? s.i === 0 : s.ride === 'wheel' ? Math.floor(s.i / 2) === r.seat : s.i === r.seat;
+  },
+  seatsOf(ride, idx) { return this.rd.seats.filter((s) => s.ride === ride && (!idx || idx.includes(s.i)) && !this.playerSeat(s)); },
+  unload(ride, idx) { for (const s of this.seatsOf(ride, idx)) if (s.occ) { s.occ = false; this.visitorOff(ride); } },
+  load(ride, extra, idx) {
+    const c = new THREE.Color(), G2 = this.rd.groups;
+    for (const s of this.seatsOf(ride, idx)) {
+      if (s.occ) continue;
+      if (this.queue[ride] > 0) { this.queue[ride]--; s.occ = true; } else s.occ = chance(extra);
+      if (s.occ) { G2[s.up][0].setColorAt(s.gi, c.set(pick(LOOKS.shirt))); G2[s.up][1].setColorAt(s.gi, c.set(pick(LOOKS.skin))); for (const m of G2[s.up]) if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+    }
+  },
+  /* off the ride: a visitor walks away from its exit (if you're about to see it, and the park isn't packed) */
+  visitorOff(ride) {
+    const A = W.FUN.area, t = G.body(), e = this.RIDES[ride]; if (!A || !e || G.noSpawn || dist(t.x, t.z, A.cx, A.cz) > A.R + 280) return;
+    let n = 0; for (const p of G.npcs) if (!p.dead && p.ai && p.ai.area === A) n++; if (n >= A.cap + 8) return;
+    const nd = W.FUN.nodes[ride], p = spawnPed(e.ex + rand(-0.8, 0.8), e.ez + rand(-0.8, 0.8), W.nearestBlock(e.ex, e.ez), 1, 1);
+    Object.assign(p.ai, { mode: 'park', park: true, area: A, node: nd, prev: null, waitT: rand(0, 1.5), speed: rand(1.1, 1.6), tx: nd.x, tz: nd.z, rode: ride });
+  },
+  riders(dt) {
+    if (!this.rd) this.ridersInit();
+    const R = W.FUN.rides, rd = this.rd, c = R.coaster;
+    // the Viper: everyone off when it pulls in, the next lot on as it leaves
+    if (rd.vState !== c.state) { if (rd.vState) { if (c.state === 'load') this.unload('viper'); else this.load('viper', 0.5); } rd.vState = c.state; }
+    // the Big Drop: off as it settles at the bottom, on before it climbs
+    const t = G.time % R.drop.cycle, loading = t < 5.2 || t > 30.5;
+    if (rd.dLoad !== loading) { if (rd.dLoad != null) { if (loading) this.unload('drop'); else this.load('drop', 0.55); } rd.dLoad = loading; }
+    // the Sky Wheel: each gondola as it comes round to the bottom
+    for (let g = 0; g < R.wheel.n; g++) { const low = this.gondola(g).y < 3.5; if (low && rd.wLow[g] === false) { this.unload('wheel', [2 * g, 2 * g + 1]); this.load('wheel', 0.35, [2 * g, 2 * g + 1]); } rd.wLow[g] = low; }
+    // the carousel: a few hop on and off now and then
+    rd.cT -= dt; if (rd.cT <= 0) { rd.cT = 18; const idx = []; for (let i = 0; i < 12; i++) if (chance(0.35)) idx.push(i); this.unload('carousel', idx); this.load('carousel', 0.45, idx); }
+    // place them
+    const o = rd.o, D = R.drop;
+    for (const s of rd.seats) {
+      const ms = rd.groups[s.up];
+      if (!s.occ || this.playerSeat(s)) { for (const m of ms) m.setMatrixAt(s.gi, rd.zero); continue; }
+      if (s.ride === 'viper') { if (!c.mats) { for (const m of ms) m.setMatrixAt(s.gi, rd.zero); continue; } rd.m.copy(c.mats[s.i >> 1]).multiply(rd.loc[s.i & 1]); for (const m of ms) m.setMatrixAt(s.gi, rd.m); continue; }
+      if (s.ride === 'drop') { const a = (s.i / 8) * TAU; o.position.set(D.x + Math.sin(a) * 3.05, D.y - 0.75, D.z + Math.cos(a) * 3.05); o.rotation.set(0, a, 0); }
+      else if (s.ride === 'wheel') { const g = this.gondola(s.i >> 1), sd = s.i & 1 ? 1 : -1; o.position.set(g.x, g.y - 0.1, g.z + sd * 0.35); o.rotation.set(0, sd > 0 ? Math.PI : 0, 0); }
+      else { const h = this.horse(s.i); o.position.set(h.x, h.y, h.z); o.rotation.set(0, h.yaw, 0); }
+      o.updateMatrix(); for (const m of ms) m.setMatrixAt(s.gi, o.matrix);
+    }
+    for (const g of rd.groups) for (const m of g) m.instanceMatrix.needsUpdate = true;
   },
   gondola(i) { const w = W.FUN.rides.wheel, a = w.ang + (i / w.n) * TAU; return { x: w.x, y: w.y - w.r * Math.cos(a) - 2.1, z: w.z - w.r * Math.sin(a) }; },
   coaster(dt) {
@@ -377,6 +457,7 @@ const Funland = {
     for (let k = 0; k < 3; k++) {
       const s = c.s - k * c.gap, p = this.vAt(s), q = this.vAt(s + 0.6), b = this.vAt(s - 0.6), tx = q.x - b.x, ty = q.y - b.y, tz = q.z - b.z, l = Math.hypot(tx, ty, tz) || 1;
       d.position.set(p.x, p.y, p.z); d.rotation.set(-Math.asin(ty / l), Math.atan2(tx, tz), 0); d.updateMatrix(); c.cars.setMatrixAt(k, d.matrix);
+      (c.mats = c.mats || [new THREE.Matrix4(), new THREE.Matrix4(), new THREE.Matrix4()])[k].copy(d.matrix);
       if (k === 0) { c.head.position.copy(d.position); c.head.rotation.copy(d.rotation); c.pos = { x: p.x, y: p.y, z: p.z, yaw: Math.atan2(tx, tz), vx: tx / l * c.v, vy: ty / l * c.v, vz: tz / l * c.v }; }
     }
     c.cars.instanceMatrix.needsUpdate = true;
@@ -407,6 +488,8 @@ const Strollers = {
   keep(p, t) { const A = p.ai.area; return !!A && dist(t.x, t.z, A.cx, A.cz) < A.R + 320; },
   nextTarget(p) {
     const a = p.ai, at = a.node; if (!at) return this.resume(p);
+    if (a.area && a.area === W.FUN.area && at.k !== a.rode && Funland.canQueue(at.k) && chance(Funland.boardChance)) { Funland.queue[at.k]++; Funland.boarded = (Funland.boarded || 0) + 1; p.remove(); return; } // (in the queue: on at the next load)
+    if (at.k !== a.rode) a.rode = null;
     const opts = at.links.length > 1 ? at.links.filter((l) => l !== a.prev) : at.links, nb = pick(opts);
     a.prev = at; a.node = nb;
     const horiz = Math.abs(nb.z - at.z) < 1, j = rand(-1, 1) * Math.min(nb.w || 1.6, at.w || 1.6);

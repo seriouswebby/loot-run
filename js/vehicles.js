@@ -620,7 +620,7 @@ function rocketKills(x, z, src, hit) {
 /* ---------------- AI driving ---------------- */
 // how fast a physics car can take a turn of this many radians inside a junction: a right angle at about 11 m/s
 // (what real tyres hold within the crossing), turning right round at about 6
-const turnSpeed = (turn) => turn <= 1.57 ? 11 + 26 * (1 - turn / 1.57) : Math.max(6, 11 - 5 * (turn - 1.57) / 1.57);
+const turnSpeed = (turn) => (turn <= 1.57 ? 11 + 26 * (1 - turn / 1.57) : Math.max(6, 11 - 5 * (turn - 1.57) / 1.57)) * Math.sqrt(Weather.grip()); // (slower in the wet, the snow, a storm)
 function steerTo(car, tx, tz, want, dt) {
   const desired = Math.atan2(tx - car.x, tz - car.z);
   const d = angDiff(car.h, desired);
@@ -628,7 +628,7 @@ function steerTo(car, tx, tz, want, dt) {
   let steer = clamp(-d * 2.6, -1, 1);
   let thr = 0;
   if (Math.abs(d) > 0.6) want = Math.min(want, 8);
-  if (car.phys && Math.abs(d) > 0.3) want = Math.min(want, Math.abs(d) > 1.8 ? 6 : 9 + 23 * Math.max(0, 1 - (Math.abs(d) - 0.3) / 0.6)); // tyres, not rails (and turning right round, slowly)
+  if (car.phys && Math.abs(d) > 0.3) want = Math.min(want, (Math.abs(d) > 1.8 ? 6 : 9 + 23 * Math.max(0, 1 - (Math.abs(d) - 0.3) / 0.6)) * Math.sqrt(Weather.grip())); // tyres, not rails (turning right round slowly, and slower on a slippery road)
   if (car.phys) thr = clamp((want - car.v) / 3, -1, 1); // a physics car gets smooth pedals
   else if (car.v < want - 0.8) thr = 1; else if (car.v > want + 1.5) thr = -1;
   if (want <= 0.1 && car.v < 0.6) { thr = 0; if (!car.phys) car.v = Math.max(0, car.v); }
@@ -696,7 +696,7 @@ function aiTraffic(car, dt) {
   let want = a.flee ? Math.min(car.T.maxV * 0.85, a.limit * 1.8) : a.limit;
   if (a.peek != null && a.stage !== 'exit' && dT < 26) { // slow for the turn: the sharper, the slower
     const A = W.nodes[a.from], B = W.nodes[a.to], C = W.nodes[a.peek], turn = Math.abs(angDiff(Math.atan2(B.x - A.x, B.z - A.z), Math.atan2(C.x - B.x, C.z - B.z)));
-    const long = car.T.len > 5.5; want = Math.min(want, (long ? 12 : 15) - (long ? 8.5 : 9) * Math.min(1, turn / 1.57)); // big trucks take corners slower
+    const long = car.T.len > 5.5; want = Math.min(want, ((long ? 12 : 15) - (long ? 8.5 : 9) * Math.min(1, turn / 1.57)) * (car.phys ? Math.sqrt(Weather.grip()) : 1)); // big trucks take corners slower (and physics cars on a slippery road, as cornering speed goes with the root of the grip)
   }
   for (const cr of W.railCrossings || []) {
     if (!cr.closed) continue;

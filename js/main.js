@@ -1226,6 +1226,7 @@ function demoSetup(kind) {
   else if (kind === 'waypointcam') { G.camMode = 'chase'; G.setWaypoint(P.x + 60, P.z - 90); CAM.yaw = Math.atan2(60, -90); CAM.pitch = 0.15; for (let i = 0; i < 10; i++) step(STEP); }
   else if (kind === 'map') { GPS.update(0.5); openBigMap(); }
   else if (kind === 'beach') { P.x = 30; P.z = W.SHORE - 8; for (let i = 0; i < 30; i++) step(STEP); }
+  else if (kind === 'isoviper' || kind === 'isodrop') { const at = kind === 'isoviper' ? [718, 250] : [812, 292]; P.x = at[0]; P.z = at[1]; CAM.zoomIso = 26; CAM.curIso = 26; for (let i = 0; i < 60 * 2; i++) step(STEP); }
   else if (kind === 'funiso') { P.x = 735; P.z = 60; CAM.zoomIso = 150; CAM.curIso = 150; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'funroad') { G.camMode = 'chase'; P.x = 690; P.z = 10; P.facing = CAM.yaw = Math.atan2(45, 36); CAM.pitch = 0.3; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'boats') { G.camMode = 'chase'; P.x = -1; P.z = W.SHORE + 1; P.facing = CAM.yaw = 0.25; CAM.pitch = 0.32; for (let i = 0; i < 60; i++) step(STEP); }
@@ -1238,6 +1239,9 @@ function demoSetup(kind) {
     Input.keys.KeyW = true; for (let i = 0; i < 60 * 9; i++) { step(STEP); Heat.spotted(); if (i % 120 === 0) Input.keys.KeyD = !Input.keys.KeyD; } Input.keys.KeyW = Input.keys.KeyD = false;
     const cop = G.cars.find((c) => c.T.boat && c.police && !c.dead); if (cop) { CAM.carYaw = Math.atan2(cop.x - b.x, cop.z - b.z) + Math.PI; CAM.carPitch = 0.25; CAM.wasInCar = true; G.camMode = 'chase'; }
   }
+  else if (kind === 'rides') { G.camMode = 'chase'; P.x = 712; P.z = 158; P.facing = CAM.yaw = Math.atan2(0, -1) + 0.35; CAM.pitch = 0.22; for (let i = 0; i < 60 * 8; i++) step(STEP); }
+  else if (kind === 'wheel' || kind === 'drop' || kind === 'viper') { const at = { wheel: [783, 146, 797, 140], drop: [796, 282, 808, 290], viper: [722, 236, 714, 250] }[kind]; G.camMode = 'chase'; P.x = at[0]; P.z = at[1]; P.facing = CAM.yaw = Math.atan2(at[2] - at[0], at[3] - at[1]); CAM.pitch = kind === 'wheel' ? -0.25 : 0.05; for (let i = 0; i < 60 * (kind === 'drop' ? 9 : 4); i++) step(STEP); }
+  else if (kind === 'carousel') { G.camMode = 'chase'; P.x = 699; P.z = 140; Funland.board('carousel'); for (let i = 0; i < 60 * 3; i++) step(STEP); CAM.yaw = P.facing + 0.9; CAM.pitch = 0.3; }
   else if (kind === 'pier') { G.camMode = 'chase'; P.x = 0; P.z = W.SHORE - 4; P.facing = CAM.yaw = 0; CAM.pitch = 0.32; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'dialog') { Story.start(); }
   else if (kind === 'bank') { const b = W.places.bank; P.x = b.x + 4; P.z = b.z + 3; for (let i = 0; i < 30; i++) step(STEP); }
