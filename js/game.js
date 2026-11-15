@@ -421,7 +421,7 @@ G.exitCar = function (force) {
   if (car.T.boat) {
     const spot = Boats.landing(car);
     if (!spot && !force) { G.toast("You can't swim! Bring it alongside the pier or up to the beach to get off.", 'warn'); Sfx.error(); return false; }
-    const s = spot || { x: car.x, z: Math.min(car.z, W.SHORE - 2) }; P.x = s.x; P.z = s.z; W.collideCircle(P, P.r);
+    const s = spot || { x: clamp(car.x, W.LAND.minX + 8, W.LAND.maxX - 8), z: Math.min(car.z, W.SHORE - 2) }; P.x = s.x; P.z = s.z; W.collideCircle(P, P.r);
   } else {
     let placed = false;
     for (const s of [-1, 1]) {

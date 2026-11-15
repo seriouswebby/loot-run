@@ -1242,6 +1242,14 @@ function demoSetup(kind) {
   else if (kind === 'rides') { G.camMode = 'chase'; P.x = 712; P.z = 158; P.facing = CAM.yaw = Math.atan2(0, -1) + 0.35; CAM.pitch = 0.22; for (let i = 0; i < 60 * 8; i++) step(STEP); }
   else if (kind === 'wheel' || kind === 'drop' || kind === 'viper') { const at = { wheel: [783, 146, 797, 140], drop: [796, 282, 808, 290], viper: [722, 236, 714, 250] }[kind]; G.camMode = 'chase'; P.x = at[0]; P.z = at[1]; P.facing = CAM.yaw = Math.atan2(at[2] - at[0], at[3] - at[1]); CAM.pitch = kind === 'wheel' ? -0.25 : 0.05; for (let i = 0; i < 60 * (kind === 'drop' ? 9 : 4); i++) step(STEP); }
   else if (kind === 'carousel') { G.camMode = 'chase'; P.x = 699; P.z = 140; Funland.board('carousel'); for (let i = 0; i < 60 * 3; i++) step(STEP); CAM.yaw = P.facing + 0.9; CAM.pitch = 0.3; }
+  else if (kind === 'jetski' || kind === 'copboat') {
+    for (let i = 0; i < 5; i++) step(STEP); const b = Boats.MOORINGS[0].car; P.x = b.x; P.z = W.SHORE - 1.5; G.enterCar(b); b.x = 30; b.z = W.SHORE + 40; b.h = 0.9; b.sea = null; G.camMode = 'chase';
+    if (kind === 'copboat') { G.god = true; Heat.add(3, 5, 'demo'); }
+    Input.keys.KeyW = true; Input.keys.KeyA = true; for (let i = 0; i < 60 * (kind === 'copboat' ? 8 : 1.5); i++) { step(STEP); if (Heat.level) Heat.spotted(); } Input.keys.KeyW = Input.keys.KeyA = false;
+    const cop = G.cars.find((c) => c.T.boat && c.police && !c.dead);
+    if (kind === 'copboat' && cop) { cop.x = b.x + Math.sin(b.h) * 14; cop.z = b.z + Math.cos(b.h) * 14; cop.h = b.h + Math.PI; cop.sea = null; step(STEP); }
+    CAM.carYaw = b.h + 0.6; CAM.carPitch = 0.2; CAM.wasInCar = true;
+  }
   else if (kind === 'pier') { G.camMode = 'chase'; P.x = 0; P.z = W.SHORE - 4; P.facing = CAM.yaw = 0; CAM.pitch = 0.32; for (let i = 0; i < 30; i++) step(STEP); }
   else if (kind === 'dialog') { Story.start(); }
   else if (kind === 'bank') { const b = W.places.bank; P.x = b.x + 4; P.z = b.z + 3; for (let i = 0; i < 30; i++) step(STEP); }

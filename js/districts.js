@@ -394,7 +394,7 @@ const Funland = {
   },
   playerSeat(s) {
     const r = G.player.ride; if (!r || r.kind !== s.ride) return false;
-    return s.ride === 'viper' ? s.i === 0 : s.ride === 'wheel' ? Math.floor(s.i / 2) === r.seat : s.i === r.seat;
+    return s.ride === 'viper' ? s.i < 2 : s.ride === 'wheel' ? Math.floor(s.i / 2) === r.seat : s.i === r.seat;
   },
   seatsOf(ride, idx) { return this.rd.seats.filter((s) => s.ride === ride && (!idx || idx.includes(s.i)) && !this.playerSeat(s)); },
   unload(ride, idx) { for (const s of this.seatsOf(ride, idx)) if (s.occ) { s.occ = false; this.visitorOff(ride); } },

@@ -54,7 +54,7 @@ const Boats = {
     const R = car.T.len / 2 + 4; let best = null, bd = 3.6;
     for (let dx = -R; dx <= R; dx += 0.75) for (let dz = -R; dz <= R; dz += 0.75) {
       const x = car.x + dx, z = car.z + dz, d = this.hullDist(car, x, z);
-      if (d >= bd || d < 0.3) continue;
+      if (d >= bd || d < 0.3 || Math.abs(x) > W.LAND.maxX - 3) continue; // (the sea runs on past the county fence: not out there)
       let ok = true;
       for (const [ox, oz] of [[0, 0], [0.4, 0], [-0.4, 0], [0, 0.4], [0, -0.4]]) if (W.waterAt(x + ox, z + oz) || W.solidAt(x + ox, z + oz)) { ok = false; break; }
       if (ok) { bd = d; best = { x, z }; }

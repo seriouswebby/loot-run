@@ -343,7 +343,7 @@ class Car {
     if (src && src === G.player && this.police && this.driver === 'ai') G.crime('assaultCop', G.player.x, G.player.z, { radio: true });
     if (this.hp <= 0 && this.burning <= 0) {
       this.hp = 0; this.burning = 6.5;
-      if (this.driver === 'player') G.toast('Your car is on fire — get out!', 'warn');
+      if (this.driver === 'player') G.toast(this.T.boat ? 'Your boat is on fire! Get it to the shore.' : 'Your car is on fire — get out!', 'warn');
       if (this.driver === 'ai' && this.ai) { const empty = this.ai.mode === 'roadblock' || this.ai.mode === 'parked' || this.T.boat; this.ai.mode = 'dead'; if (!empty) G.ejectDriver(this); this.driver = null; }
     }
   }

@@ -97,6 +97,10 @@ function runAutotest() {
     const c = sb.car; c.x = 60; c.z = S + 90; c.h = 0; c.v = c.vx = c.vz = 0; c.sea = null; step(STEP);
     G.interact = computeInteract(); const swim = G.interact.e && G.interact.e.disabled;
     G.exitCar(); if (P.inCar !== c) bad.push('got off out at sea (at ' + P.x.toFixed(0) + ',' + P.z.toFixed(0) + ')'); else if (!/swim/.test(swim || '')) bad.push('no hint about swimming: ' + swim);
+    // past the end of the county fence the sea runs on, but you don't step off out there
+    c.x = W.LAND.maxX + 30; c.z = S + 4; c.h = Math.PI / 2; c.sea = null; step(STEP); if (G.exitCar() !== false || !P.inCar) { if (!inRect(P.x, P.z, W.LAND)) bad.push('got off outside the world at ' + P.x.toFixed(0) + ',' + P.z.toFixed(0)); if (!P.inCar) { tp(c.x - 3, S - 2); G.enterCar(c); } }
+    G.exitCar(true); if (!inRect(P.x, P.z, W.LAND)) bad.push('thrown off outside the world at ' + P.x.toFixed(0) + ',' + P.z.toFixed(0)); tp(c.x, S - 2); G.enterCar(c);
+    c.x = 60; c.z = S + 90; c.h = 0; c.sea = null; step(STEP);
     // wrecked out there: you're thrown clear, ashore, and it sinks
     G.god = true; c.damage(9999, c.x, c.z, null); steps(9);
     if (P.inCar) bad.push('still aboard the wreck'); else if (P.z >= S || W.waterAt(P.x, P.z) || !inRect(P.x, P.z, W.LAND)) bad.push('washed up at ' + P.x.toFixed(1) + ',' + P.z.toFixed(1) + ' (shore ' + S + ')');
